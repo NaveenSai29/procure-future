@@ -39,3 +39,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# environment
+.env
+.env.local
+.env.production
+
+# uploads
+src/uploads/*
+!src/uploads/.gitkeep
+
+# logs
+src/logs/*
+!src/logs/.gitkeep
+
+# backups
+src/backups/*
+!src/backups/.gitkeep
