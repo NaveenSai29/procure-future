@@ -12,7 +12,6 @@ const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapCo
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
-const Circle = dynamic(() => import('react-leaflet').then(mod => mod.Circle), { ssr: false });
 
 export default function LiveMapPage() {
   const [data, setData] = useState(null);
@@ -78,19 +77,19 @@ export default function LiveMapPage() {
 
   const warehouseIcon = useMemo(() => L && new L.DivIcon({
     className: 'custom-div-icon',
-    html: `<div style="background:linear-gradient(135deg,#3b82f6,#2563eb);width:36px;height:36px;border-radius:50%;border:3px solid white;box-shadow:0 4px 12px rgba(59,130,246,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;">🏭</div>`,
+    html: '<div style="background:linear-gradient(135deg,#3b82f6,#2563eb);width:36px;height:36px;border-radius:50%;border:3px solid white;box-shadow:0 4px 12px rgba(59,130,246,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;">🏭</div>',
     iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20],
   }), [L]);
 
   const truckIcon = useMemo(() => L && new L.DivIcon({
     className: 'custom-div-icon',
-    html: `<div style="background:linear-gradient(135deg,#f59e0b,#d97706);width:36px;height:36px;border-radius:50%;border:3px solid white;box-shadow:0 4px 12px rgba(245,158,11,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;">🚚</div>`,
+    html: '<div style="background:linear-gradient(135deg,#f59e0b,#d97706);width:36px;height:36px;border-radius:50%;border:3px solid white;box-shadow:0 4px 12px rgba(245,158,11,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;">🚚</div>',
     iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20],
   }), [L]);
 
   const selectedIcon = useMemo(() => L && new L.DivIcon({
     className: 'custom-div-icon',
-    html: `<div style="background:linear-gradient(135deg,#ef4444,#dc2626);width:44px;height:44px;border-radius:50%;border:4px solid white;box-shadow:0 6px 20px rgba(239,68,68,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;">📍</div>`,
+    html: '<div style="background:linear-gradient(135deg,#ef4444,#dc2626);width:44px;height:44px;border-radius:50%;border:4px solid white;box-shadow:0 6px 20px rgba(239,68,68,0.5);display:flex;align-items:center;justify-content:center;font-size:20px;">📍</div>',
     iconSize: [44, 44], iconAnchor: [22, 22], popupAnchor: [0, -24],
   }), [L]);
 
@@ -193,8 +192,10 @@ export default function LiveMapPage() {
                     <div style={{ minWidth: '200px' }}>
                       <h4 style={{ fontWeight: 700, fontSize: '14px', margin: '0 0 4px' }}>{w.name}</h4>
                       <p style={{ fontSize: '12px', color: '#666', margin: '0 0 2px' }}>{w.supplier?.businessName}</p>
-                      <p style={{ fontSize: '11px', color: '#999', margin: '0 0 2px' }}>📍 {w.addressLine1}</p>
                       <p style={{ fontSize: '11px', color: '#999', margin: '0' }}>{w.city}, {w.state}</p>
+                      {w.isPickupLocation !== false && (
+                        <span style={{ fontSize: '10px', background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px' }}>Pickup Location</span>
+                      )}
                     </div>
                   </Popup>
                 </Marker>
@@ -212,11 +213,6 @@ export default function LiveMapPage() {
                   </Popup>
                 </Marker>
               ))}
-
-              {selectedWarehouse?.latitude && (
-                <Circle center={[selectedWarehouse.latitude, selectedWarehouse.longitude]} radius={500} 
-                  pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.1, weight: 2 }} />
-              )}
             </MapContainer>
           )}
         </div>
@@ -224,6 +220,7 @@ export default function LiveMapPage() {
         {/* Sidebar List */}
         {showList && (
           <div className="space-y-3 max-h-[600px] overflow-y-auto">
+            {/* Warehouses List */}
             {(activeTab === 'all' || activeTab === 'warehouses') && (
               <div className="bg-white rounded-xl border">
                 <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
@@ -237,9 +234,14 @@ export default function LiveMapPage() {
                       <div className="flex items-start gap-2">
                         <Building2 className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{w.name}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{w.name}</p>
+                            {w.isPickupLocation !== false && (
+                              <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Pickup</span>
+                            )}
+                          </div>
                           <p className="text-xs text-gray-500">{w.supplier?.businessName}</p>
-                          <p className="text-xs text-gray-400 truncate">{w.addressLine1}, {w.city}</p>
+                          <p className="text-xs text-gray-400 truncate">{w.city}, {w.state}</p>
                         </div>
                       </div>
                     </button>
@@ -260,6 +262,7 @@ export default function LiveMapPage() {
               </div>
             )}
 
+            {/* Drivers List */}
             {(activeTab === 'all' || activeTab === 'drivers') && (
               <div className="bg-white rounded-xl border">
                 <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
@@ -279,10 +282,14 @@ export default function LiveMapPage() {
                       </div>
                     </button>
                   ))}
+                  {data?.deliveryPartners?.length === 0 && (
+                    <p className="p-4 text-center text-sm text-gray-400">No drivers online</p>
+                  )}
                 </div>
               </div>
             )}
 
+            {/* Suppliers List */}
             {(activeTab === 'all' || activeTab === 'suppliers') && (
               <div className="bg-white rounded-xl border">
                 <div className="p-3 border-b bg-gray-50 flex items-center justify-between">

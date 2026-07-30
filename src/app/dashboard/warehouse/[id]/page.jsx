@@ -6,7 +6,10 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ArrowLeft, Warehouse, MapPin, Package, Plus, Minus, Layers, Edit3, Save, X, Bell, Check } from "lucide-react";
+import { ArrowLeft, Warehouse, MapPin, Package, Plus, Layers, Edit3, Save, X, Bell, Check, Loader2, Truck } from "lucide-react";
+import dynamic from 'next/dynamic';
+
+const LocationPicker = dynamic(() => import('@/components/warehouse/LocationPicker'), { ssr: false });
 
 export default function WarehouseDetailPage() {
   const { id } = useParams();
@@ -22,7 +25,9 @@ export default function WarehouseDetailPage() {
 
   // Edit warehouse state
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', addressLine1: '', addressLine2: '', city: '', state: '', pincode: '' });
+  const [editForm, setEditForm] = useState({ name: '', addressLine1: '', addressLine2: '', city: '', state: '', pincode: '', isPickupLocation: true });
+  const [editLocation, setEditLocation] = useState(null);
+  const [editAddressForm, setEditAddressForm] = useState({ addressLine1: '', addressLine2: '', city: '', state: '', pincode: '' });
   const [updating, setUpdating] = useState(false);
 
   // Edit min stock inline state
@@ -65,27 +70,58 @@ export default function WarehouseDetailPage() {
         city: warehouse.city || '',
         state: warehouse.state || '',
         pincode: warehouse.pincode || '',
+        isPickupLocation: warehouse.isPickupLocation !== false,
       });
+      setEditAddressForm({
+        addressLine1: warehouse.addressLine1 || '',
+        addressLine2: warehouse.addressLine2 || '',
+        city: warehouse.city || '',
+        state: warehouse.state || '',
+        pincode: warehouse.pincode || '',
+      });
+      if (warehouse.latitude && warehouse.longitude) {
+        setEditLocation({ lat: warehouse.latitude, lng: warehouse.longitude });
+      } else {
+        setEditLocation(null);
+      }
       setEditing(true);
     }
   };
 
   const saveEdit = async () => {
-    if (!editForm.name || !editForm.addressLine1 || !editForm.city || !editForm.state || !editForm.pincode) {
-      toast.error("All fields except Address Line 2 are required");
+    if (!editForm.name) {
+      toast.error("Warehouse name is required");
       return;
     }
+    if (!editAddressForm.addressLine1 || !editAddressForm.city || !editAddressForm.state || !editAddressForm.pincode) {
+      toast.error("All address fields except Address Line 2 are required");
+      return;
+    }
+    if (!editLocation) {
+      toast.error("Please drop a pin on the map to set exact location");
+      return;
+    }
+
     setUpdating(true);
     try {
+      const body = {
+        name: editForm.name,
+        ...editAddressForm,
+        latitude: editLocation.lat,
+        longitude: editLocation.lng,
+        isPickupLocation: editForm.isPickupLocation,
+      };
+
       const res = await fetch(`/api/warehouses/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(body),
       });
       const result = await res.json();
       if (result.success) {
         toast.success('Warehouse updated!');
         setEditing(false);
+        setEditLocation(null);
         fetchWarehouse();
       } else {
         toast.error(result.message || result.error);
@@ -181,36 +217,54 @@ export default function WarehouseDetailPage() {
               <Warehouse className="h-6 w-6 text-blue-600" />
             </div>
             {editing ? (
-              <div className="flex-1 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="flex-1 space-y-4">
+                {/* Name */}
+                <div>
+                  <label className="text-xs font-medium text-gray-500">Warehouse Name *</label>
+                  <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="Main Warehouse" />
+                </div>
+
+                {/* Pickup Location Toggle */}
+                <div className="flex items-center gap-3 bg-blue-50 rounded-xl p-4 border border-blue-100">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isPickupLocation}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, isPickupLocation: e.target.checked }))}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                  />
                   <div>
-                    <label className="text-xs font-medium text-gray-500">Warehouse Name *</label>
-                    <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="Main Warehouse" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">Address Line 1 *</label>
-                    <Input value={editForm.addressLine1} onChange={e => setEditForm({...editForm, addressLine1: e.target.value})} placeholder="123 Street Name" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">Address Line 2</label>
-                    <Input value={editForm.addressLine2} onChange={e => setEditForm({...editForm, addressLine2: e.target.value})} placeholder="Landmark, Area" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">City *</label>
-                    <Input value={editForm.city} onChange={e => setEditForm({...editForm, city: e.target.value})} placeholder="Mumbai" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">State *</label>
-                    <Input value={editForm.state} onChange={e => setEditForm({...editForm, state: e.target.value})} placeholder="Maharashtra" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">Pincode *</label>
-                    <Input value={editForm.pincode} onChange={e => setEditForm({...editForm, pincode: e.target.value})} placeholder="400001" />
+                    <label className="text-sm font-medium text-gray-900">Pickup Location</label>
+                    <p className="text-xs text-gray-500">Delivery partners can pick up orders from this warehouse</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button onClick={saveEdit} disabled={updating} size="sm">
-                    {updating ? <><span className="animate-spin mr-1">⏳</span> Saving...</> : <><Save className="h-4 w-4 mr-1" /> Save Changes</>}
+
+                {/* Location Picker for Edit */}
+                <div className="border-t pt-4">
+                  <label className="text-sm font-medium text-gray-700 block mb-3">📍 Update Warehouse Location *</label>
+                  <LocationPicker
+                    initialLat={warehouse.latitude || undefined}
+                    initialLng={warehouse.longitude || undefined}
+                    existingAddress={{
+                      addressLine1: warehouse.addressLine1 || '',
+                      addressLine2: warehouse.addressLine2 || '',
+                      city: warehouse.city || '',
+                      state: warehouse.state || '',
+                      pincode: warehouse.pincode || '',
+                    }}
+                    onLocationChange={setEditLocation}
+                    onAddressChange={setEditAddressForm}
+                  />
+                </div>
+
+                {!editLocation && (
+                  <p className="text-sm text-red-500 flex items-center gap-1">
+                    ⚠️ Please drop a pin on the map to set exact location
+                  </p>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <Button onClick={saveEdit} disabled={updating || !editLocation} size="sm">
+                    {updating ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Saving...</> : <><Save className="h-4 w-4 mr-1" /> Save Changes</>}
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setEditing(false)}>
                     <X className="h-4 w-4 mr-1" /> Cancel
@@ -225,9 +279,16 @@ export default function WarehouseDetailPage() {
                   {warehouse.addressLine1}
                   {warehouse.addressLine2 && `, ${warehouse.addressLine2}`}, {warehouse.city}, {warehouse.state} - {warehouse.pincode}
                 </div>
-                <button onClick={startEditing} className="text-xs text-blue-600 hover:text-blue-700 hover:underline mt-1.5 flex items-center gap-1">
-                  <Edit3 className="h-3 w-3" /> Edit warehouse details
-                </button>
+                <div className="flex items-center gap-2 mt-1.5">
+                  {warehouse.isPickupLocation !== false && (
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Truck className="h-3 w-3" /> Pickup Location
+                    </span>
+                  )}
+                  <button onClick={startEditing} className="text-xs text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1">
+                    <Edit3 className="h-3 w-3" /> Edit warehouse details
+                  </button>
+                </div>
               </div>
             )}
           </div>

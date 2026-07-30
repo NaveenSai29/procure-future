@@ -236,15 +236,16 @@ model Cart {
 }
 
 model CartItem {
-  id        String   @id @default(uuid())
-  cartId    String
-  productId String
-  quantity  Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  cartId      String
+  productId   String
+  quantity    Int      @default(1)
+  customPrice Float?   // RFQ accepted price override
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
+  cart        Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
 
   @@index([productId])
 }
@@ -445,6 +446,7 @@ model Warehouse {
   latitude     Float?
   longitude    Float?
   isActive     Boolean           @default(true)
+  isPickupLocation Boolean       @default(true)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 

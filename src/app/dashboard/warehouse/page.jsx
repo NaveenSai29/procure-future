@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Warehouse, Plus, MapPin, Package, Layers, CheckCircle, AlertTriangle } from "lucide-react";
+import { Warehouse, Plus, MapPin, Package, Layers, CheckCircle, AlertTriangle, Loader2, X, Truck } from "lucide-react";
+import dynamic from 'next/dynamic';
+
+const LocationPicker = dynamic(() => import('@/components/warehouse/LocationPicker'), { ssr: false });
 
 export default function WarehousePage() {
   const [warehouses, setWarehouses] = useState([]);
@@ -14,8 +15,11 @@ export default function WarehousePage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const { register, handleSubmit, reset, formState: { errors } } = useForm();
+  const [location, setLocation] = useState(null);
+  const [addressForm, setAddressForm] = useState({
+    addressLine1: '', addressLine2: '', city: '', state: '', pincode: ''
+  });
+  const [isPickup, setIsPickup] = useState(true);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -25,16 +29,10 @@ export default function WarehousePage() {
         fetch("/api/warehouses"),
         fetch("/api/inventory?summary=true")
       ]);
-      
       const whData = await whRes.json();
       const invData = await invRes.json();
-      
-      if (whData.success) {
-        setWarehouses(whData.data || []);
-      }
-      if (invData.success) {
-        setSummary(invData.data || invData);
-      }
+      if (whData.success) setWarehouses(whData.data || []);
+      if (invData.success) setSummary(invData.data || invData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -42,26 +40,54 @@ export default function WarehousePage() {
     }
   };
 
-  const onSubmit = async (data) => {
+  const onSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!location) {
+      toast.error("Please drop a pin on the map to set warehouse location");
+      return;
+    }
+
+    if (!addressForm.addressLine1 || !addressForm.city || !addressForm.state || !addressForm.pincode) {
+      toast.error("Please fill all required address fields");
+      return;
+    }
+
+    const name = e.target.name?.value;
+    if (!name) {
+      toast.error("Warehouse name is required");
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/warehouses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          name,
+          ...addressForm,
+          latitude: location.lat,
+          longitude: location.lng,
+          isPickupLocation: isPickup,
+        }),
       });
       const result = await res.json();
       if (result.success) {
-        toast.success("Warehouse created!");
-        reset();
+        toast.success(result.message || "Warehouse created!");
         setShowForm(false);
+        setLocation(null);
+        setIsPickup(true);
+        setAddressForm({ addressLine1: '', addressLine2: '', city: '', state: '', pincode: '' });
         fetchData();
       } else {
         toast.error(result.message || result.error);
       }
     } catch {
       toast.error("Failed to create warehouse");
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) return (
@@ -108,38 +134,62 @@ export default function WarehousePage() {
         </div>
       </div>
 
-      {/* Add Form */}
+      {/* Add Form with Map */}
       {showForm && (
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-xl border p-6 space-y-4 mb-6 shadow-sm">
+        <form onSubmit={onSubmit} className="bg-white rounded-xl border p-6 space-y-4 mb-6 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-lg">New Warehouse</h2>
-            <button type="button" onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          {/* Warehouse Name */}
+          <div>
+            <label className="text-sm font-medium text-gray-700">Warehouse Name *</label>
+            <input
+              type="text"
+              name="name"
+              required
+              placeholder="Main Warehouse"
+              className="w-full mt-1 px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Pickup Location Toggle */}
+          <div className="flex items-center gap-3 bg-blue-50 rounded-xl p-4 border border-blue-100">
+            <input
+              type="checkbox"
+              id="isPickup"
+              checked={isPickup}
+              onChange={(e) => setIsPickup(e.target.checked)}
+              className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+            />
             <div>
-              <label className="text-sm font-medium">Warehouse Name *</label>
-              <Input {...register("name", { required: "Name required" })} placeholder="Main Warehouse" className="mt-1" />
-              {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>}
-            </div>
-            <div>
-              <label className="text-sm font-medium">Address *</label>
-              <Input {...register("addressLine1", { required: "Address required" })} placeholder="Street address" className="mt-1" />
-            </div>
-            <div>
-              <label className="text-sm font-medium">City *</label>
-              <Input {...register("city", { required: "City required" })} placeholder="Mumbai" className="mt-1" />
-            </div>
-            <div>
-              <label className="text-sm font-medium">State *</label>
-              <Input {...register("state", { required: "State required" })} placeholder="Maharashtra" className="mt-1" />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Pincode *</label>
-              <Input {...register("pincode", { required: "Pincode required" })} placeholder="400001" className="mt-1" />
+              <label htmlFor="isPickup" className="text-sm font-medium text-gray-900">Pickup Location</label>
+              <p className="text-xs text-gray-500">Delivery partners can pick up orders from this warehouse</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create Warehouse'}</Button>
+
+          {/* Location Picker */}
+          <div className="border-t pt-4">
+            <label className="text-sm font-medium text-gray-700 block mb-3">📍 Warehouse Location *</label>
+            <LocationPicker
+              onLocationChange={setLocation}
+              onAddressChange={setAddressForm}
+            />
+          </div>
+
+          {!location && (
+            <p className="text-sm text-red-500 flex items-center gap-1">
+              <AlertTriangle className="h-4 w-4" /> Please drop a pin on the map to set location
+            </p>
+          )}
+
+          <div className="flex gap-2 pt-2">
+            <Button type="submit" disabled={saving || !location}>
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Creating...</> : 'Create Warehouse'}
+            </Button>
             <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
           </div>
         </form>
@@ -167,7 +217,14 @@ export default function WarehousePage() {
                       <h3 className="font-semibold text-gray-900">{wh.name}</h3>
                       <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
                         <MapPin className="h-3 w-3" />
-                        {wh.city}, {wh.state} - {wh.pincode}
+                        {wh.addressLine1 && `${wh.addressLine1}, `}{wh.city}, {wh.state} - {wh.pincode}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        {wh.isPickupLocation !== false && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Truck className="h-3 w-3" /> Pickup
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

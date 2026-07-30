@@ -21,7 +21,12 @@ export async function GET(request) {
       unreadOnly
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      success: true,
+      data: result.notifications || [],
+      pagination: result.pagination,
+      unreadCount: result.pagination?.unreadCount || 0
+    });
   } catch (error) {
     console.error('Fetch notifications error:', error);
     return NextResponse.json(
@@ -51,7 +56,7 @@ export async function POST(request) {
       data
     });
 
-    return NextResponse.json(notification, { status: 201 });
+    return NextResponse.json({ success: true, data: notification }, { status: 201 });
   } catch (error) {
     console.error('Send notification error:', error);
     return NextResponse.json(

@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import prisma from "@/lib/prisma";
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
@@ -34,10 +34,27 @@ export async function verifyToken(token, isRefresh = false) {
   }
 }
 
-// Get current user from cookie
+// Get current user from cookie OR Authorization header (for mobile)
 export async function getSessionUser() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("access_token")?.value;
+  let token = null;
+
+  // 1. Try reading from httpOnly cookie (web browser)
+  try {
+    const cookieStore = await cookies();
+    token = cookieStore.get("access_token")?.value;
+  } catch {}
+
+  // 2. Try reading from Authorization header (mobile app)
+  if (!token) {
+    try {
+      const headersList = await headers();
+      const authHeader = headersList.get("authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        token = authHeader.substring(7);
+      }
+    } catch {}
+  }
+
   if (!token) return null;
   return await verifyToken(token);
 }
@@ -85,18 +102,35 @@ export async function comparePassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
-// API Response helpers
+// Standard success response
 export function successResponse(data, status = 200) {
-  return Response.json({ success: true, data }, { status });
+  return new Response(JSON.stringify({ success: true, data }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
+// Standard error response
 export function errorResponse(message, status = 400, errors = null) {
-  return Response.json(
-    { success: false, message, errors },
-    { status }
-  );
+  const body = { success: false, message };
+  if (errors) body.errors = errors;
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
-export function unauthorizedResponse(message = "Unauthorized") {
-  return Response.json({ success: false, message }, { status: 401 });
-}
+// Validation
+import { z } from "zod";
+
+export const registerSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Invalid email address"),
+  mobile: z.string().regex(/^[6-9]\d{9}$/, "Invalid Indian mobile number").optional(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email"),
+  password: z.string().min(1, "Password required"),
+});

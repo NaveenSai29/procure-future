@@ -64,7 +64,7 @@ export async function POST(request) {
       },
     });
 
-    // Set cookies
+    // Set cookies (for web)
     const cookieStore = await cookies();
     cookieStore.set("access_token", accessToken, {
       httpOnly: true,
@@ -82,9 +82,12 @@ export async function POST(request) {
       path: "/",
     });
 
+    // ALSO return tokens in response body for mobile apps
     return successResponse({
-      user: { id: user.id, name: user.name, email: user.email },
+      user: { id: user.id, name: user.name, email: user.email, referralCode: user.referralCode },
       roles,
+      access_token: accessToken,
+      refresh_token: refreshToken,
     });
 
   } catch (error) {

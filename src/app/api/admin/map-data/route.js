@@ -18,11 +18,11 @@ export async function GET() {
     const [warehousesWithCoords, warehousesWithoutCoords, deliveryPartners, suppliers] = await Promise.all([
       prisma.warehouse.findMany({
         where: { latitude: { not: null }, longitude: { not: null } },
-        select: { id: true, name: true, city: true, state: true, addressLine1: true, latitude: true, longitude: true, supplier: { select: { businessName: true } } },
+        select: { id: true, name: true, city: true, state: true, addressLine1: true, latitude: true, longitude: true, isPickupLocation: true, supplier: { select: { businessName: true } } },
       }),
       prisma.warehouse.findMany({
         where: { OR: [{ latitude: null }, { longitude: null }] },
-        select: { id: true, name: true, city: true, state: true, addressLine1: true, supplier: { select: { businessName: true } } },
+        select: { id: true, name: true, city: true, state: true, addressLine1: true, isPickupLocation: true, supplier: { select: { businessName: true } } },
       }),
       prisma.deliveryPartner.findMany({
         where: { isOnline: true, currentLat: { not: null }, currentLng: { not: null } },
