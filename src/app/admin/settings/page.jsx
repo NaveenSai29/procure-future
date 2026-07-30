@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import {
   Settings, Building2, Receipt, CreditCard, Bell,
-  Zap, Save, RefreshCw, TrendingUp,
+  Zap, Save, RefreshCw,
   Globe, Mail, Phone, Smartphone,
-  RotateCcw, Wallet, Banknote, Building, ArrowRightLeft, Percent
+  RotateCcw, Wallet, Banknote, Building, ArrowRightLeft, Percent,
+  Truck, Bike, CloudRain, ThermometerSun, Clock, MapPin, Gauge, DollarSign
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -45,6 +46,24 @@ export default function AdminSettingsPage() {
     commissionOnDelivery: false,
   });
 
+  const [deliveryForm, setDeliveryForm] = useState({
+    vehicles: [],
+    freeWeightUpTo: 5,
+    weightChargePerKg: 3,
+    maxWeight: 40000,
+    freeDeliveryAbove: 4999,
+    maxDistance: 200,
+    platformFee: 5,
+    gstPercent: 5,
+    codCharge: 30,
+    expressMultiplier: 1.8,
+    sameDayMultiplier: 2.0,
+    surgeEnabled: false,
+    rainSurgeMultiplier: 1.5,
+    autoWeatherEnabled: true,
+    peakHours: [],
+  });
+
   const [notifForm, setNotifForm] = useState({
     emailEnabled: true, smsEnabled: false, pushEnabled: true, whatsappEnabled: false,
     orderConfirmation: true, shippingUpdate: true, deliveryOTP: true,
@@ -74,6 +93,27 @@ export default function AdminSettingsPage() {
       if (data.settings?.COMMISSION) setCommissionForm(prev => ({ ...prev, ...data.settings.COMMISSION }));
       if (data.settings?.NOTIFICATION) setNotifForm(prev => ({ ...prev, ...data.settings.NOTIFICATION }));
       if (data.settings?.FEATURES) setFeatureForm(prev => ({ ...prev, ...data.settings.FEATURES }));
+      if (data.settings?.DELIVERY) {
+        const d = data.settings.DELIVERY;
+        setDeliveryForm(prev => ({
+          ...prev,
+          vehicles: d.vehicles || prev.vehicles,
+          freeWeightUpTo: d.freeWeightUpTo ?? prev.freeWeightUpTo,
+          weightChargePerKg: d.weightChargePerKg ?? prev.weightChargePerKg,
+          maxWeight: d.maxWeight ?? prev.maxWeight,
+          freeDeliveryAbove: d.freeDeliveryAbove ?? prev.freeDeliveryAbove,
+          maxDistance: d.maxDistance ?? prev.maxDistance,
+          platformFee: d.platformFee ?? prev.platformFee,
+          gstPercent: d.gstPercent ?? prev.gstPercent,
+          codCharge: d.codCharge ?? prev.codCharge,
+          expressMultiplier: d.expressMultiplier ?? prev.expressMultiplier,
+          sameDayMultiplier: d.sameDayMultiplier ?? prev.sameDayMultiplier,
+          surgeEnabled: d.surgeEnabled ?? prev.surgeEnabled,
+          rainSurgeMultiplier: d.rainSurgeMultiplier ?? prev.rainSurgeMultiplier,
+          autoWeatherEnabled: d.autoWeatherEnabled ?? prev.autoWeatherEnabled,
+          peakHours: d.peakHours || prev.peakHours,
+        }));
+      }
       if (data.platform) {
         setGeneralForm(prev => ({
           ...prev, platformName: data.platform.name, supportEmail: data.platform.supportEmail,
@@ -102,6 +142,7 @@ export default function AdminSettingsPage() {
     { id: 'GENERAL', label: 'General', icon: Building2 },
     { id: 'TAX', label: 'Tax', icon: Receipt },
     { id: 'COMMISSION', label: 'Commission', icon: Percent },
+    { id: 'DELIVERY', label: 'Delivery', icon: Truck },
     { id: 'PAYMENT', label: 'Payments', icon: CreditCard },
     { id: 'NOTIFICATION', label: 'Notifications', icon: Bell },
     { id: 'FEATURES', label: 'Features', icon: Zap },
@@ -134,7 +175,7 @@ export default function AdminSettingsPage() {
         ))}
       </div>
 
-      {/* GENERAL */}
+      {/* GENERAL TAB */}
       {activeTab === 'GENERAL' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
@@ -169,7 +210,7 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      {/* TAX */}
+      {/* TAX TAB */}
       {activeTab === 'TAX' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
@@ -192,131 +233,417 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      {/* COMMISSION */}
+      {/* COMMISSION TAB */}
       {activeTab === 'COMMISSION' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-green-100 rounded-lg"><Percent className="h-5 w-5 text-green-600" /></div>
-              <div>
-                <h3 className="font-semibold text-gray-900">Platform Commission</h3>
-                <p className="text-xs text-gray-500">Commission earned per completed order from suppliers</p>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-blue-800 font-medium">How it works:</p>
-              <p className="text-xs text-blue-700 mt-1">
-                When a buyer places an order and it's delivered, the platform automatically deducts 
-                a commission percentage from the supplier's wallet. No monthly fees, no hidden charges.
-              </p>
-            </div>
-
-            <div className="max-w-md">
-              <label className="text-sm font-medium text-gray-700">Commission Rate (%)</label>
-              <div className="relative mt-1.5">
-                <input 
-                  type="number" 
-                  step="0.1" 
-                  value={commissionForm.defaultRate || 5} 
-                  onChange={(e) => setCommissionForm(prev => ({ ...prev, defaultRate: parseFloat(e.target.value) }))}
-                  className="w-full px-4 py-3 border rounded-lg text-lg font-bold" 
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">%</span>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Example: On a Rs. 1,000 order, platform earns Rs. {(1000 * (commissionForm.defaultRate || 5) / 100).toFixed(0)}
-              </p>
-            </div>
-
+            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-green-100 rounded-lg"><Percent className="h-5 w-5 text-green-600" /></div><div><h3 className="font-semibold text-gray-900">Platform Commission</h3><p className="text-xs text-gray-500">Commission earned per completed order from suppliers</p></div></div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"><p className="text-sm text-blue-800 font-medium">How it works</p><p className="text-xs text-blue-700 mt-1">When a buyer places an order and it is delivered, the platform automatically deducts a commission percentage from the supplier wallet. No monthly fees, no hidden charges.</p></div>
+            <div className="max-w-md"><label className="text-sm font-medium text-gray-700">Commission Rate (%)</label><div className="relative mt-1.5"><input type="number" step="0.1" value={commissionForm.defaultRate || 5} onChange={(e) => setCommissionForm(prev => ({ ...prev, defaultRate: parseFloat(e.target.value) }))} className="w-full px-4 py-3 border rounded-lg text-lg font-bold" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">%</span></div><p className="text-xs text-gray-500 mt-2">Example: On Rs. 1,000 order, platform earns Rs. {(1000 * (commissionForm.defaultRate || 5) / 100).toFixed(0)}</p></div>
             <div className="mt-6 grid grid-cols-3 gap-4">
-              <div className="bg-gray-50 rounded-xl p-4 text-center">
-                <p className="text-xs text-gray-500">100 orders/mo</p>
-                <p className="text-xl font-bold text-green-600">Rs. {((100 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p>
-                <p className="text-xs text-gray-400">at Rs. 1,000 avg order</p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 text-center">
-                <p className="text-xs text-gray-500">1,000 orders/mo</p>
-                <p className="text-xl font-bold text-green-600">Rs. {((1000 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p>
-                <p className="text-xs text-gray-400">at Rs. 1,000 avg order</p>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 text-center">
-                <p className="text-xs text-gray-500">10,000 orders/mo</p>
-                <p className="text-xl font-bold text-green-600">Rs. {((10000 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p>
-                <p className="text-xs text-gray-400">at Rs. 1,000 avg order</p>
-              </div>
+              <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-gray-500">100 orders/mo</p><p className="text-xl font-bold text-green-600">Rs. {((100 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p><p className="text-xs text-gray-400">at Rs. 1,000 avg order</p></div>
+              <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-gray-500">1,000 orders/mo</p><p className="text-xl font-bold text-green-600">Rs. {((1000 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p><p className="text-xs text-gray-400">at Rs. 1,000 avg order</p></div>
+              <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-gray-500">10,000 orders/mo</p><p className="text-xl font-bold text-green-600">Rs. {((10000 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p><p className="text-xs text-gray-400">at Rs. 1,000 avg order</p></div>
             </div>
-
-            <div className="mt-4 flex gap-4">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={commissionForm.commissionOnDelivery || false} 
-                  onChange={(e) => setCommissionForm(prev => ({ ...prev, commissionOnDelivery: e.target.checked }))} />
-                <span className="text-sm">Also charge commission on delivery/shipping fees</span>
-              </label>
-            </div>
-
-            <div className="mt-6 pt-4 border-t flex justify-end">
-              <button onClick={() => handleSave('COMMISSION', { defaultRate: commissionForm.defaultRate, commissionOnDelivery: commissionForm.commissionOnDelivery })} disabled={saving}
-                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium">
-                <Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Commission Settings'}
-              </button>
-            </div>
+            <div className="mt-4 flex gap-4"><label className="flex items-center gap-2"><input type="checkbox" checked={commissionForm.commissionOnDelivery || false} onChange={(e) => setCommissionForm(prev => ({ ...prev, commissionOnDelivery: e.target.checked }))} /><span className="text-sm">Also charge commission on delivery charges</span></label></div>
+            <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('COMMISSION', { defaultRate: commissionForm.defaultRate, commissionOnDelivery: commissionForm.commissionOnDelivery })} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Commission Settings'}</button></div>
           </div>
         </div>
       )}
 
-      {/* PAYMENT */}
+      {/* DELIVERY TAB */}
+      {activeTab === 'DELIVERY' && (
+        <div className="space-y-6">
+
+          {/* PER VEHICLE PRICING */}
+          {deliveryForm.vehicles.length === 0 ? (
+            <div className="bg-white rounded-xl border shadow-sm p-12 text-center">
+              <Truck className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">No Vehicles Configured</h3>
+              <p className="text-gray-500 mb-4">Run the seed script to add all vehicle types with default pricing</p>
+              <code className="bg-gray-900 text-green-400 px-4 py-2 rounded-lg text-sm">node scripts/seed-delivery.js</code>
+            </div>
+          ) : (
+            deliveryForm.vehicles.map((vehicle, vIdx) => (
+              <div key={vIdx} className="bg-white rounded-xl border shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <Truck className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="text"
+                          value={vehicle.type}
+                          onChange={e => {
+                            const updated = [...deliveryForm.vehicles];
+                            updated[vIdx].type = e.target.value;
+                            setDeliveryForm(prev => ({ ...prev, vehicles: updated }));
+                          }}
+                          className="font-semibold text-gray-900 text-lg bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none px-1 py-0.5 w-40"
+                        />
+                        <span className="text-xs text-gray-400">Max: {vehicle.maxWeight} kg</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setDeliveryForm(prev => ({
+                          ...prev,
+                          vehicles: prev.vehicles.filter((_, i) => i !== vIdx)
+                        }));
+                      }}
+                      className="text-red-400 hover:text-red-600 text-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-4 mb-4">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">Base Charge (Rs)</label>
+                    <input type="number" value={vehicle.baseCharge}
+                      onChange={e => {
+                        const u = [...deliveryForm.vehicles];
+                        u[vIdx].baseCharge = parseInt(e.target.value) || 0;
+                        setDeliveryForm(prev => ({ ...prev, vehicles: u }));
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg mt-1 font-medium" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">Max Weight (kg)</label>
+                    <input type="number" value={vehicle.maxWeight}
+                      onChange={e => {
+                        const u = [...deliveryForm.vehicles];
+                        u[vIdx].maxWeight = parseInt(e.target.value) || 0;
+                        setDeliveryForm(prev => ({ ...prev, vehicles: u }));
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg mt-1 font-medium" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500">Fallback Per Km (Rs)</label>
+                    <input type="number" value={vehicle.perKmRate || 0}
+                      onChange={e => {
+                        const u = [...deliveryForm.vehicles];
+                        u[vIdx].perKmRate = parseInt(e.target.value) || 0;
+                        setDeliveryForm(prev => ({ ...prev, vehicles: u }));
+                      }}
+                      className="w-full px-3 py-2 border rounded-lg mt-1 font-medium" />
+                    <p className="text-xs text-gray-400 mt-1">Used when slab pricing is off</p>
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <label className="flex items-center gap-2 bg-gray-50 px-3 py-2.5 rounded-lg cursor-pointer w-full justify-center border">
+                      <input
+                        type="checkbox"
+                        checked={vehicle.useSlabPricing !== false}
+                        onChange={e => {
+                          const u = [...deliveryForm.vehicles];
+                          u[vIdx].useSlabPricing = e.target.checked;
+                          if (e.target.checked && !u[vIdx].distanceSlabs) {
+                            u[vIdx].distanceSlabs = [
+                              { upToKm: 5, charge: u[vIdx].baseCharge || 50 },
+                              { upToKm: 10, charge: (u[vIdx].baseCharge || 50) * 2 },
+                              { upToKm: 20, charge: (u[vIdx].baseCharge || 50) * 3 },
+                              { upToKm: 999, charge: (u[vIdx].baseCharge || 50) * 5 },
+                            ];
+                          }
+                          setDeliveryForm(prev => ({ ...prev, vehicles: u }));
+                        }}
+                      />
+                      <span className="text-xs font-medium">Slab Pricing</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Distance Slabs for this vehicle */}
+                {vehicle.useSlabPricing !== false && vehicle.distanceSlabs && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-medium text-gray-700">Distance Slabs</span>
+                      <button
+                        onClick={() => {
+                          const u = [...deliveryForm.vehicles];
+                          const lastSlab = u[vIdx].distanceSlabs[u[vIdx].distanceSlabs.length - 1];
+                          u[vIdx].distanceSlabs.push({
+                            upToKm: (lastSlab?.upToKm || 50) + 50,
+                            charge: (lastSlab?.charge || 200) + 100
+                          });
+                          setDeliveryForm(prev => ({ ...prev, vehicles: u }));
+                        }}
+                        className="text-blue-600 text-xs font-medium hover:text-blue-800"
+                      >
+                        + Add Slab
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                      {vehicle.distanceSlabs.map((slab, sIdx) => (
+                        <div key={sIdx} className="bg-white border rounded-lg p-3 relative">
+                          <button
+                            onClick={() => {
+                              if (vehicle.distanceSlabs.length <= 1) return;
+                              const u = [...deliveryForm.vehicles];
+                              u[vIdx].distanceSlabs = u[vIdx].distanceSlabs.filter((_, i) => i !== sIdx);
+                              setDeliveryForm(prev => ({ ...prev, vehicles: u }));
+                            }}
+                            className="absolute top-1 right-2 text-gray-300 hover:text-red-500 text-xs"
+                          >
+                            ×
+                          </button>
+                          <label className="text-xs text-gray-400">Up to (km)</label>
+                          <input
+                            type="number"
+                            value={slab.upToKm}
+                            onChange={e => {
+                              const u = [...deliveryForm.vehicles];
+                              u[vIdx].distanceSlabs[sIdx].upToKm = parseInt(e.target.value) || 0;
+                              setDeliveryForm(prev => ({ ...prev, vehicles: u }));
+                            }}
+                            className="w-full px-2 py-1.5 border rounded text-center font-bold text-sm mt-0.5"
+                          />
+                          <label className="text-xs text-gray-400 mt-2 block">Charge (Rs)</label>
+                          <input
+                            type="number"
+                            value={slab.charge}
+                            onChange={e => {
+                              const u = [...deliveryForm.vehicles];
+                              u[vIdx].distanceSlabs[sIdx].charge = parseInt(e.target.value) || 0;
+                              setDeliveryForm(prev => ({ ...prev, vehicles: u }));
+                            }}
+                            className="w-full px-2 py-1.5 border rounded text-center font-bold text-green-600 text-sm mt-0.5"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+
+          {/* Add Vehicle Button */}
+          <button
+            onClick={() => {
+              setDeliveryForm(prev => ({
+                ...prev,
+                vehicles: [...prev.vehicles, {
+                  type: 'New Vehicle',
+                  baseCharge: 100,
+                  maxWeight: 100,
+                  useSlabPricing: true,
+                  perKmRate: 20,
+                  distanceSlabs: [
+                    { upToKm: 5, charge: 100 },
+                    { upToKm: 10, charge: 180 },
+                    { upToKm: 20, charge: 300 },
+                    { upToKm: 999, charge: 500 },
+                  ],
+                }]
+              }));
+            }}
+            className="w-full py-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-600 hover:bg-blue-50 font-medium text-sm transition-colors"
+          >
+            + Add Vehicle Type
+          </button>
+
+          {/* Global Settings */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-xl border shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-blue-100 rounded-lg"><MapPin className="h-5 w-5 text-blue-600" /></div>
+                <h3 className="font-semibold text-gray-900">Distance Limits</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Max Delivery Distance (km)</label>
+                  <input type="number" value={deliveryForm.maxDistance} onChange={e => setDeliveryForm(prev => ({ ...prev, maxDistance: parseInt(e.target.value) || 200 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Free Delivery Above (Rs)</label>
+                  <input type="number" value={deliveryForm.freeDeliveryAbove} onChange={e => setDeliveryForm(prev => ({ ...prev, freeDeliveryAbove: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-purple-100 rounded-lg"><Gauge className="h-5 w-5 text-purple-600" /></div>
+                <h3 className="font-semibold text-gray-900">Weight Handling</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Free Weight Up To (kg)</label>
+                  <input type="number" value={deliveryForm.freeWeightUpTo} onChange={e => setDeliveryForm(prev => ({ ...prev, freeWeightUpTo: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Per Extra Kg (Rs)</label>
+                  <input type="number" value={deliveryForm.weightChargePerKg} onChange={e => setDeliveryForm(prev => ({ ...prev, weightChargePerKg: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-green-100 rounded-lg"><DollarSign className="h-5 w-5 text-green-600" /></div>
+                <h3 className="font-semibold text-gray-900">Fees</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Platform Fee (Rs)</label>
+                  <input type="number" value={deliveryForm.platformFee} onChange={e => setDeliveryForm(prev => ({ ...prev, platformFee: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">GST on Delivery (%)</label>
+                  <input type="number" value={deliveryForm.gstPercent} onChange={e => setDeliveryForm(prev => ({ ...prev, gstPercent: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">COD Charge (Rs)</label>
+                  <input type="number" value={deliveryForm.codCharge} onChange={e => setDeliveryForm(prev => ({ ...prev, codCharge: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Express & Same Day */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl border shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-yellow-100 rounded-lg"><Clock className="h-5 w-5 text-yellow-600" /></div>
+                <h3 className="font-semibold text-gray-900">Express Delivery</h3>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Express Multiplier</label>
+                <input type="number" step="0.1" value={deliveryForm.expressMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, expressMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                <p className="text-xs text-gray-400 mt-1">× total delivery charge</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-red-100 rounded-lg"><Clock className="h-5 w-5 text-red-600" /></div>
+                <h3 className="font-semibold text-gray-900">Same Day Delivery</h3>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Same Day Multiplier</label>
+                <input type="number" step="0.1" value={deliveryForm.sameDayMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, sameDayMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                <p className="text-xs text-gray-400 mt-1">× total delivery charge</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Surge & Weather */}
+          <div className="bg-white rounded-xl border shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-lg"><CloudRain className="h-5 w-5 text-red-600" /></div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Surge Pricing & Weather Detection</h3>
+                  <p className="text-xs text-gray-500">Auto-adjust delivery price during peak hours and rain</p>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-4 py-2 rounded-lg">
+                <input type="checkbox" checked={deliveryForm.surgeEnabled} onChange={e => setDeliveryForm(prev => ({ ...prev, surgeEnabled: e.target.checked }))} className="w-4 h-4" />
+                <span className="text-sm font-medium">{deliveryForm.surgeEnabled ? 'Enabled' : 'Disabled'}</span>
+              </label>
+            </div>
+            {deliveryForm.surgeEnabled && (
+              <>
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="text-sm font-medium">Rain Surge Multiplier</label>
+                    <input type="number" step="0.1" value={deliveryForm.rainSurgeMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, rainSurgeMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
+                  </div>
+                  <div className="flex items-end">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 w-full">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-blue-700 font-medium">Auto Weather Detection</span>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={deliveryForm.autoWeatherEnabled} onChange={e => setDeliveryForm(prev => ({ ...prev, autoWeatherEnabled: e.target.checked }))} />
+                          <span className="text-xs font-medium">{deliveryForm.autoWeatherEnabled ? 'ON' : 'OFF'}</span>
+                        </label>
+                      </div>
+                      <p className="text-xs text-blue-500 mt-1">Set OPENWEATHER_API_KEY in .env</p>
+                    </div>
+                  </div>
+                </div>
+                <h4 className="font-medium text-sm text-gray-700 mb-3">Peak Hours</h4>
+                <div className="space-y-2 mb-3">
+                  {deliveryForm.peakHours.map((ph, idx) => (
+                    <div key={idx} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
+                      <input type="text" value={ph.label} onChange={e => { const u = [...deliveryForm.peakHours]; u[idx].label = e.target.value; setDeliveryForm(prev => ({ ...prev, peakHours: u })); }} className="w-32 px-2 py-1.5 border rounded text-sm font-medium" />
+                      <input type="time" value={ph.start} onChange={e => { const u = [...deliveryForm.peakHours]; u[idx].start = e.target.value; setDeliveryForm(prev => ({ ...prev, peakHours: u })); }} className="px-2 py-1.5 border rounded" />
+                      <span className="text-gray-400">to</span>
+                      <input type="time" value={ph.end} onChange={e => { const u = [...deliveryForm.peakHours]; u[idx].end = e.target.value; setDeliveryForm(prev => ({ ...prev, peakHours: u })); }} className="px-2 py-1.5 border rounded" />
+                      <span className="text-gray-400">×</span>
+                      <input type="number" step="0.1" value={ph.multiplier} onChange={e => { const u = [...deliveryForm.peakHours]; u[idx].multiplier = parseFloat(e.target.value) || 1; setDeliveryForm(prev => ({ ...prev, peakHours: u })); }} className="w-16 px-2 py-1.5 border rounded font-bold text-orange-600" />
+                      <button onClick={() => setDeliveryForm(prev => ({ ...prev, peakHours: prev.peakHours.filter((_, i) => i !== idx) }))} className="text-red-400 hover:text-red-600 ml-auto">×</button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setDeliveryForm(prev => ({ ...prev, peakHours: [...prev.peakHours, { start: '12:00', end: '14:00', multiplier: 1.2, label: 'Lunch Rush' }] }))} className="text-blue-600 text-sm font-medium hover:text-blue-800">+ Add Peak Hour</button>
+              </>
+            )}
+          </div>
+
+          {/* Save */}
+          <div className="flex justify-end gap-3">
+            <button onClick={fetchSettings} className="px-6 py-3 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 font-medium">Reset</button>
+            <button onClick={() => handleSave('DELIVERY', {
+              vehicles: deliveryForm.vehicles,
+              freeWeightUpTo: deliveryForm.freeWeightUpTo,
+              weightChargePerKg: deliveryForm.weightChargePerKg,
+              maxWeight: deliveryForm.maxWeight,
+              freeDeliveryAbove: deliveryForm.freeDeliveryAbove,
+              maxDistance: deliveryForm.maxDistance,
+              platformFee: deliveryForm.platformFee,
+              gstPercent: deliveryForm.gstPercent,
+              codCharge: deliveryForm.codCharge,
+              expressMultiplier: deliveryForm.expressMultiplier,
+              sameDayMultiplier: deliveryForm.sameDayMultiplier,
+              surgeEnabled: deliveryForm.surgeEnabled,
+              rainSurgeMultiplier: deliveryForm.rainSurgeMultiplier,
+              autoWeatherEnabled: deliveryForm.autoWeatherEnabled,
+              peakHours: deliveryForm.peakHours,
+            })} disabled={saving}
+              className="px-8 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2 font-semibold shadow-lg">
+              <Save className="h-5 w-5" />{saving ? 'Saving...' : 'Save Delivery Settings'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT TAB */}
       {activeTab === 'PAYMENT' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
             <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-purple-100 rounded-lg"><CreditCard className="h-5 w-5 text-purple-600" /></div><div><h3 className="font-semibold text-gray-900">Payment Methods</h3><p className="text-xs text-gray-500">Configure available payment options</p></div></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[{ key: 'razorpayEnabled', label: 'Razorpay', desc: 'UPI, Cards, Net Banking', icon: CreditCard },{ key: 'upiEnabled', label: 'UPI Direct', desc: 'Google Pay, PhonePe', icon: Smartphone },{ key: 'bankTransferEnabled', label: 'Bank Transfer', desc: 'NEFT/RTGS/IMPS', icon: Building },{ key: 'walletEnabled', label: 'Wallet', desc: 'PROCURE Wallet', icon: Wallet },{ key: 'codEnabled', label: 'Cash on Delivery', desc: 'Pay on delivery', icon: Banknote }].map(item => (
-                <label key={item.key} className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input type="checkbox" checked={paymentForm[item.key]} onChange={(e) => setPaymentForm(prev => ({ ...prev, [item.key]: e.target.checked }))} className="w-5 h-5" />
-                  <item.icon className="h-5 w-5 text-gray-500" /><div><p className="font-medium text-sm">{item.label}</p><p className="text-xs text-gray-500">{item.desc}</p></div>
-                </label>
+              {[{ key: 'razorpayEnabled', label: 'Razorpay', desc: 'UPI, Cards, Net Banking', icon: CreditCard }, { key: 'upiEnabled', label: 'UPI Direct', desc: 'Google Pay, PhonePe', icon: Smartphone }, { key: 'bankTransferEnabled', label: 'Bank Transfer', desc: 'NEFT/RTGS/IMPS', icon: Building }, { key: 'walletEnabled', label: 'Wallet', desc: 'PROCURE Wallet', icon: Wallet }, { key: 'codEnabled', label: 'Cash on Delivery', desc: 'Pay on delivery', icon: Banknote }].map(item => (
+                <label key={item.key} className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50"><input type="checkbox" checked={paymentForm[item.key]} onChange={(e) => setPaymentForm(prev => ({ ...prev, [item.key]: e.target.checked }))} className="w-5 h-5" /><item.icon className="h-5 w-5 text-gray-500" /><div><p className="font-medium text-sm">{item.label}</p><p className="text-xs text-gray-500">{item.desc}</p></div></label>
               ))}
             </div>
             <div className="grid grid-cols-2 gap-4 mt-4"><div><label className="text-sm font-medium">COD Max (Rs.)</label><input type="number" value={paymentForm.codMaxAmount} onChange={(e) => setPaymentForm(prev => ({ ...prev, codMaxAmount: parseInt(e.target.value) }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div><div><label className="text-sm font-medium">Wallet Min (Rs.)</label><input type="number" value={paymentForm.walletMinBalance} onChange={(e) => setPaymentForm(prev => ({ ...prev, walletMinBalance: parseInt(e.target.value) }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div></div>
             <div className="mt-4 pt-4 border-t flex justify-end"><button onClick={() => handleSave('PAYMENT', paymentForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Payment Settings'}</button></div>
           </div>
-
-          <div className="bg-white rounded-xl border shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-green-100 rounded-lg"><ArrowRightLeft className="h-5 w-5 text-green-600" /></div><div><h3 className="font-semibold text-gray-900">Settlement Configuration</h3></div></div>
-            <div className="grid grid-cols-3 gap-4"><div><label className="text-sm font-medium">Cycle</label><select value={paymentForm.settlementCycle} onChange={(e) => setPaymentForm(prev => ({ ...prev, settlementCycle: e.target.value }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5"><option>DAILY</option><option>WEEKLY</option><option>MONTHLY</option></select></div><div><label className="text-sm font-medium">Min (Rs.)</label><input type="number" value={paymentForm.minSettlement} onChange={(e) => setPaymentForm(prev => ({ ...prev, minSettlement: parseInt(e.target.value) }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div><div><label className="text-sm font-medium">Hold (Days)</label><input type="number" value={paymentForm.holdPeriod} onChange={(e) => setPaymentForm(prev => ({ ...prev, holdPeriod: parseInt(e.target.value) }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div></div>
-            <div className="mt-4 pt-4 border-t flex justify-end"><button onClick={() => handleSave('SETTLEMENT', paymentForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Settlement Settings'}</button></div>
-          </div>
-
-          <div className="bg-white rounded-xl border shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-orange-100 rounded-lg"><RotateCcw className="h-5 w-5 text-orange-600" /></div><div><h3 className="font-semibold text-gray-900">Refund Configuration</h3><p className="text-xs text-gray-500">Per-request based - buyer/admin chooses method</p></div></div>
-            <div className="flex flex-wrap gap-3 mb-4">
-              <label className="flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer"><input type="checkbox" checked={paymentForm.refundToWallet} onChange={(e) => setPaymentForm(prev => ({ ...prev, refundToWallet: e.target.checked }))} /><Wallet className="h-4 w-4" />Wallet</label>
-              <label className="flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer"><input type="checkbox" checked={paymentForm.refundToBank} onChange={(e) => setPaymentForm(prev => ({ ...prev, refundToBank: e.target.checked }))} /><Building className="h-4 w-4" />Bank Transfer</label>
-              <label className="flex items-center gap-2 px-4 py-2 border rounded-lg cursor-pointer"><input type="checkbox" checked={paymentForm.refundToOriginal} onChange={(e) => setPaymentForm(prev => ({ ...prev, refundToOriginal: e.target.checked }))} /><ArrowRightLeft className="h-4 w-4" />Original Payment</label>
-            </div>
-            <div className="grid grid-cols-2 gap-4"><div><label className="text-sm font-medium">Auto-Approve Below (Rs.)</label><input type="number" value={paymentForm.autoRefundBelow} onChange={(e) => setPaymentForm(prev => ({ ...prev, autoRefundBelow: parseInt(e.target.value) }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div><div><label className="text-sm font-medium">Max Refund Days</label><input type="number" value={paymentForm.maxRefundDays} onChange={(e) => setPaymentForm(prev => ({ ...prev, maxRefundDays: parseInt(e.target.value) }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div></div>
-            <label className="flex items-center gap-2 mt-3"><input type="checkbox" checked={paymentForm.partialRefundEnabled} onChange={(e) => setPaymentForm(prev => ({ ...prev, partialRefundEnabled: e.target.checked }))} />Allow Partial Refunds</label>
-            <div className="mt-4 pt-4 border-t flex justify-end"><button onClick={() => handleSave('REFUND', paymentForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Refund Settings'}</button></div>
-          </div>
         </div>
       )}
 
-      {/* NOTIFICATION */}
+      {/* NOTIFICATION TAB */}
       {activeTab === 'NOTIFICATION' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
             <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-orange-100 rounded-lg"><Bell className="h-5 w-5 text-orange-600" /></div><div><h3 className="font-semibold text-gray-900">Notification Configuration</h3></div></div>
             <h4 className="font-medium text-sm mb-3">Channels</h4>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-              {[{ key: 'emailEnabled', label: 'Email', icon: Mail },{ key: 'smsEnabled', label: 'SMS', icon: Smartphone },{ key: 'pushEnabled', label: 'Push', icon: Bell },{ key: 'whatsappEnabled', label: 'WhatsApp', icon: Smartphone }].map(item => (
+              {[{ key: 'emailEnabled', label: 'Email', icon: Mail }, { key: 'smsEnabled', label: 'SMS', icon: Smartphone }, { key: 'pushEnabled', label: 'Push', icon: Bell }, { key: 'whatsappEnabled', label: 'WhatsApp', icon: Smartphone }].map(item => (
                 <label key={item.key} className="flex flex-col items-center gap-2 p-4 border rounded-lg cursor-pointer text-center"><input type="checkbox" checked={notifForm[item.key]} onChange={(e) => setNotifForm(prev => ({ ...prev, [item.key]: e.target.checked }))} /><item.icon className="h-5 w-5 text-gray-500" /><p className="font-medium text-sm">{item.label}</p></label>
               ))}
             </div>
             {notifForm.emailEnabled && <div className="mb-6 p-4 bg-gray-50 rounded-lg"><h4 className="font-medium text-sm mb-3">SMTP Config</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-3"><input type="text" value={notifForm.smtpHost || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpHost: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="Host" /><input type="number" value={notifForm.smtpPort || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpPort: parseInt(e.target.value) }))} className="px-3 py-2 border rounded-lg" placeholder="Port" /><input type="text" value={notifForm.smtpUser || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpUser: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="User" /><input type="password" value={notifForm.smtpPass || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpPass: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="Password" /></div></div>}
             <h4 className="font-medium text-sm mb-3">Events</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {[{ key: 'orderConfirmation', label: 'Order Confirmation' },{ key: 'shippingUpdate', label: 'Shipping Updates' },{ key: 'deliveryOTP', label: 'Delivery OTP' },{ key: 'rfqAlert', label: 'RFQ Alerts' },{ key: 'paymentReceipt', label: 'Payment Receipts' },{ key: 'promotionalEmail', label: 'Promotional' }].map(item => (
+              {[{ key: 'orderConfirmation', label: 'Order Confirmation' }, { key: 'shippingUpdate', label: 'Shipping Updates' }, { key: 'deliveryOTP', label: 'Delivery OTP' }, { key: 'rfqAlert', label: 'RFQ Alerts' }, { key: 'paymentReceipt', label: 'Payment Receipts' }, { key: 'promotionalEmail', label: 'Promotional' }].map(item => (
                 <label key={item.key} className="flex items-center gap-2"><input type="checkbox" checked={notifForm[item.key]} onChange={(e) => setNotifForm(prev => ({ ...prev, [item.key]: e.target.checked }))} />{item.label}</label>
               ))}
             </div>
@@ -325,17 +652,14 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      {/* FEATURES */}
+      {/* FEATURES TAB */}
       {activeTab === 'FEATURES' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
             <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-yellow-100 rounded-lg"><Zap className="h-5 w-5 text-yellow-600" /></div><div><h3 className="font-semibold text-gray-900">Feature Flags</h3></div></div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {Object.entries(featureForm).map(([key, enabled]) => (
-                <label key={key} className="flex items-center justify-between p-4 border rounded-lg cursor-pointer">
-                  <div><p className="font-medium text-sm capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p></div>
-                  <input type="checkbox" checked={enabled} onChange={(e) => setFeatureForm(prev => ({ ...prev, [key]: e.target.checked }))} className="w-5 h-5" />
-                </label>
+                <label key={key} className="flex items-center justify-between p-4 border rounded-lg cursor-pointer"><div><p className="font-medium text-sm capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p></div><input type="checkbox" checked={enabled} onChange={(e) => setFeatureForm(prev => ({ ...prev, [key]: e.target.checked }))} className="w-5 h-5" /></label>
               ))}
             </div>
             <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('FEATURES', featureForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Feature Settings'}</button></div>

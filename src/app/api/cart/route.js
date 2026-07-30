@@ -58,20 +58,42 @@ export async function GET() {
       },
     });
 
-    const formattedItems = (cart?.items || []).map(item => ({
-      id: item.id,
-      productId: item.productId,
-      productName: item.product?.name,
-      supplier: item.product?.supplier?.businessName,
-      supplierId: item.product?.supplier?.id,
-      isVerified: item.product?.supplier?.isVerified,
-      image: item.product?.images[0]?.url || null,
-      price: item.customPrice || item.product?.pricing[0]?.sellingPrice || 0,
-      mrp: item.product?.pricing[0]?.mrp || 0,
-      isRfqPrice: !!item.customPrice,
-      moq: item.product?.pricing[0]?.minQty || 1,
-      quantity: item.quantity,
-    }));
+    // Get RFQ info for items with customPrice (RFQ accepted items)
+    const rfqItems = await prisma.rFQ.findMany({
+      where: {
+        status: 'AWARDED',
+        buyerId: session.userId,
+      },
+      select: {
+        id: true,
+        awardedSupplierId: true,
+        items: true,
+        deadline: true,
+      },
+    });
+
+    const formattedItems = (cart?.items || []).map(item => {
+      // Find matching RFQ for this product
+      const rfq = rfqItems.find(r => 
+        r.items?.some(i => i.productId === item.productId)
+      );
+
+      return {
+        id: item.id,
+        productId: item.productId,
+        productName: item.product?.name,
+        supplier: item.product?.supplier?.businessName,
+        supplierId: item.product?.supplier?.id,
+        isVerified: item.product?.supplier?.isVerified,
+        image: item.product?.images[0]?.url || null,
+        price: item.customPrice || item.product?.pricing[0]?.sellingPrice || 0,
+        mrp: item.product?.pricing[0]?.mrp || 0,
+        isRfqPrice: !!item.customPrice,
+        rfqExpiresAt: rfq?.deadline || null,
+        moq: item.product?.pricing[0]?.minQty || 1,
+        quantity: item.quantity,
+      };
+    });
 
     return successResponse({ id: cart?.id, items: formattedItems });
   } catch (error) {
