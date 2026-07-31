@@ -6,7 +6,6 @@ export class FinanceService {
    */
   static async getSupplierFinanceOverview(supplierId) {
     const [orders, invoices, wallet, settlements, returns] = await Promise.all([
-      // Revenue from orders
       prisma.order.aggregate({
         where: {
           product: { supplierId },
@@ -15,22 +14,18 @@ export class FinanceService {
         _sum: { totalAmount: true },
         _count: true
       }),
-      // Invoice summary
       prisma.invoice.aggregate({
         where: { supplierId },
         _sum: { totalAmount: true, taxAmount: true },
         _count: true
       }),
-      // Wallet balance
       prisma.supplierWallet.findUnique({
         where: { supplierId }
       }),
-      // Pending settlements
       prisma.settlement.aggregate({
         where: { supplierId, status: 'PENDING' },
         _sum: { amount: true }
       }),
-      // Return/Refund summary
       prisma.returnRequest.aggregate({
         where: {
           supplierId,
@@ -41,11 +36,8 @@ export class FinanceService {
       })
     ]);
 
-    // Recent transactions
     const recentTransactions = await prisma.walletTransaction.findMany({
-      where: {
-        wallet: { supplierId }
-      },
+      where: { wallet: { supplierId } },
       orderBy: { createdAt: 'desc' },
       take: 10
     });
@@ -86,9 +78,7 @@ export class FinanceService {
     const [invoices, total] = await Promise.all([
       prisma.invoice.findMany({
         where,
-        include: {
-          items: true
-        },
+        include: { items: true },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit
@@ -98,12 +88,7 @@ export class FinanceService {
 
     return {
       invoices,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit)
-      }
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
     };
   }
 
@@ -112,11 +97,8 @@ export class FinanceService {
    */
   static async createInvoice(supplierId, data) {
     const { orderId, items, invoiceType = 'TAX_INVOICE', dueDate } = data;
-
-    // Generate invoice number
     const invoiceNumber = `INV-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-    // Calculate totals
     let amount = 0;
     let taxAmount = 0;
 
@@ -125,7 +107,6 @@ export class FinanceService {
       const itemTax = itemTotal * (item.taxRate / 100);
       amount += itemTotal;
       taxAmount += itemTax;
-
       return {
         description: item.description,
         productId: item.productId,
@@ -148,13 +129,9 @@ export class FinanceService {
         taxAmount,
         totalAmount: amount + taxAmount,
         dueDate: dueDate ? new Date(dueDate) : null,
-        items: {
-          create: invoiceItems
-        }
+        items: { create: invoiceItems }
       },
-      include: {
-        items: true
-      }
+      include: { items: true }
     });
 
     return invoice;
@@ -166,10 +143,7 @@ export class FinanceService {
   static async updateInvoiceStatus(invoiceId, status, paidAt = null) {
     return prisma.invoice.update({
       where: { id: invoiceId },
-      data: {
-        status,
-        ...(paidAt && { paidAt: new Date(paidAt) })
-      }
+      data: { status, ...(paidAt && { paidAt: new Date(paidAt) }) }
     });
   }
 
@@ -201,66 +175,119 @@ export class FinanceService {
    */
   static async createSettlement(supplierId, { amount, settlementType = 'AUTO', referenceId = null, notes = null }) {
     return prisma.settlement.create({
-      data: {
-        supplierId,
-        amount,
-        settlementType,
-        referenceId,
-        notes
-      }
+      data: { supplierId, amount, settlementType, referenceId, notes }
     });
   }
 
   /**
-   * Process settlement
+   * Process settlement - DEDUCT from wallet and optionally send via Razorpay Payout
    */
   static async processSettlement(settlementId) {
     const settlement = await prisma.settlement.findUnique({
       where: { id: settlementId },
-      include: { supplier: { include: { wallet: true } } }
+      include: { 
+        supplier: { 
+          include: { 
+            wallet: true,
+            bankAccounts: { where: { isDefault: true }, take: 1 }
+          } 
+        } 
+      }
     });
 
     if (!settlement) throw new Error('Settlement not found');
     if (settlement.status !== 'PENDING') throw new Error('Settlement already processed');
 
-    // Update wallet
     const wallet = settlement.supplier.wallet;
     if (!wallet) throw new Error('Supplier wallet not found');
 
-    const balanceBefore = wallet.balance;
-    const balanceAfter = balanceBefore + settlement.amount;
+    // Validate wallet has enough balance
+    if (wallet.balance < settlement.amount) {
+      throw new Error(`Insufficient wallet balance. Available: ₹${wallet.balance}, Requested: ₹${settlement.amount}`);
+    }
 
-    // Update settlement and wallet in transaction
+    const bankAccount = settlement.supplier.bankAccounts[0];
+
+    // Try actual Razorpay payout (works in production with real keys)
+    let payoutResult = null;
+    try {
+      const { RazorpayService } = await import('@/services/razorpay.service');
+      
+      let fundAccountId = bankAccount?.razorpayFundAccountId;
+      
+      if (!fundAccountId && bankAccount) {
+        const fundAccount = await RazorpayService.createFundAccount({
+          accountHolder: bankAccount.accountHolder,
+          accountNumber: bankAccount.accountNumber,
+          ifsc: bankAccount.ifscCode,
+          bankName: bankAccount.bankName,
+        });
+        fundAccountId = fundAccount.id;
+        
+        await prisma.supplierBankAccount.update({
+          where: { id: bankAccount.id },
+          data: { razorpayFundAccountId: fundAccountId }
+        }).catch(() => {});
+      }
+
+      if (fundAccountId) {
+        payoutResult = await RazorpayService.createPayout({
+          fundAccountId,
+          amount: settlement.amount,
+          reference: `settlement_${settlementId}`,
+          narration: `PROCURE Settlement #${settlementId.slice(0, 8)}`,
+        });
+      }
+    } catch (payoutError) {
+      console.log('Razorpay payout not available (test mode or missing bank):', payoutError.message);
+    }
+
+    const balanceBefore = wallet.balance;
+    const balanceAfter = balanceBefore - settlement.amount;
+
     const result = await prisma.$transaction([
       prisma.settlement.update({
         where: { id: settlementId },
-        data: {
-          status: 'PROCESSED',
-          processedAt: new Date()
+        data: { 
+          status: 'PROCESSED', 
+          processedAt: new Date(),
+          notes: payoutResult 
+            ? `Razorpay Payout ID: ${payoutResult.id} | Mode: NEFT` 
+            : settlement.notes || 'Settlement processed'
         }
       }),
       prisma.supplierWallet.update({
         where: { id: wallet.id },
         data: {
           balance: balanceAfter,
-          totalEarned: wallet.totalEarned + settlement.amount
+          totalWithdrawn: (wallet.totalWithdrawn || 0) + settlement.amount
         }
       }),
       prisma.walletTransaction.create({
         data: {
           walletId: wallet.id,
-          type: 'CREDIT',
+          type: 'DEBIT',
           amount: settlement.amount,
           referenceType: 'SETTLEMENT',
           referenceId: settlementId,
-          description: `Settlement processed - ${settlement.settlementType}`,
+          description: payoutResult 
+            ? `Settlement via Razorpay Payout (NEFT)` 
+            : `Settlement payout`,
           balanceBefore,
           balanceAfter
         }
       })
     ]);
 
-    return result;
+    return {
+      settlementId,
+      amount: settlement.amount,
+      walletBalanceBefore: balanceBefore,
+      walletBalanceAfter: balanceAfter,
+      status: 'PROCESSED',
+      payoutId: payoutResult?.id || null,
+      isRealPayout: !!payoutResult
+    };
   }
 
   /**
@@ -269,21 +296,13 @@ export class FinanceService {
   static async getWallet(supplierId) {
     let wallet = await prisma.supplierWallet.findUnique({
       where: { supplierId },
-      include: {
-        transactions: {
-          orderBy: { createdAt: 'desc' },
-          take: 50
-        }
-      }
+      include: { transactions: { orderBy: { createdAt: 'desc' }, take: 50 } }
     });
 
-    // Create wallet if doesn't exist
     if (!wallet) {
       wallet = await prisma.supplierWallet.create({
         data: { supplierId },
-        include: {
-          transactions: true
-        }
+        include: { transactions: true }
       });
     }
 
@@ -294,10 +313,7 @@ export class FinanceService {
    * Get wallet transactions
    */
   static async getWalletTransactions(supplierId, { page = 1, limit = 20 } = {}) {
-    const wallet = await prisma.supplierWallet.findUnique({
-      where: { supplierId }
-    });
-
+    const wallet = await prisma.supplierWallet.findUnique({ where: { supplierId } });
     if (!wallet) return { transactions: [], pagination: { page, limit, total: 0, totalPages: 0 } };
 
     const [transactions, total] = await Promise.all([
@@ -310,46 +326,32 @@ export class FinanceService {
       prisma.walletTransaction.count({ where: { walletId: wallet.id } })
     ]);
 
-    return {
-      transactions,
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
-    };
+    return { transactions, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
   /**
    * Get admin finance overview
    */
   static async getAdminFinanceOverview() {
-    const [
-      totalRevenue,
-      pendingSettlements,
-      totalRefunds,
-      invoiceStats,
-      monthlyRevenue
-    ] = await Promise.all([
-      // Total platform revenue
+    const [totalRevenue, pendingSettlements, totalRefunds, invoiceStats, monthlyRevenue] = await Promise.all([
       prisma.order.aggregate({
         where: { status: { in: ['DELIVERED', 'COMPLETED'] } },
         _sum: { totalAmount: true }
       }),
-      // Pending settlements
       prisma.settlement.aggregate({
         where: { status: 'PENDING' },
         _sum: { amount: true },
         _count: true
       }),
-      // Total refunds
       prisma.refundTransaction.aggregate({
         where: { status: 'SUCCESS' },
         _sum: { amount: true }
       }),
-      // Invoice stats
       prisma.invoice.groupBy({
         by: ['status'],
         _count: true,
         _sum: { totalAmount: true }
       }),
-      // Monthly revenue (last 12 months)
       prisma.$queryRaw`
         SELECT 
           DATE_FORMAT(createdAt, '%Y-%m') as month,
@@ -381,25 +383,16 @@ export class FinanceService {
   static async generateFinancialReport(supplierId, { startDate, endDate, type = 'SUMMARY' } = {}) {
     const where = {
       supplierId,
-      ...(startDate && endDate && {
-        createdAt: {
-          gte: new Date(startDate),
-          lte: new Date(endDate)
-        }
-      })
+      ...(startDate && endDate && { createdAt: { gte: new Date(startDate), lte: new Date(endDate) } })
     };
 
     const [orders, invoices, settlements, walletTransactions, returns] = await Promise.all([
       prisma.order.findMany({
         where: {
           product: { supplierId },
-          ...(startDate && endDate && {
-            createdAt: { gte: new Date(startDate), lte: new Date(endDate) }
-          })
+          ...(startDate && endDate && { createdAt: { gte: new Date(startDate), lte: new Date(endDate) } })
         },
-        include: {
-          product: { select: { name: true } }
-        },
+        include: { product: { select: { name: true } } },
         orderBy: { createdAt: 'desc' }
       }),
       prisma.invoice.findMany({ where, orderBy: { createdAt: 'desc' } }),
@@ -407,18 +400,14 @@ export class FinanceService {
       prisma.walletTransaction.findMany({
         where: {
           wallet: { supplierId },
-          ...(startDate && endDate && {
-            createdAt: { gte: new Date(startDate), lte: new Date(endDate) }
-          })
+          ...(startDate && endDate && { createdAt: { gte: new Date(startDate), lte: new Date(endDate) } })
         },
         orderBy: { createdAt: 'desc' }
       }),
       prisma.returnRequest.findMany({
         where: {
           supplierId,
-          ...(startDate && endDate && {
-            createdAt: { gte: new Date(startDate), lte: new Date(endDate) }
-          })
+          ...(startDate && endDate && { createdAt: { gte: new Date(startDate), lte: new Date(endDate) } })
         }
       })
     ]);
@@ -426,31 +415,15 @@ export class FinanceService {
     return {
       period: { startDate, endDate },
       type,
-      orders: {
-        data: orders,
-        total: orders.reduce((sum, o) => sum + o.totalAmount, 0),
-        count: orders.length
-      },
-      invoices: {
-        data: invoices,
-        total: invoices.reduce((sum, i) => sum + i.totalAmount, 0),
-        count: invoices.length
-      },
-      settlements: {
-        data: settlements,
-        total: settlements.reduce((sum, s) => sum + s.amount, 0),
-        count: settlements.length
-      },
+      orders: { data: orders, total: orders.reduce((sum, o) => sum + o.totalAmount, 0), count: orders.length },
+      invoices: { data: invoices, total: invoices.reduce((sum, i) => sum + i.totalAmount, 0), count: invoices.length },
+      settlements: { data: settlements, total: settlements.reduce((sum, s) => sum + s.amount, 0), count: settlements.length },
       walletTransactions: {
         data: walletTransactions,
         credits: walletTransactions.filter(t => t.type === 'CREDIT').reduce((sum, t) => sum + t.amount, 0),
         debits: walletTransactions.filter(t => t.type === 'DEBIT').reduce((sum, t) => sum + t.amount, 0)
       },
-      returns: {
-        data: returns,
-        totalRefund: returns.reduce((sum, r) => sum + (r.refundAmount || 0), 0),
-        count: returns.length
-      }
+      returns: { data: returns, totalRefund: returns.reduce((sum, r) => sum + (r.refundAmount || 0), 0), count: returns.length }
     };
   }
 }

@@ -60,8 +60,11 @@ export default function SupplierMessagesPage() {
     } catch { toast.error('Failed to send'); }
   };
 
-  const startConversation = (customer) => {
-    setSelectedBuyer({ buyerId: customer.id, buyer: { name: customer.name, email: customer.email }, unreadCount: 0 });
+    const startConversation = (customer) => {
+    const buyerId = customer.buyerId || customer.id;
+    const buyerName = customer.buyer?.name || customer.name || 'Customer';
+    const buyerEmail = customer.buyer?.email || customer.email || '';
+    setSelectedBuyer({ buyerId, buyer: { name: buyerName, email: buyerEmail }, unreadCount: 0 });
     setActiveTab('messages');
   };
 

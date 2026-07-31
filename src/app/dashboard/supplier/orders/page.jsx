@@ -24,7 +24,11 @@ export default function SupplierOrdersPage() {
   const [declineReason, setDeclineReason] = useState("");
   const [declineProcessing, setDeclineProcessing] = useState(false);
 
-  useEffect(() => { fetchOrders(); }, [statusFilter]);
+  useEffect(() => { 
+    fetchOrders(); 
+    const interval = setInterval(fetchOrders, 15000);
+    return () => clearInterval(interval);
+  }, [statusFilter]);
 
   const fetchOrders = async () => {
     try {
@@ -32,7 +36,7 @@ export default function SupplierOrdersPage() {
       if (statusFilter) params.set("status", statusFilter);
       const res = await fetch(`/api/orders?${params}`);
       const data = await res.json();
-      if (data.success) setOrders(data.data.orders);
+      if (data.success) setOrders(data.data.orders || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -49,6 +53,7 @@ export default function SupplierOrdersPage() {
       if (!data.success) { toast.error(data.message); return; }
       toast.success(`Order ${newStatus.toLowerCase().replace('_', ' ')} successfully`);
       fetchOrders();
+      window.dispatchEvent(new CustomEvent('order-updated'));
     } catch { toast.error("Failed to update order"); }
   };
 
@@ -67,6 +72,7 @@ export default function SupplierOrdersPage() {
       if (!data.success) { toast.error(data.message); return; }
       toast.success("Order declined");
       setDeclineModal(null); setDeclineReason(""); fetchOrders();
+      window.dispatchEvent(new CustomEvent('order-updated'));
     } catch { toast.error("Failed"); }
     finally { setDeclineProcessing(false); }
   };

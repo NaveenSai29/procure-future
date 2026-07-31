@@ -230,11 +230,17 @@ export async function DELETE(request) {
     const { searchParams } = new URL(request.url);
     const itemId = searchParams.get("itemId");
 
-    if (!itemId) return errorResponse("Item ID required", 422);
+    const cartId = await getOrCreateCart(session.userId);
 
-    await prisma.cartItem.delete({ where: { id: itemId } });
-
-    return successResponse({ message: "Removed" });
+    if (itemId) {
+      // Delete single item
+      await prisma.cartItem.delete({ where: { id: itemId } });
+      return successResponse({ message: "Removed" });
+    } else {
+      // Delete all items (clear cart)
+      await prisma.cartItem.deleteMany({ where: { cartId } });
+      return successResponse({ message: "Cart cleared" });
+    }
   } catch (error) {
     return errorResponse("Failed to remove", 500);
   }

@@ -47,11 +47,27 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    const { action, settlementId } = await request.json();
+    const { action, settlementId, supplierId, amount } = await request.json();
 
-    if (action === 'processSettlement' && settlementId) {
-      const result = await FinanceService.processSettlement(settlementId);
-      return NextResponse.json({ success: true, result });
+    if (action === 'processSettlement') {
+      // If settlementId provided, process existing settlement
+      if (settlementId) {
+        const result = await FinanceService.processSettlement(settlementId);
+        return NextResponse.json({ success: true, result });
+      }
+      
+      // If supplierId and amount provided, create + process new settlement
+      if (supplierId && amount) {
+        const settlement = await FinanceService.createSettlement(supplierId, { 
+          amount: parseFloat(amount), 
+          settlementType: 'MANUAL',
+          notes: 'Manual settlement by admin'
+        });
+        const result = await FinanceService.processSettlement(settlement.id);
+        return NextResponse.json({ success: true, result });
+      }
+      
+      return NextResponse.json({ error: 'Required: settlementId or supplierId+amount' }, { status: 400 });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

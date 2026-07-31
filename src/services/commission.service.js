@@ -36,24 +36,46 @@ export class CommissionService {
       commissionAmount = maxCommission;
     }
 
-    // Deduct from supplier wallet
+    // Add order revenue to supplier wallet, then deduct commission
     const supplierId = order.product.supplierId;
     let wallet = await prisma.supplierWallet.findUnique({ where: { supplierId } });
     
     if (!wallet) {
       wallet = await prisma.supplierWallet.create({
-        data: { supplierId, balance: 0 }
+        data: { supplierId, balance: 0, totalEarned: 0 }
       });
     }
 
-    const balanceBefore = wallet.balance;
-    const balanceAfter = balanceBefore - commissionAmount;
+    // First credit the order amount
+    const balanceAfterOrder = wallet.balance + order.totalAmount;
+    const totalEarnedAfter = (wallet.totalEarned || 0) + order.totalAmount;
+
+    // Then deduct commission
+    const balanceAfterCommission = balanceAfterOrder - commissionAmount;
 
     await prisma.$transaction([
+      // Update wallet with order revenue + commission deduction
       prisma.supplierWallet.update({
         where: { id: wallet.id },
-        data: { balance: balanceAfter }
+        data: { 
+          balance: balanceAfterCommission,
+          totalEarned: totalEarnedAfter
+        }
       }),
+      // Record order revenue credit
+      prisma.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'CREDIT',
+          amount: order.totalAmount,
+          referenceType: 'ORDER',
+          referenceId: orderId,
+          description: `Order #${orderId.slice(0, 8)} revenue`,
+          balanceBefore: wallet.balance,
+          balanceAfter: balanceAfterOrder
+        }
+      }),
+      // Record commission deduction
       prisma.walletTransaction.create({
         data: {
           walletId: wallet.id,
@@ -61,9 +83,9 @@ export class CommissionService {
           amount: commissionAmount,
           referenceType: 'COMMISSION',
           referenceId: orderId,
-          description: `Platform commission (${commissionRate}%) on order #${orderId.slice(0,8)}`,
-          balanceBefore,
-          balanceAfter
+          description: `Platform commission (${commissionRate}%) on order #${orderId.slice(0, 8)}`,
+          balanceBefore: balanceAfterOrder,
+          balanceAfter: balanceAfterCommission
         }
       })
     ]);
@@ -73,7 +95,7 @@ export class CommissionService {
       commissionRate,
       commissionAmount,
       supplierId,
-      walletBalance: balanceAfter
+      walletBalance: balanceAfterCommission
     };
   }
 

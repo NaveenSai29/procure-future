@@ -42,7 +42,7 @@ export default function NotificationsPage() {
     }
   };
 
-  const markAsRead = async (id) => {
+    const markAsRead = async (id) => {
     try {
       const res = await fetch(`/api/notifications/${id}`, {
         method: 'PATCH',
@@ -55,13 +55,15 @@ export default function NotificationsPage() {
           prev.map(n => n.id === id ? { ...n, isRead: true, readAt: new Date() } : n)
         );
         setPagination(prev => ({ ...prev, unreadCount: Math.max(0, prev.unreadCount - 1) }));
+        // Dispatch event so sidebar updates immediately
+        window.dispatchEvent(new CustomEvent('notifications-read'));
       }
     } catch (error) {
       console.error('Mark as read error:', error);
     }
   };
 
-  const markAllAsRead = async () => {
+    const markAllAsRead = async () => {
     try {
       const res = await fetch('/api/notifications', {
         method: 'PATCH',
@@ -72,6 +74,8 @@ export default function NotificationsPage() {
       if (res.ok) {
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true, readAt: new Date() })));
         setPagination(prev => ({ ...prev, unreadCount: 0 }));
+        // Dispatch event so sidebar updates immediately
+        window.dispatchEvent(new CustomEvent('notifications-read'));
         toast.success('All notifications marked as read');
       }
     } catch (error) {

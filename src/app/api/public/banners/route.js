@@ -9,10 +9,13 @@ export async function GET() {
       select: {
         id: true,
         title: true,
-        subtitle: true,
         imageUrl: true,
         linkUrl: true,
         placement: true,
+        sortOrder: true,
+        isActive: true,
+        startDate: true,
+        endDate: true,
       },
     });
 

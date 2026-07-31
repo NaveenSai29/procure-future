@@ -40,6 +40,7 @@ export async function GET(request) {
       isActive: true,
       supplier: {
         isVerified: true,
+        gstVerified: true,
         isActive: true,
       },
       ...(search && {

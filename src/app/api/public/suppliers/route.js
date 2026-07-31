@@ -8,7 +8,7 @@ export async function GET(request) {
 
     if (supplierId) {
       const supplier = await prisma.supplier.findUnique({
-        where: { id: supplierId, isVerified: true, isActive: true },
+        where: { id: supplierId, isVerified: true, gstVerified: true, isActive: true },
         select: {
           id: true,
           businessName: true,
@@ -88,7 +88,7 @@ export async function GET(request) {
 
     // List all verified suppliers
     const suppliers = await prisma.supplier.findMany({
-      where: { isVerified: true, isActive: true },
+      where: { isVerified: true, gstVerified: true, isActive: true },
       select: {
         id: true,
         businessName: true,

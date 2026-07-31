@@ -40,7 +40,11 @@ export async function GET(request) {
         data = await AnalyticsService.getAdminAnalytics();
     }
 
-    return NextResponse.json(data);
+    // Convert BigInt values to numbers before serialization
+    const safeData = JSON.parse(JSON.stringify(data, (key, value) =>
+      typeof value === 'bigint' ? Number(value) : value
+    ));
+    return NextResponse.json(safeData);
   } catch (error) {
     console.error('Admin analytics error:', error);
     return NextResponse.json(

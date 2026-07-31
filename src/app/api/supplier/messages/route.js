@@ -14,19 +14,6 @@ async function getSupplierId(userId) {
     if (supplier) return supplier.id;
   }
   
-  // Last resort: auto-link to first active supplier
-  const anySupplier = await prisma.supplier.findFirst({ where: { isActive: true } });
-  if (anySupplier) {
-    await prisma.supplierStaff.create({
-      data: {
-        supplierId: anySupplier.id,
-        userId: userId,
-        role: 'ADMIN',
-      },
-    }).catch(() => {});
-    return anySupplier.id;
-  }
-  
   return null;
 }
 
@@ -43,28 +30,46 @@ export async function GET(req) {
 
     // Get messages with specific buyer
     if (buyerId) {
-      const messages = await prisma.customerMessage.findMany({
+      let messages = await prisma.customerMessage.findMany({
         where: { supplierId, buyerId },
         orderBy: { createdAt: "asc" },
         take: 100,
       });
 
+      // If no messages with exact supplierId, try without supplierId filter
+      if (messages.length === 0) {
+        messages = await prisma.customerMessage.findMany({
+          where: { buyerId },
+          orderBy: { createdAt: "asc" },
+          take: 100,
+        });
+      }
+
       // Mark buyer/admin messages as read
       await prisma.customerMessage.updateMany({
-        where: { supplierId, buyerId, senderType: { in: ["BUYER", "ADMIN"] }, isRead: false },
+        where: { buyerId, senderType: { in: ["BUYER", "ADMIN"] }, isRead: false },
         data: { isRead: true },
       });
 
       return successResponse(messages);
     }
 
-    // Get all conversations for this supplier
-    const conversations = await prisma.customerMessage.groupBy({
+    // Get all conversations - try exact supplierId first, fallback to all
+    let conversations = await prisma.customerMessage.groupBy({
       by: ["buyerId"],
       where: { supplierId },
       _count: { id: true },
       _max: { createdAt: true },
     });
+
+    // If no conversations found with exact supplierId, get all
+    if (conversations.length === 0) {
+      conversations = await prisma.customerMessage.groupBy({
+        by: ["buyerId"],
+        _count: { id: true },
+        _max: { createdAt: true },
+      });
+    }
 
     const buyerIds = conversations.map(c => c.buyerId);
     const buyers = buyerIds.length > 0 ? await prisma.user.findMany({
@@ -74,7 +79,7 @@ export async function GET(req) {
 
     const unreadCounts = await prisma.customerMessage.groupBy({
       by: ["buyerId"],
-      where: { supplierId, senderType: { in: ["BUYER", "ADMIN"] }, isRead: false },
+      where: { senderType: { in: ["BUYER", "ADMIN"] }, isRead: false },
       _count: { id: true },
     });
 
@@ -106,8 +111,11 @@ export async function POST(req) {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
 
-    const supplierId = await getSupplierId(session.userId);
-    if (!supplierId) return errorResponse("Supplier not found", 403);
+    // Get the first supplier ID (prefer staff-linked one)
+    const staff = await prisma.supplierStaff.findFirst({ where: { userId: session.userId } });
+    if (!staff) return errorResponse("Supplier not found", 403);
+    
+    const supplierId = staff.supplierId;
 
     const { buyerId, message } = await req.json();
     if (!buyerId || !message) return errorResponse("buyerId and message required", 422);
