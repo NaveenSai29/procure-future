@@ -80,11 +80,24 @@ export async function PATCH(request, { params }) {
     const body = await request.json();
     const { status, awardedSupplierId } = body;
 
-    const rfq = await prisma.rFQ.findUnique({ where: { id } });
+    const rfq = await prisma.rFQ.findUnique({
+      where: { id },
+      include: { items: true },
+    });
     if (!rfq) return errorResponse("RFQ not found", 404);
     if (rfq.buyerId !== session.userId) return errorResponse("Not your RFQ", 403);
 
+    if (status === 'CLOSED') {
+      // Check if RFQ has active awarded status
+      if (rfq.status === 'AWARDED') {
+        // Allow closing but warn about losing the price
+      }
+    }
+
     if (status === 'AWARDED' && awardedSupplierId) {
+      // Set RFQ price expiry to 7 days from now
+      const priceExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
       await prisma.quotation.updateMany({
         where: { rfqId: id, supplierId: awardedSupplierId },
         data: { status: 'ACCEPTED' },
@@ -92,6 +105,20 @@ export async function PATCH(request, { params }) {
       await prisma.quotation.updateMany({
         where: { rfqId: id, NOT: { supplierId: awardedSupplierId } },
         data: { status: 'REJECTED' },
+      });
+
+      // Update RFQ with expiry
+      await prisma.rFQ.update({
+        where: { id },
+        data: {
+          status,
+          deadline: priceExpiry, // Reuse deadline field for RFQ price expiry
+        },
+      });
+
+      return successResponse({
+        message: 'RFQ awarded. Price valid for 7 days.',
+        priceExpiry: priceExpiry.toISOString(),
       });
     }
 

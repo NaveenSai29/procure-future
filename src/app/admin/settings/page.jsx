@@ -6,7 +6,7 @@ import {
   Zap, Save, RefreshCw,
   Globe, Mail, Phone, Smartphone,
   RotateCcw, Wallet, Banknote, Building, ArrowRightLeft, Percent,
-  Truck, Bike, CloudRain, ThermometerSun, Clock, MapPin, Gauge, DollarSign
+  Truck, CloudRain, ThermometerSun, Clock, MapPin, Gauge, DollarSign
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -42,26 +42,14 @@ export default function AdminSettingsPage() {
   });
 
   const [commissionForm, setCommissionForm] = useState({
-    defaultRate: 5,
-    commissionOnDelivery: false,
+    defaultRate: 5, commissionOnDelivery: false,
   });
 
   const [deliveryForm, setDeliveryForm] = useState({
-    vehicles: [],
-    freeWeightUpTo: 5,
-    weightChargePerKg: 3,
-    maxWeight: 40000,
-    freeDeliveryAbove: 4999,
-    maxDistance: 200,
-    platformFee: 5,
-    gstPercent: 5,
-    codCharge: 30,
-    expressMultiplier: 1.8,
-    sameDayMultiplier: 2.0,
-    surgeEnabled: false,
-    rainSurgeMultiplier: 1.5,
-    autoWeatherEnabled: true,
-    peakHours: [],
+    vehicles: [], freeWeightUpTo: 5, weightChargePerKg: 3, maxWeight: 40000,
+    freeDeliveryAbove: 4999, maxDistance: 200, platformFee: 5, gstPercent: 5,
+    codCharge: 30, expressMultiplier: 1.8, sameDayMultiplier: 2.0, minDeliveryFee: 20,
+    surgeEnabled: false, rainSurgeMultiplier: 1.5, autoWeatherEnabled: true, peakHours: [],
   });
 
   const [notifForm, setNotifForm] = useState({
@@ -86,7 +74,6 @@ export default function AdminSettingsPage() {
       const res = await fetch('/api/admin/settings');
       const data = await res.json();
       setPlatformData(data);
-
       if (data.settings?.GENERAL) setGeneralForm(prev => ({ ...prev, ...data.settings.GENERAL }));
       if (data.settings?.TAX) setTaxForm(prev => ({ ...prev, ...data.settings.TAX }));
       if (data.settings?.PAYMENT) setPaymentForm(prev => ({ ...prev, ...data.settings.PAYMENT }));
@@ -108,6 +95,7 @@ export default function AdminSettingsPage() {
           codCharge: d.codCharge ?? prev.codCharge,
           expressMultiplier: d.expressMultiplier ?? prev.expressMultiplier,
           sameDayMultiplier: d.sameDayMultiplier ?? prev.sameDayMultiplier,
+          minDeliveryFee: d.minDeliveryFee ?? prev.minDeliveryFee,
           surgeEnabled: d.surgeEnabled ?? prev.surgeEnabled,
           rainSurgeMultiplier: d.rainSurgeMultiplier ?? prev.rainSurgeMultiplier,
           autoWeatherEnabled: d.autoWeatherEnabled ?? prev.autoWeatherEnabled,
@@ -115,11 +103,7 @@ export default function AdminSettingsPage() {
         }));
       }
       if (data.platform) {
-        setGeneralForm(prev => ({
-          ...prev, platformName: data.platform.name, supportEmail: data.platform.supportEmail,
-          supportPhone: data.platform.supportPhone, language: data.platform.language,
-          currency: data.platform.currency, timezone: data.platform.timezone,
-        }));
+        setGeneralForm(prev => ({ ...prev, platformName: data.platform.name, supportEmail: data.platform.supportEmail, supportPhone: data.platform.supportPhone, language: data.platform.language, currency: data.platform.currency, timezone: data.platform.timezone }));
       }
     } catch { toast.error('Failed to load settings'); }
     finally { setLoading(false); }
@@ -128,10 +112,7 @@ export default function AdminSettingsPage() {
   const handleSave = async (category, formData) => {
     try {
       setSaving(true);
-      const res = await fetch('/api/admin/settings', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, settings: formData })
-      });
+      const res = await fetch('/api/admin/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category, settings: formData }) });
       if (res.ok) { toast.success(category + ' settings saved'); fetchSettings(); }
       else { const d = await res.json(); toast.error(d.error || 'Failed'); }
     } catch { toast.error('Failed to save'); }
@@ -168,8 +149,7 @@ export default function AdminSettingsPage() {
 
       <div className="flex gap-2 mb-6 overflow-x-auto border-b pb-2">
         {tabs.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-t-lg text-sm font-medium whitespace-nowrap transition border-b-2 ${activeTab === tab.id ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-5 py-2.5 rounded-t-lg text-sm font-medium whitespace-nowrap transition border-b-2 ${activeTab === tab.id ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
             <tab.icon className="h-4 w-4" />{tab.label}
           </button>
         ))}
@@ -199,11 +179,7 @@ export default function AdminSettingsPage() {
               </div>
             </div>
             <div className="mt-6 pt-4 border-t"><h4 className="font-medium text-sm text-gray-700 mb-3">SEO Settings</h4>
-              <div className="space-y-3">
-                <input type="text" value={generalForm.metaTitle || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaTitle: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="Meta Title" />
-                <textarea value={generalForm.metaDescription || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaDescription: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" rows={2} placeholder="Meta Description" />
-                <input type="text" value={generalForm.metaKeywords || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaKeywords: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="Meta Keywords" />
-              </div>
+              <div className="space-y-3"><input type="text" value={generalForm.metaTitle || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaTitle: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="Meta Title" /><textarea value={generalForm.metaDescription || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaDescription: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" rows={2} placeholder="Meta Description" /><input type="text" value={generalForm.metaKeywords || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaKeywords: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="Meta Keywords" /></div>
             </div>
             <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('GENERAL', generalForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save General Settings'}</button></div>
           </div>
@@ -214,7 +190,7 @@ export default function AdminSettingsPage() {
       {activeTab === 'TAX' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-green-100 rounded-lg"><Receipt className="h-5 w-5 text-green-600" /></div><div><h3 className="font-semibold text-gray-900">GST & Tax Configuration</h3><p className="text-xs text-gray-500">Indian GST and tax compliance settings</p></div></div>
+            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-green-100 rounded-lg"><Receipt className="h-5 w-5 text-green-600" /></div><div><h3 className="font-semibold text-gray-900">GST & Tax Configuration</h3></div></div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div><label className="text-sm font-medium">Default GST Rate (%)</label><select value={taxForm.defaultRate} onChange={(e) => setTaxForm(prev => ({ ...prev, defaultRate: parseInt(e.target.value) }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5"><option value={0}>0%</option><option value={5}>5%</option><option value={12}>12%</option><option value={18}>18%</option><option value={28}>28%</option></select></div>
               <div><label className="text-sm font-medium">CGST (%)</label><input type="number" value={taxForm.cgst} onChange={(e) => setTaxForm(prev => ({ ...prev, cgst: parseFloat(e.target.value) }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
@@ -237,16 +213,11 @@ export default function AdminSettingsPage() {
       {activeTab === 'COMMISSION' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-green-100 rounded-lg"><Percent className="h-5 w-5 text-green-600" /></div><div><h3 className="font-semibold text-gray-900">Platform Commission</h3><p className="text-xs text-gray-500">Commission earned per completed order from suppliers</p></div></div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"><p className="text-sm text-blue-800 font-medium">How it works</p><p className="text-xs text-blue-700 mt-1">When a buyer places an order and it is delivered, the platform automatically deducts a commission percentage from the supplier wallet. No monthly fees, no hidden charges.</p></div>
-            <div className="max-w-md"><label className="text-sm font-medium text-gray-700">Commission Rate (%)</label><div className="relative mt-1.5"><input type="number" step="0.1" value={commissionForm.defaultRate || 5} onChange={(e) => setCommissionForm(prev => ({ ...prev, defaultRate: parseFloat(e.target.value) }))} className="w-full px-4 py-3 border rounded-lg text-lg font-bold" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">%</span></div><p className="text-xs text-gray-500 mt-2">Example: On Rs. 1,000 order, platform earns Rs. {(1000 * (commissionForm.defaultRate || 5) / 100).toFixed(0)}</p></div>
-            <div className="mt-6 grid grid-cols-3 gap-4">
-              <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-gray-500">100 orders/mo</p><p className="text-xl font-bold text-green-600">Rs. {((100 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p><p className="text-xs text-gray-400">at Rs. 1,000 avg order</p></div>
-              <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-gray-500">1,000 orders/mo</p><p className="text-xl font-bold text-green-600">Rs. {((1000 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p><p className="text-xs text-gray-400">at Rs. 1,000 avg order</p></div>
-              <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-gray-500">10,000 orders/mo</p><p className="text-xl font-bold text-green-600">Rs. {((10000 * 1000 * (commissionForm.defaultRate || 5)) / 100).toLocaleString()}</p><p className="text-xs text-gray-400">at Rs. 1,000 avg order</p></div>
-            </div>
+            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-green-100 rounded-lg"><Percent className="h-5 w-5 text-green-600" /></div><div><h3 className="font-semibold text-gray-900">Platform Commission</h3></div></div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"><p className="text-sm text-blue-800 font-medium">How it works</p><p className="text-xs text-blue-700 mt-1">Commission auto-deducted from supplier wallet on completed orders.</p></div>
+            <div className="max-w-md"><label className="text-sm font-medium text-gray-700">Commission Rate (%)</label><div className="relative mt-1.5"><input type="number" step="0.1" value={commissionForm.defaultRate || 5} onChange={(e) => setCommissionForm(prev => ({ ...prev, defaultRate: parseFloat(e.target.value) }))} className="w-full px-4 py-3 border rounded-lg text-lg font-bold" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">%</span></div></div>
             <div className="mt-4 flex gap-4"><label className="flex items-center gap-2"><input type="checkbox" checked={commissionForm.commissionOnDelivery || false} onChange={(e) => setCommissionForm(prev => ({ ...prev, commissionOnDelivery: e.target.checked }))} /><span className="text-sm">Also charge commission on delivery charges</span></label></div>
-            <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('COMMISSION', { defaultRate: commissionForm.defaultRate, commissionOnDelivery: commissionForm.commissionOnDelivery })} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Commission Settings'}</button></div>
+            <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('COMMISSION', commissionForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Commission Settings'}</button></div>
           </div>
         </div>
       )}
@@ -255,12 +226,11 @@ export default function AdminSettingsPage() {
       {activeTab === 'DELIVERY' && (
         <div className="space-y-6">
 
-          {/* PER VEHICLE PRICING */}
           {deliveryForm.vehicles.length === 0 ? (
             <div className="bg-white rounded-xl border shadow-sm p-12 text-center">
               <Truck className="h-16 w-16 mx-auto text-gray-300 mb-4" />
               <h3 className="text-lg font-semibold text-gray-700 mb-2">No Vehicles Configured</h3>
-              <p className="text-gray-500 mb-4">Run the seed script to add all vehicle types with default pricing</p>
+              <p className="text-gray-500 mb-4">Run the seed script to add vehicle types</p>
               <code className="bg-gray-900 text-green-400 px-4 py-2 rounded-lg text-sm">node scripts/seed-delivery.js</code>
             </div>
           ) : (
@@ -268,304 +238,86 @@ export default function AdminSettingsPage() {
               <div key={vIdx} className="bg-white rounded-xl border shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 rounded-lg">
-                      <Truck className="h-5 w-5 text-orange-600" />
+                    <div className="p-2 bg-orange-100 rounded-lg"><Truck className="h-5 w-5 text-orange-600" /></div>
+                    <div className="flex items-center gap-3">
+                      <input type="text" value={vehicle.type} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].type = e.target.value; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="font-semibold text-gray-900 text-lg bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none px-1 py-0.5 w-40" />
+                      <span className="text-xs text-gray-400">Max: {vehicle.maxWeight} kg</span>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="text"
-                          value={vehicle.type}
-                          onChange={e => {
-                            const updated = [...deliveryForm.vehicles];
-                            updated[vIdx].type = e.target.value;
-                            setDeliveryForm(prev => ({ ...prev, vehicles: updated }));
-                          }}
-                          className="font-semibold text-gray-900 text-lg bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none px-1 py-0.5 w-40"
-                        />
-                        <span className="text-xs text-gray-400">Max: {vehicle.maxWeight} kg</span>
+                  </div>
+                  <button onClick={() => setDeliveryForm(prev => ({ ...prev, vehicles: prev.vehicles.filter((_, i) => i !== vIdx) }))} className="text-red-400 hover:text-red-600 text-sm">Remove</button>
+                </div>
+
+                <div className="mb-4">
+                  <label className="text-xs font-medium text-gray-500">Max Weight (kg)</label>
+                  <input type="number" value={vehicle.maxWeight} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].maxWeight = parseInt(e.target.value) || 0; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="w-28 px-3 py-2 border rounded-lg mt-1 font-medium" />
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div><span className="text-sm font-medium text-gray-700">Per-Km Rate Slabs</span><p className="text-xs text-gray-400 mt-0.5">0-{(vehicle.distanceSlabs?.[0]?.upToKm || 5)}km = Rs {vehicle.distanceSlabs?.[0]?.perKmRate || 0}/km, {(vehicle.distanceSlabs?.[0]?.upToKm || 5)}-{(vehicle.distanceSlabs?.[1]?.upToKm || 10)}km = Rs {vehicle.distanceSlabs?.[1]?.perKmRate || 0}/km...</p></div>
+                    <button onClick={() => { const u = [...deliveryForm.vehicles]; if (!u[vIdx].distanceSlabs) u[vIdx].distanceSlabs = []; const last = u[vIdx].distanceSlabs[u[vIdx].distanceSlabs.length - 1]; u[vIdx].distanceSlabs.push({ upToKm: (last?.upToKm || 50) + 50, perKmRate: (last?.perKmRate || 50) + 20 }); setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="text-blue-600 text-xs font-medium hover:text-blue-800">+ Add Slab</button>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {(vehicle.distanceSlabs || []).map((slab, sIdx) => (
+                      <div key={sIdx} className="bg-white border rounded-lg p-3 relative">
+                        <button onClick={() => { if ((vehicle.distanceSlabs || []).length <= 1) return; const u = [...deliveryForm.vehicles]; u[vIdx].distanceSlabs = u[vIdx].distanceSlabs.filter((_, i) => i !== sIdx); setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="absolute top-1 right-2 text-gray-300 hover:text-red-500 text-xs">×</button>
+                        <label className="text-xs text-gray-400">Up to (km)</label>
+                        <input type="number" value={slab.upToKm} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].distanceSlabs[sIdx].upToKm = parseInt(e.target.value) || 0; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="w-full px-2 py-1.5 border rounded text-center font-bold text-sm mt-0.5" />
+                        <label className="text-xs text-gray-400 mt-2 block">Per Km (Rs)</label>
+                        <input type="number" value={slab.perKmRate || 0} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].distanceSlabs[sIdx].perKmRate = parseInt(e.target.value) || 0; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="w-full px-2 py-1.5 border rounded text-center font-bold text-green-600 text-sm mt-0.5" />
+                        <p className="text-xs text-gray-400 text-center mt-1">Ex: 3km = Rs {((slab.perKmRate || 0) * 3).toLocaleString()}</p>
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => {
-                        setDeliveryForm(prev => ({
-                          ...prev,
-                          vehicles: prev.vehicles.filter((_, i) => i !== vIdx)
-                        }));
-                      }}
-                      className="text-red-400 hover:text-red-600 text-sm"
-                    >
-                      Remove
-                    </button>
+                    ))}
                   </div>
                 </div>
-
-                <div className="grid grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">Base Charge (Rs)</label>
-                    <input type="number" value={vehicle.baseCharge}
-                      onChange={e => {
-                        const u = [...deliveryForm.vehicles];
-                        u[vIdx].baseCharge = parseInt(e.target.value) || 0;
-                        setDeliveryForm(prev => ({ ...prev, vehicles: u }));
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg mt-1 font-medium" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">Max Weight (kg)</label>
-                    <input type="number" value={vehicle.maxWeight}
-                      onChange={e => {
-                        const u = [...deliveryForm.vehicles];
-                        u[vIdx].maxWeight = parseInt(e.target.value) || 0;
-                        setDeliveryForm(prev => ({ ...prev, vehicles: u }));
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg mt-1 font-medium" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-500">Fallback Per Km (Rs)</label>
-                    <input type="number" value={vehicle.perKmRate || 0}
-                      onChange={e => {
-                        const u = [...deliveryForm.vehicles];
-                        u[vIdx].perKmRate = parseInt(e.target.value) || 0;
-                        setDeliveryForm(prev => ({ ...prev, vehicles: u }));
-                      }}
-                      className="w-full px-3 py-2 border rounded-lg mt-1 font-medium" />
-                    <p className="text-xs text-gray-400 mt-1">Used when slab pricing is off</p>
-                  </div>
-                  <div className="flex items-end pb-1">
-                    <label className="flex items-center gap-2 bg-gray-50 px-3 py-2.5 rounded-lg cursor-pointer w-full justify-center border">
-                      <input
-                        type="checkbox"
-                        checked={vehicle.useSlabPricing !== false}
-                        onChange={e => {
-                          const u = [...deliveryForm.vehicles];
-                          u[vIdx].useSlabPricing = e.target.checked;
-                          if (e.target.checked && !u[vIdx].distanceSlabs) {
-                            u[vIdx].distanceSlabs = [
-                              { upToKm: 5, charge: u[vIdx].baseCharge || 50 },
-                              { upToKm: 10, charge: (u[vIdx].baseCharge || 50) * 2 },
-                              { upToKm: 20, charge: (u[vIdx].baseCharge || 50) * 3 },
-                              { upToKm: 999, charge: (u[vIdx].baseCharge || 50) * 5 },
-                            ];
-                          }
-                          setDeliveryForm(prev => ({ ...prev, vehicles: u }));
-                        }}
-                      />
-                      <span className="text-xs font-medium">Slab Pricing</span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* Distance Slabs for this vehicle */}
-                {vehicle.useSlabPricing !== false && vehicle.distanceSlabs && (
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm font-medium text-gray-700">Distance Slabs</span>
-                      <button
-                        onClick={() => {
-                          const u = [...deliveryForm.vehicles];
-                          const lastSlab = u[vIdx].distanceSlabs[u[vIdx].distanceSlabs.length - 1];
-                          u[vIdx].distanceSlabs.push({
-                            upToKm: (lastSlab?.upToKm || 50) + 50,
-                            charge: (lastSlab?.charge || 200) + 100
-                          });
-                          setDeliveryForm(prev => ({ ...prev, vehicles: u }));
-                        }}
-                        className="text-blue-600 text-xs font-medium hover:text-blue-800"
-                      >
-                        + Add Slab
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                      {vehicle.distanceSlabs.map((slab, sIdx) => (
-                        <div key={sIdx} className="bg-white border rounded-lg p-3 relative">
-                          <button
-                            onClick={() => {
-                              if (vehicle.distanceSlabs.length <= 1) return;
-                              const u = [...deliveryForm.vehicles];
-                              u[vIdx].distanceSlabs = u[vIdx].distanceSlabs.filter((_, i) => i !== sIdx);
-                              setDeliveryForm(prev => ({ ...prev, vehicles: u }));
-                            }}
-                            className="absolute top-1 right-2 text-gray-300 hover:text-red-500 text-xs"
-                          >
-                            ×
-                          </button>
-                          <label className="text-xs text-gray-400">Up to (km)</label>
-                          <input
-                            type="number"
-                            value={slab.upToKm}
-                            onChange={e => {
-                              const u = [...deliveryForm.vehicles];
-                              u[vIdx].distanceSlabs[sIdx].upToKm = parseInt(e.target.value) || 0;
-                              setDeliveryForm(prev => ({ ...prev, vehicles: u }));
-                            }}
-                            className="w-full px-2 py-1.5 border rounded text-center font-bold text-sm mt-0.5"
-                          />
-                          <label className="text-xs text-gray-400 mt-2 block">Charge (Rs)</label>
-                          <input
-                            type="number"
-                            value={slab.charge}
-                            onChange={e => {
-                              const u = [...deliveryForm.vehicles];
-                              u[vIdx].distanceSlabs[sIdx].charge = parseInt(e.target.value) || 0;
-                              setDeliveryForm(prev => ({ ...prev, vehicles: u }));
-                            }}
-                            className="w-full px-2 py-1.5 border rounded text-center font-bold text-green-600 text-sm mt-0.5"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             ))
           )}
 
-          {/* Add Vehicle Button */}
-          <button
-            onClick={() => {
-              setDeliveryForm(prev => ({
-                ...prev,
-                vehicles: [...prev.vehicles, {
-                  type: 'New Vehicle',
-                  baseCharge: 100,
-                  maxWeight: 100,
-                  useSlabPricing: true,
-                  perKmRate: 20,
-                  distanceSlabs: [
-                    { upToKm: 5, charge: 100 },
-                    { upToKm: 10, charge: 180 },
-                    { upToKm: 20, charge: 300 },
-                    { upToKm: 999, charge: 500 },
-                  ],
-                }]
-              }));
-            }}
-            className="w-full py-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-600 hover:bg-blue-50 font-medium text-sm transition-colors"
-          >
-            + Add Vehicle Type
-          </button>
+          <button onClick={() => { setDeliveryForm(prev => ({ ...prev, vehicles: [...prev.vehicles, { type: 'New Vehicle', maxWeight: 100, distanceSlabs: [{ upToKm: 5, perKmRate: 25 }, { upToKm: 10, perKmRate: 35 }, { upToKm: 20, perKmRate: 50 }, { upToKm: 999, perKmRate: 70 }] }] })); }} className="w-full py-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-600 hover:bg-blue-50 font-medium text-sm">+ Add Vehicle Type</button>
 
-          {/* Global Settings */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white rounded-xl border shadow-sm p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-blue-100 rounded-lg"><MapPin className="h-5 w-5 text-blue-600" /></div>
-                <h3 className="font-semibold text-gray-900">Distance Limits</h3>
-              </div>
+              <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-blue-100 rounded-lg"><MapPin className="h-5 w-5 text-blue-600" /></div><h3 className="font-semibold text-gray-900">Distance Limits</h3></div>
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Max Delivery Distance (km)</label>
-                  <input type="number" value={deliveryForm.maxDistance} onChange={e => setDeliveryForm(prev => ({ ...prev, maxDistance: parseInt(e.target.value) || 200 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Free Delivery Above (Rs)</label>
-                  <input type="number" value={deliveryForm.freeDeliveryAbove} onChange={e => setDeliveryForm(prev => ({ ...prev, freeDeliveryAbove: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                </div>
+                <div><label className="text-sm font-medium">Max Distance (km)</label><input type="number" value={deliveryForm.maxDistance} onChange={e => setDeliveryForm(prev => ({ ...prev, maxDistance: parseInt(e.target.value) || 200 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                <div><label className="text-sm font-medium">Free Delivery Above (Rs)</label><input type="number" value={deliveryForm.freeDeliveryAbove} onChange={e => setDeliveryForm(prev => ({ ...prev, freeDeliveryAbove: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                <div><label className="text-sm font-medium">Min Delivery Fee (Rs)</label><input type="number" value={deliveryForm.minDeliveryFee} onChange={e => setDeliveryForm(prev => ({ ...prev, minDeliveryFee: parseInt(e.target.value) || 20 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
               </div>
             </div>
-
             <div className="bg-white rounded-xl border shadow-sm p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-purple-100 rounded-lg"><Gauge className="h-5 w-5 text-purple-600" /></div>
-                <h3 className="font-semibold text-gray-900">Weight Handling</h3>
-              </div>
+              <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-purple-100 rounded-lg"><Gauge className="h-5 w-5 text-purple-600" /></div><h3 className="font-semibold text-gray-900">Weight Handling</h3></div>
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Free Weight Up To (kg)</label>
-                  <input type="number" value={deliveryForm.freeWeightUpTo} onChange={e => setDeliveryForm(prev => ({ ...prev, freeWeightUpTo: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Per Extra Kg (Rs)</label>
-                  <input type="number" value={deliveryForm.weightChargePerKg} onChange={e => setDeliveryForm(prev => ({ ...prev, weightChargePerKg: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                </div>
+                <div><label className="text-sm font-medium">Free Weight (kg)</label><input type="number" value={deliveryForm.freeWeightUpTo} onChange={e => setDeliveryForm(prev => ({ ...prev, freeWeightUpTo: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                <div><label className="text-sm font-medium">Per Extra Kg (Rs)</label><input type="number" value={deliveryForm.weightChargePerKg} onChange={e => setDeliveryForm(prev => ({ ...prev, weightChargePerKg: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                <div><label className="text-sm font-medium">Max Weight (kg)</label><input type="number" value={deliveryForm.maxWeight} onChange={e => setDeliveryForm(prev => ({ ...prev, maxWeight: parseInt(e.target.value) || 40000 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
               </div>
             </div>
-
             <div className="bg-white rounded-xl border shadow-sm p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-green-100 rounded-lg"><DollarSign className="h-5 w-5 text-green-600" /></div>
-                <h3 className="font-semibold text-gray-900">Fees</h3>
-              </div>
+              <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-green-100 rounded-lg"><DollarSign className="h-5 w-5 text-green-600" /></div><h3 className="font-semibold text-gray-900">Fees</h3></div>
               <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Platform Fee (Rs)</label>
-                  <input type="number" value={deliveryForm.platformFee} onChange={e => setDeliveryForm(prev => ({ ...prev, platformFee: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">GST on Delivery (%)</label>
-                  <input type="number" value={deliveryForm.gstPercent} onChange={e => setDeliveryForm(prev => ({ ...prev, gstPercent: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">COD Charge (Rs)</label>
-                  <input type="number" value={deliveryForm.codCharge} onChange={e => setDeliveryForm(prev => ({ ...prev, codCharge: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                </div>
+                <div><label className="text-sm font-medium">Platform Fee (Rs)</label><input type="number" value={deliveryForm.platformFee} onChange={e => setDeliveryForm(prev => ({ ...prev, platformFee: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                <div><label className="text-sm font-medium">GST (%)</label><input type="number" value={deliveryForm.gstPercent} onChange={e => setDeliveryForm(prev => ({ ...prev, gstPercent: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                <div><label className="text-sm font-medium">COD Charge (Rs)</label><input type="number" value={deliveryForm.codCharge} onChange={e => setDeliveryForm(prev => ({ ...prev, codCharge: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
               </div>
             </div>
           </div>
 
-          {/* Express & Same Day */}
           <div className="grid grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl border shadow-sm p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-yellow-100 rounded-lg"><Clock className="h-5 w-5 text-yellow-600" /></div>
-                <h3 className="font-semibold text-gray-900">Express Delivery</h3>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Express Multiplier</label>
-                <input type="number" step="0.1" value={deliveryForm.expressMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, expressMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                <p className="text-xs text-gray-400 mt-1">× total delivery charge</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-xl border shadow-sm p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-red-100 rounded-lg"><Clock className="h-5 w-5 text-red-600" /></div>
-                <h3 className="font-semibold text-gray-900">Same Day Delivery</h3>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Same Day Multiplier</label>
-                <input type="number" step="0.1" value={deliveryForm.sameDayMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, sameDayMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                <p className="text-xs text-gray-400 mt-1">× total delivery charge</p>
-              </div>
-            </div>
+            <div className="bg-white rounded-xl border shadow-sm p-6"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-yellow-100 rounded-lg"><Clock className="h-5 w-5 text-yellow-600" /></div><h3 className="font-semibold text-gray-900">Express Delivery</h3></div><div><label className="text-sm font-medium">Multiplier</label><input type="number" step="0.1" value={deliveryForm.expressMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, expressMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div></div>
+            <div className="bg-white rounded-xl border shadow-sm p-6"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-red-100 rounded-lg"><Clock className="h-5 w-5 text-red-600" /></div><h3 className="font-semibold text-gray-900">Same Day Delivery</h3></div><div><label className="text-sm font-medium">Multiplier</label><input type="number" step="0.1" value={deliveryForm.sameDayMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, sameDayMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div></div>
           </div>
 
-          {/* Surge & Weather */}
           <div className="bg-white rounded-xl border shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-lg"><CloudRain className="h-5 w-5 text-red-600" /></div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Surge Pricing & Weather Detection</h3>
-                  <p className="text-xs text-gray-500">Auto-adjust delivery price during peak hours and rain</p>
-                </div>
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-4 py-2 rounded-lg">
-                <input type="checkbox" checked={deliveryForm.surgeEnabled} onChange={e => setDeliveryForm(prev => ({ ...prev, surgeEnabled: e.target.checked }))} className="w-4 h-4" />
-                <span className="text-sm font-medium">{deliveryForm.surgeEnabled ? 'Enabled' : 'Disabled'}</span>
-              </label>
+              <div className="flex items-center gap-3"><div className="p-2 bg-red-100 rounded-lg"><CloudRain className="h-5 w-5 text-red-600" /></div><div><h3 className="font-semibold text-gray-900">Surge Pricing & Weather</h3><p className="text-xs text-gray-500">Auto-adjust price during peak hours and rain (shows banner in app)</p></div></div>
+              <label className="flex items-center gap-2 cursor-pointer bg-gray-50 px-4 py-2 rounded-lg"><input type="checkbox" checked={deliveryForm.surgeEnabled} onChange={e => setDeliveryForm(prev => ({ ...prev, surgeEnabled: e.target.checked }))} className="w-4 h-4" /><span className="text-sm font-medium">{deliveryForm.surgeEnabled ? 'ON' : 'OFF'}</span></label>
             </div>
             {deliveryForm.surgeEnabled && (
               <>
                 <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label className="text-sm font-medium">Rain Surge Multiplier</label>
-                    <input type="number" step="0.1" value={deliveryForm.rainSurgeMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, rainSurgeMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" />
-                  </div>
-                  <div className="flex items-end">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 w-full">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-blue-700 font-medium">Auto Weather Detection</span>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={deliveryForm.autoWeatherEnabled} onChange={e => setDeliveryForm(prev => ({ ...prev, autoWeatherEnabled: e.target.checked }))} />
-                          <span className="text-xs font-medium">{deliveryForm.autoWeatherEnabled ? 'ON' : 'OFF'}</span>
-                        </label>
-                      </div>
-                      <p className="text-xs text-blue-500 mt-1">Set OPENWEATHER_API_KEY in .env</p>
-                    </div>
-                  </div>
+                  <div><label className="text-sm font-medium">Rain Surge Multiplier</label><input type="number" step="0.1" value={deliveryForm.rainSurgeMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, rainSurgeMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                  <div className="flex items-end"><div className="bg-blue-50 border border-blue-200 rounded-lg p-3 w-full"><div className="flex items-center justify-between"><span className="text-xs text-blue-700 font-medium">Auto Weather Detection</span><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={deliveryForm.autoWeatherEnabled} onChange={e => setDeliveryForm(prev => ({ ...prev, autoWeatherEnabled: e.target.checked }))} /><span className="text-xs font-medium">{deliveryForm.autoWeatherEnabled ? 'ON' : 'OFF'}</span></label></div><p className="text-xs text-blue-500 mt-1">Set OPENWEATHER_API_KEY in .env</p></div></div>
                 </div>
                 <h4 className="font-medium text-sm text-gray-700 mb-3">Peak Hours</h4>
                 <div className="space-y-2 mb-3">
@@ -586,29 +338,16 @@ export default function AdminSettingsPage() {
             )}
           </div>
 
-          {/* Save */}
           <div className="flex justify-end gap-3">
             <button onClick={fetchSettings} className="px-6 py-3 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 font-medium">Reset</button>
             <button onClick={() => handleSave('DELIVERY', {
-              vehicles: deliveryForm.vehicles,
-              freeWeightUpTo: deliveryForm.freeWeightUpTo,
-              weightChargePerKg: deliveryForm.weightChargePerKg,
-              maxWeight: deliveryForm.maxWeight,
-              freeDeliveryAbove: deliveryForm.freeDeliveryAbove,
-              maxDistance: deliveryForm.maxDistance,
-              platformFee: deliveryForm.platformFee,
-              gstPercent: deliveryForm.gstPercent,
-              codCharge: deliveryForm.codCharge,
-              expressMultiplier: deliveryForm.expressMultiplier,
-              sameDayMultiplier: deliveryForm.sameDayMultiplier,
-              surgeEnabled: deliveryForm.surgeEnabled,
-              rainSurgeMultiplier: deliveryForm.rainSurgeMultiplier,
-              autoWeatherEnabled: deliveryForm.autoWeatherEnabled,
-              peakHours: deliveryForm.peakHours,
-            })} disabled={saving}
-              className="px-8 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2 font-semibold shadow-lg">
-              <Save className="h-5 w-5" />{saving ? 'Saving...' : 'Save Delivery Settings'}
-            </button>
+              vehicles: deliveryForm.vehicles, freeWeightUpTo: deliveryForm.freeWeightUpTo, weightChargePerKg: deliveryForm.weightChargePerKg,
+              maxWeight: deliveryForm.maxWeight, freeDeliveryAbove: deliveryForm.freeDeliveryAbove, maxDistance: deliveryForm.maxDistance,
+              platformFee: deliveryForm.platformFee, gstPercent: deliveryForm.gstPercent, codCharge: deliveryForm.codCharge,
+              expressMultiplier: deliveryForm.expressMultiplier, sameDayMultiplier: deliveryForm.sameDayMultiplier, minDeliveryFee: deliveryForm.minDeliveryFee,
+              surgeEnabled: deliveryForm.surgeEnabled, rainSurgeMultiplier: deliveryForm.rainSurgeMultiplier,
+              autoWeatherEnabled: deliveryForm.autoWeatherEnabled, peakHours: deliveryForm.peakHours,
+            })} disabled={saving} className="px-8 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2 font-semibold shadow-lg"><Save className="h-5 w-5" />{saving ? 'Saving...' : 'Save Delivery Settings'}</button>
           </div>
         </div>
       )}
@@ -617,7 +356,7 @@ export default function AdminSettingsPage() {
       {activeTab === 'PAYMENT' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-purple-100 rounded-lg"><CreditCard className="h-5 w-5 text-purple-600" /></div><div><h3 className="font-semibold text-gray-900">Payment Methods</h3><p className="text-xs text-gray-500">Configure available payment options</p></div></div>
+            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-purple-100 rounded-lg"><CreditCard className="h-5 w-5 text-purple-600" /></div><div><h3 className="font-semibold text-gray-900">Payment Methods</h3></div></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[{ key: 'razorpayEnabled', label: 'Razorpay', desc: 'UPI, Cards, Net Banking', icon: CreditCard }, { key: 'upiEnabled', label: 'UPI Direct', desc: 'Google Pay, PhonePe', icon: Smartphone }, { key: 'bankTransferEnabled', label: 'Bank Transfer', desc: 'NEFT/RTGS/IMPS', icon: Building }, { key: 'walletEnabled', label: 'Wallet', desc: 'PROCURE Wallet', icon: Wallet }, { key: 'codEnabled', label: 'Cash on Delivery', desc: 'Pay on delivery', icon: Banknote }].map(item => (
                 <label key={item.key} className="flex items-center gap-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50"><input type="checkbox" checked={paymentForm[item.key]} onChange={(e) => setPaymentForm(prev => ({ ...prev, [item.key]: e.target.checked }))} className="w-5 h-5" /><item.icon className="h-5 w-5 text-gray-500" /><div><p className="font-medium text-sm">{item.label}</p><p className="text-xs text-gray-500">{item.desc}</p></div></label>

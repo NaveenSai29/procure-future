@@ -3,13 +3,11 @@ import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 
 // Helper to get or create cart for a user
 async function getOrCreateCart(userId) {
-  // Find buyer profile
   let buyerProfile = await prisma.buyerProfile.findUnique({
     where: { userId },
     include: { cart: true },
   });
 
-  // Create buyer profile if doesn't exist
   if (!buyerProfile) {
     buyerProfile = await prisma.buyerProfile.create({
       data: { userId, buyerType: "INDIVIDUAL" },
@@ -17,12 +15,10 @@ async function getOrCreateCart(userId) {
     });
   }
 
-  // Create cart if doesn't exist
   if (!buyerProfile.cart) {
     await prisma.cart.create({
       data: { buyerId: buyerProfile.id },
     });
-    // Re-fetch with cart
     buyerProfile = await prisma.buyerProfile.findUnique({
       where: { userId },
       include: { cart: true },
@@ -58,25 +54,38 @@ export async function GET() {
       },
     });
 
-    // Get RFQ info for items with customPrice (RFQ accepted items)
-    const rfqItems = await prisma.rFQ.findMany({
-      where: {
-        status: 'AWARDED',
-        buyerId: session.userId,
-      },
-      select: {
-        id: true,
-        awardedSupplierId: true,
-        items: true,
-        deadline: true,
-      },
-    });
+    // Find awarded RFQs with deadline for price expiry
+    let awardedRfqs = [];
+    try {
+      awardedRfqs = await prisma.rFQ.findMany({
+        where: {
+          buyerId: session.userId,
+          status: 'AWARDED',
+        },
+        select: {
+          description: true,
+          deadline: true,
+        },
+      });
+    } catch (e) {
+      // Ignore RFQ query errors
+    }
 
     const formattedItems = (cart?.items || []).map(item => {
-      // Find matching RFQ for this product
-      const rfq = rfqItems.find(r => 
-        r.items?.some(i => i.productId === item.productId)
-      );
+      // Parse RFQ descriptions to find matching product
+      let rfqDeadline = null;
+      for (const rfq of awardedRfqs) {
+        try {
+          const desc = JSON.parse(rfq.description || '{}');
+          if (desc.productId === item.productId) {
+            rfqDeadline = rfq.deadline;
+            break;
+          }
+        } catch (e) {}
+      }
+
+      const isExpired = rfqDeadline ? new Date(rfqDeadline) < new Date() : false;
+      const hasCustomPrice = !!item.customPrice;
 
       return {
         id: item.id,
@@ -86,10 +95,10 @@ export async function GET() {
         supplierId: item.product?.supplier?.id,
         isVerified: item.product?.supplier?.isVerified,
         image: item.product?.images[0]?.url || null,
-        price: item.customPrice || item.product?.pricing[0]?.sellingPrice || 0,
+        price: (hasCustomPrice && !isExpired) ? item.customPrice : (item.product?.pricing[0]?.sellingPrice || 0),
         mrp: item.product?.pricing[0]?.mrp || 0,
-        isRfqPrice: !!item.customPrice,
-        rfqExpiresAt: rfq?.deadline || null,
+        isRfqPrice: hasCustomPrice && !isExpired,
+        rfqExpiresAt: hasCustomPrice ? (rfqDeadline || null) : null,
         moq: item.product?.pricing[0]?.minQty || 1,
         quantity: item.quantity,
       };
@@ -97,7 +106,7 @@ export async function GET() {
 
     return successResponse({ id: cart?.id, items: formattedItems });
   } catch (error) {
-    console.error("Cart error:", error);
+    console.error("Cart GET error:", error);
     return errorResponse("Failed to fetch cart", 500);
   }
 }
@@ -112,7 +121,55 @@ export async function POST(request) {
 
     if (!productId) return errorResponse("Product ID required", 422);
 
+    // Check product exists
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, isActive: true, isApproved: true },
+    });
+    if (!product) return errorResponse("Product not found", 404);
+
     const cartId = await getOrCreateCart(session.userId);
+
+    // Check for active awarded RFQ price (only if customPrice not already passed)
+    let rfqPrice = customPrice || null;
+    if (!rfqPrice) {
+      try {
+        const awardedRfqs = await prisma.rFQ.findMany({
+          where: {
+            buyerId: session.userId,
+            status: 'AWARDED',
+            deadline: { gt: new Date() },
+          },
+          select: {
+            description: true,
+            deadline: true,
+            quotations: {
+              where: { status: 'ACCEPTED' },
+              take: 1,
+              orderBy: { createdAt: 'desc' },
+              select: {
+                items: true,
+              },
+            },
+          },
+        });
+
+        for (const rfq of awardedRfqs) {
+          try {
+            const desc = JSON.parse(rfq.description || '{}');
+            if (desc.productId === productId && rfq.quotations?.[0]?.items) {
+              const qItem = rfq.quotations[0].items.find(i => i.productId === productId);
+              if (qItem?.unitPrice) {
+                rfqPrice = qItem.unitPrice;
+                break;
+              }
+            }
+          } catch (e) {}
+        }
+      } catch (e) {
+        // Ignore RFQ errors, just add without custom price
+      }
+    }
 
     const existing = await prisma.cartItem.findFirst({
       where: { cartId, productId },
@@ -122,8 +179,8 @@ export async function POST(request) {
       await prisma.cartItem.update({
         where: { id: existing.id },
         data: {
-          quantity: existing.quantity + quantity,
-          ...(customPrice && { customPrice: parseFloat(customPrice) }),
+          quantity: existing.quantity + (quantity || 1),
+          ...(rfqPrice && { customPrice: parseFloat(rfqPrice) }),
         },
       });
     } else {
@@ -131,15 +188,15 @@ export async function POST(request) {
         data: {
           cartId,
           productId,
-          quantity,
-          ...(customPrice && { customPrice: parseFloat(customPrice) }),
+          quantity: quantity || 1,
+          ...(rfqPrice && { customPrice: parseFloat(rfqPrice) }),
         },
       });
     }
 
     return successResponse({ message: "Added to cart" });
   } catch (error) {
-    console.error("Cart add error:", error);
+    console.error("Cart POST error:", error.message);
     return errorResponse("Failed to add to cart", 500);
   }
 }

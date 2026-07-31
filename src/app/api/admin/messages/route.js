@@ -94,14 +94,14 @@ export async function POST(req) {
     const body = await req.json();
     const { userId, supplierId, message, broadcastType, title } = body;
 
-    // Direct message to user from admin
+    // Direct message to user from admin (as Support Team)
     if (userId && supplierId && message) {
       const msg = await prisma.customerMessage.create({
         data: {
           supplierId,
           buyerId: userId,
           senderType: "ADMIN",
-          message: `[Admin] ${message}`,
+          message: `[Support Team] ${message}`,
         },
       });
 
@@ -109,11 +109,11 @@ export async function POST(req) {
       NotificationService.send({
         userId,
         type: 'IN_APP',
-        title: '📢 Message from PROCURE Team',
+        title: '📢 Message from Support Team',
         message: message.substring(0, 100),
       }).catch(() => {});
 
-      // Notify supplier staff
+      // Notify supplier staff so they see the message
       const staff = await prisma.supplierStaff.findFirst({
         where: { supplierId },
         select: { userId: true },
@@ -122,8 +122,8 @@ export async function POST(req) {
         NotificationService.send({
           userId: staff.userId,
           type: 'IN_APP',
-          title: '📢 Admin Message',
-          message: message.substring(0, 100),
+          title: '📢 New message from Support Team',
+          message: `Regarding buyer: ${message.substring(0, 80)}`,
         }).catch(() => {});
       }
 

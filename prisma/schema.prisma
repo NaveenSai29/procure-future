@@ -189,22 +189,24 @@ model BuyerProfile {
 }
 
 model Address {
-  id           String   @id @default(uuid())
-  buyerId      String
-  label        String
-  fullName     String
-  mobile       String
-  addressLine1 String
-  addressLine2 String?
-  city         String
-  state        String
-  pincode      String
-  landmark     String?
-  isDefault    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  buyer        BuyerProfile @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+    id           String   @id @default(uuid())
+    buyerId      String
+    label        String
+    fullName     String
+    mobile       String
+    addressLine1 String
+    addressLine2 String?
+    city         String
+    state        String
+    pincode      String
+    landmark     String?
+    latitude     Float?
+    longitude    Float?
+    isDefault    Boolean  @default(false)
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+  
+    buyer        BuyerProfile @relation(fields: [buyerId], references: [id], onDelete: Cascade)
 }
 
 model Wishlist {
@@ -676,6 +678,7 @@ model OrderStatusHistory {
   fromStatus String
   toStatus   String
   changedBy  String
+  notes      String?  // Decline reason or additional notes
   createdAt  DateTime @default(now())
 
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)

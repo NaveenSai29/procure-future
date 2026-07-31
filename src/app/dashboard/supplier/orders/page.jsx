@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { toast } from "sonner";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
-import { ShoppingCart, Filter, Search, ArrowUpDown } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Search, X } from "lucide-react";
+
+const DECLINE_REASONS = [
+  "Out of Stock",
+  "Price Mismatch",
+  "Delivery Not Possible",
+  "Minimum Order Not Met",
+  "Product Discontinued",
+  "Other",
+];
 
 export default function SupplierOrdersPage() {
   const [orders, setOrders] = useState([]);
@@ -13,10 +20,11 @@ export default function SupplierOrdersPage() {
   const [confirmAction, setConfirmAction] = useState(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [declineModal, setDeclineModal] = useState(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [declineProcessing, setDeclineProcessing] = useState(false);
 
-  useEffect(() => {
-    fetchOrders();
-  }, [statusFilter]);
+  useEffect(() => { fetchOrders(); }, [statusFilter]);
 
   const fetchOrders = async () => {
     try {
@@ -25,190 +33,210 @@ export default function SupplierOrdersPage() {
       const res = await fetch(`/api/orders?${params}`);
       const data = await res.json();
       if (data.success) setOrders(data.data.orders);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   };
 
-  const executeUpdate = async (orderId, newStatus, isRevert = false) => {
+  const executeUpdate = async (orderId, newStatus, extraData = {}) => {
     setConfirmAction(null);
     try {
       const res = await fetch(`/api/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, revert: isRevert }),
+        body: JSON.stringify({ status: newStatus, ...extraData }),
       });
       const data = await res.json();
-      if (!data.success) {
-        toast.error(data.message);
-        return;
-      }
-      toast.success(data.data.message);
+      if (!data.success) { toast.error(data.message); return; }
+      toast.success(`Order ${newStatus.toLowerCase().replace('_', ' ')} successfully`);
       fetchOrders();
-    } catch {
-      toast.error("Failed to update order");
-    }
+    } catch { toast.error("Failed to update order"); }
+  };
+
+  const handleDecline = (order) => { setDeclineModal(order); setDeclineReason(""); };
+
+  const submitDecline = async () => {
+    if (!declineReason) { toast.error("Please select a reason"); return; }
+    setDeclineProcessing(true);
+    try {
+      const res = await fetch(`/api/orders/${declineModal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "DECLINED", declineReason }),
+      });
+      const data = await res.json();
+      if (!data.success) { toast.error(data.message); return; }
+      toast.success("Order declined");
+      setDeclineModal(null); setDeclineReason(""); fetchOrders();
+    } catch { toast.error("Failed"); }
+    finally { setDeclineProcessing(false); }
   };
 
   const statusColors = {
-    PENDING: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    CONFIRMED: "bg-blue-100 text-blue-800 border-blue-200",
-    PROCESSING: "bg-purple-100 text-purple-800 border-purple-200",
-    SHIPPED: "bg-orange-100 text-orange-800 border-orange-200",
-    DELIVERED: "bg-green-100 text-green-800 border-green-200",
-    CANCELLED: "bg-red-100 text-red-800 border-red-200",
+    PENDING: "bg-yellow-100 text-yellow-800",
+    ACCEPTED: "bg-blue-100 text-blue-800",
+    PROCESSING: "bg-purple-100 text-purple-800",
+    READY_FOR_PICKUP: "bg-cyan-100 text-cyan-800",
+    SHIPPED: "bg-orange-100 text-orange-800",
+    DELIVERED: "bg-green-100 text-green-800",
+    DECLINED: "bg-gray-100 text-gray-800",
+    CANCELLED: "bg-red-100 text-red-800",
   };
 
   const supplierActions = {
     PENDING: [
-      { label: "Confirm", status: "CONFIRMED", color: "bg-blue-500 hover:bg-blue-600", variant: "default", revert: false },
-      { label: "Cancel", status: "CANCELLED", color: "bg-red-500 hover:bg-red-600", variant: "destructive", revert: false },
-    ],
-    CONFIRMED: [
-      { label: "Process", status: "PROCESSING", color: "bg-purple-500 hover:bg-purple-600", variant: "default", revert: false },
-      { label: "Undo", status: "PENDING", color: "bg-gray-500 hover:bg-gray-600", variant: "default", revert: true },
+      { label: "Accept", status: "ACCEPTED", color: "bg-green-500 hover:bg-green-600" },
+      { label: "Decline", status: "DECLINED", color: "bg-gray-500 hover:bg-gray-600", isDecline: true },
     ],
     PROCESSING: [
-      { label: "Ship", status: "SHIPPED", color: "bg-orange-500 hover:bg-orange-600", variant: "default", revert: false },
-      { label: "Undo", status: "CONFIRMED", color: "bg-gray-500 hover:bg-gray-600", variant: "default", revert: true },
-    ],
-    SHIPPED: [
-      { label: "Delivered", status: "DELIVERED", color: "bg-green-500 hover:bg-green-600", variant: "success", revert: false },
-      { label: "Undo", status: "PROCESSING", color: "bg-gray-500 hover:bg-gray-600", variant: "default", revert: true },
+      { label: "Ready for Pickup", status: "READY_FOR_PICKUP", color: "bg-cyan-500 hover:bg-cyan-600" },
     ],
   };
 
   const actionMessages = {
-    CONFIRMED: "Confirm this order and reserve stock?",
-    PROCESSING: "Start processing this order?",
-    SHIPPED: "Mark as shipped?",
-    DELIVERED: "Mark as delivered? This is final and cannot be undone.",
-    CANCELLED: "Cancel this order? Stock will be returned. Cannot be undone.",
-    PENDING: "Revert this order back to Pending?",
+    ACCEPTED: "Accept this order? Stock will be reserved.",
+    READY_FOR_PICKUP: "Mark order as packed and ready for pickup?",
   };
 
-  const statuses = ["PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
+  const statuses = ["PENDING", "ACCEPTED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "DECLINED", "CANCELLED"];
 
   const filteredOrders = searchTerm
-    ? orders.filter((o) =>
-        o.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        o.buyer?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+    ? orders.filter((o) => o.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || o.buyer?.name?.toLowerCase().includes(searchTerm.toLowerCase()))
     : orders;
 
-  if (loading) return <div className="p-8 text-center">Loading orders...</div>;
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Orders</h1>
-          <p className="text-muted-foreground">{orders.length} total orders</p>
+          <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+          <p className="text-gray-500 mt-1">{orders.length} orders</p>
+        </div>
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-sm text-blue-700 font-medium">{orders.filter(o => o.status === 'PENDING').length} pending</span>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-background rounded-xl border p-4">
-        <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by product or buyer..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setStatusFilter("")}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium border ${!statusFilter ? "bg-primary text-white border-primary" : "bg-background hover:bg-muted"}`}
-            >
-              All
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto">
+          {statuses.map(s => (
+            <button key={s} onClick={() => setStatusFilter(statusFilter === s ? "" : s)}
+              className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition ${statusFilter === s ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+              {s.replace('_', ' ')}
             </button>
-            {statuses.map((s) => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium border ${statusFilter === s ? "bg-primary text-white border-primary" : "bg-background hover:bg-muted"}`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Orders List */}
-      {filteredOrders.length === 0 ? (
-        <div className="bg-background rounded-xl border p-12 text-center">
-          <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-semibold">No orders found</h3>
-          <p className="text-muted-foreground">
-            {statusFilter ? `No ${statusFilter.toLowerCase()} orders` : "Orders will appear here when customers place them"}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filteredOrders.map((order) => (
-            <div key={order.id} className="bg-background rounded-xl border p-4 hover:shadow-sm transition-shadow">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="p-2 bg-muted rounded-lg shrink-0">
-                    <ShoppingCart className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate">{order.product?.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Buyer: {order.buyer?.name} • Qty: {order.quantity} • {new Date(order.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="font-bold">₹{order.totalAmount?.toLocaleString()}</p>
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${statusColors[order.status]}`}>
-                      {order.status}
-                    </span>
-                  </div>
-
-                  {supplierActions[order.status] && (
-                    <div className="flex gap-1.5">
-                      {supplierActions[order.status].map((action) => (
-                        <button
-                          key={action.status}
-                          onClick={() => setConfirmAction({
-                            orderId: order.id,
-                            status: action.status,
-                            variant: action.variant,
-                            revert: action.revert,
-                          })}
-                          className={`px-3 py-1.5 text-white text-xs font-medium rounded-md ${action.color}`}
-                        >
-                          {action.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
           ))}
         </div>
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input type="text" placeholder="Search orders..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-gray-50">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Order</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Product</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Buyer</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {loading ? (
+                <tr><td colSpan={6} className="p-8 text-center text-gray-400">Loading...</td></tr>
+              ) : filteredOrders.length === 0 ? (
+                <tr><td colSpan={6} className="p-8 text-center text-gray-400">No orders found</td></tr>
+              ) : (
+                filteredOrders.map(order => {
+                  const actions = supplierActions[order.status] || [];
+                  return (
+                    <tr key={order.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-mono font-medium text-gray-900">#{order.id?.substring(0, 8)?.toUpperCase()}</p>
+                        <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString('en-IN')}</p>
+                      </td>
+                      <td className="px-4 py-3"><p className="text-sm font-medium text-gray-900">{order.product?.name || 'Product'}</p><p className="text-xs text-gray-500">Qty: {order.quantity}</p></td>
+                      <td className="px-4 py-3"><p className="text-sm text-gray-900">{order.buyer?.name || 'Buyer'}</p></td>
+                      <td className="px-4 py-3 text-right"><p className="text-sm font-bold">₹{order.totalAmount?.toLocaleString('en-IN')}</p></td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${statusColors[order.status] || 'bg-gray-100'}`}>
+                          {order.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {actions.map(action => (
+                            <button key={action.label}
+                              onClick={() => action.isDecline ? handleDecline(order) : setConfirmAction({ orderId: order.id, status: action.status, message: actionMessages[action.status] })}
+                              className={`px-2 py-1 text-xs rounded font-medium text-white transition ${action.color}`}>
+                              {action.label}
+                            </button>
+                          ))}
+                          {!actions.length && order.status !== 'DELIVERED' && order.status !== 'DECLINED' && order.status !== 'CANCELLED' && (
+                            <span className="text-xs text-gray-400">
+                              {order.status === 'ACCEPTED' ? 'Auto-processing...' : order.status === 'READY_FOR_PICKUP' ? 'Awaiting pickup' : order.status === 'SHIPPED' ? 'In transit' : 'Auto-processing...'}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {confirmAction && (
+        <ConfirmDialog
+          open={!!confirmAction}
+          onClose={() => setConfirmAction(null)}
+          onConfirm={() => executeUpdate(confirmAction.orderId, confirmAction.status)}
+          title="Update Order"
+          message={confirmAction.message || `Change to ${confirmAction.status}?`}
+          confirmText={confirmAction.status === 'ACCEPTED' ? 'Accept' : 'Ready for Pickup'}
+        />
       )}
 
-      <ConfirmDialog
-        open={!!confirmAction}
-        onClose={() => setConfirmAction(null)}
-        onConfirm={() => confirmAction && executeUpdate(confirmAction.orderId, confirmAction.status, confirmAction.revert)}
-        title={`${confirmAction?.revert ? "Undo to" : "Mark as"} ${confirmAction?.status}?`}
-        message={confirmAction ? actionMessages[confirmAction.status] || "Are you sure?" : ""}
-        confirmText={confirmAction?.revert ? "Yes, Undo" : `Yes, ${confirmAction?.status}`}
-        variant={confirmAction?.variant || "default"}
-      />
+      {declineModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Decline Order</h3>
+              <button onClick={() => setDeclineModal(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4 mb-4">
+              <p className="text-sm"><strong>Order:</strong> #{declineModal.id?.substring(0, 8)?.toUpperCase()}</p>
+              <p className="text-sm mt-1"><strong>Product:</strong> {declineModal.product?.name}</p>
+              <p className="text-sm mt-1"><strong>Buyer:</strong> {declineModal.buyer?.name}</p>
+              <p className="text-sm mt-1"><strong>Amount:</strong> ₹{declineModal.totalAmount?.toLocaleString('en-IN')}</p>
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-gray-700">Reason for declining</label>
+              <div className="space-y-2">
+                {DECLINE_REASONS.map(reason => (
+                  <button key={reason} onClick={() => setDeclineReason(reason)}
+                    className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition ${declineReason === reason ? 'border-red-500 bg-red-50 text-red-700 font-medium' : 'border-gray-200 hover:border-gray-300 text-gray-700'}`}>
+                    {reason}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button onClick={() => setDeclineModal(null)} className="flex-1 px-4 py-2.5 bg-gray-100 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
+              <button onClick={submitDecline} disabled={!declineReason || declineProcessing}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {declineProcessing ? 'Declining...' : 'Decline Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

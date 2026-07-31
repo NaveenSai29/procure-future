@@ -27,11 +27,11 @@ export default function NotificationsPage() {
       const data = await res.json();
 
       if (res.ok) {
-        setNotifications(data.notifications || []);
+        setNotifications(data.data || []);
         setPagination(prev => ({
           ...prev,
           totalPages: data.pagination?.totalPages || 1,
-          unreadCount: data.pagination?.unreadCount || 0
+          unreadCount: data.unreadCount || 0
         }));
       }
     } catch (error) {

@@ -5,7 +5,7 @@ import {
   Users, UserPlus, Gift, IndianRupee, RefreshCw,
   Search, TrendingUp, CheckCircle2, Clock, Star,
   Loader2, ChevronDown, ArrowUpRight, BadgeCheck,
-  ShoppingCart, Filter,
+  ShoppingCart, Filter, Settings,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -17,6 +17,10 @@ export default function AdminReferralsPage() {
   const [rewardModal, setRewardModal] = useState(null);
   const [rewardAmount, setRewardAmount] = useState('');
   const [processing, setProcessing] = useState(false);
+
+  // Reward Setting
+  const [rewardSetting, setRewardSetting] = useState('100');
+  const [savingReward, setSavingReward] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -33,7 +37,64 @@ export default function AdminReferralsPage() {
     }
   }, [statusFilter]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Fetch reward setting from system settings
+  const fetchRewardSetting = async () => {
+    try {
+      const res = await fetch('/api/admin/settings');
+      const json = await res.json();
+      if (json.settings?.REFERRAL?.reward_amount) {
+        setRewardSetting(json.settings.REFERRAL.reward_amount);
+      }
+    } catch {}
+  };
+
+  useEffect(() => { 
+    fetchData(); 
+    fetchRewardSetting();
+  }, [fetchData]);
+
+  // Save reward setting
+  const handleSaveReward = async () => {
+    if (!rewardSetting || parseInt(rewardSetting) <= 0) {
+      toast.error('Enter valid reward amount');
+      return;
+    }
+    setSavingReward(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+        category: 'REFERRAL',
+        settings: {
+          reward_amount: String(rewardSetting),
+        },
+      }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success(`Referral reward set to ₹${rewardSetting}!`);
+      } else {
+        // Try direct system setting update as fallback
+        await fetch('/api/admin/settings/referral', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category: 'REFERRAL',
+            key: 'reward_amount',
+            value: String(rewardSetting),
+            description: 'Amount rewarded per successful referral (in INR)',
+          }),
+        });
+        toast.success(`Referral reward set to ₹${rewardSetting}!`);
+      }
+    } catch (err) {
+      console.error('Save reward error:', err);
+      toast.error('Failed to save. Try again.');
+    } finally {
+      setSavingReward(false);
+    }
+  };
 
   const handleMarkAsPaid = async () => {
     if (!rewardModal || !rewardAmount || rewardAmount <= 0) {
@@ -117,6 +178,48 @@ export default function AdminReferralsPage() {
         </button>
       </div>
 
+      {/* ========== REFERRAL REWARD SETTING ========== */}
+      <div className="bg-white rounded-xl border shadow-sm p-5 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-100 rounded-xl">
+              <Gift className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">Default Referral Reward</h3>
+              <p className="text-sm text-gray-500">Amount credited to referrer's wallet when their friend makes first purchase</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-sm">₹</span>
+              <input
+                type="number"
+                value={rewardSetting}
+                onChange={(e) => setRewardSetting(e.target.value)}
+                className="w-28 pl-8 pr-3 py-2.5 border border-gray-300 rounded-lg text-lg font-bold text-center focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                min="1"
+              />
+            </div>
+            <button
+              onClick={handleSaveReward}
+              disabled={savingReward}
+              className="px-5 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2 transition"
+            >
+              {savingReward ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+              ) : (
+                <>Save</>
+              )}
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">
+          <Settings className="h-3 w-3 inline mr-1" />
+          This is the default amount. You can override it when paying individual referrals.
+        </p>
+      </div>
+
       {/* Stats */}
       {data?.stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -153,17 +256,26 @@ export default function AdminReferralsPage() {
               <p className="text-sm mt-1"><strong>Referred:</strong> {rewardModal.referred?.name}</p>
               <p className="text-sm mt-1"><strong>Total Purchases:</strong> ₹{rewardModal.stats?.totalPurchaseValue?.toLocaleString('en-IN')}</p>
               <p className="text-sm mt-1"><strong>Orders:</strong> {rewardModal.stats?.deliveredOrders} delivered</p>
+              <p className="text-xs text-gray-400 mt-1">Default reward: <strong>₹{rewardSetting}</strong></p>
             </div>
             <div className="space-y-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">Reward Amount (₹)</label>
-                <input
-                  type="number"
-                  value={rewardAmount}
-                  onChange={(e) => setRewardAmount(e.target.value)}
-                  placeholder="e.g., 100"
-                  className="w-full mt-1 px-3 py-2.5 border rounded-lg text-sm"
-                />
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="number"
+                    value={rewardAmount}
+                    onChange={(e) => setRewardAmount(e.target.value)}
+                    placeholder={rewardSetting}
+                    className="flex-1 px-3 py-2.5 border rounded-lg text-sm"
+                  />
+                  <button
+                    onClick={() => setRewardAmount(rewardSetting)}
+                    className="px-3 py-2.5 bg-gray-100 rounded-lg text-xs font-medium hover:bg-gray-200"
+                  >
+                    Use Default
+                  </button>
+                </div>
               </div>
               <p className="text-xs text-gray-400">This amount will be added to {rewardModal.referrer?.name}'s wallet.</p>
               <div className="flex gap-2 pt-2">

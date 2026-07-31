@@ -48,36 +48,61 @@ export async function POST(request) {
     if (!session) return errorResponse("Not authenticated", 401);
 
     const body = await request.json();
-    const { title, quantity, unit, description, deadline } = body;
+    const { title, quantity, unit, description, deadline, supplierId, productId } = body;
 
     if (!title || !quantity) {
       return errorResponse("Title and quantity are required", 422);
     }
 
-    // Always try to parse as JSON first
-    let finalDescription = description || '';
-    let deadlineDate = deadline || null;
     let parsedData = {};
-
     try {
       if (typeof description === 'string' && description.startsWith('{')) {
         parsedData = JSON.parse(description);
-        if (parsedData.neededBy && !deadline) {
-          deadlineDate = new Date(parsedData.neededBy);
-        }
       }
-    } catch (e) {
-      // Not JSON, keep as-is
+    } catch (e) {}
+
+    // ─── DUPLICATE CHECK ───
+    if (productId && supplierId) {
+      const existingRfq = await prisma.rFQ.findFirst({
+        where: {
+          buyerId: session.userId,
+          status: { in: ['PUBLISHED', 'DRAFT'] },
+          items: { some: { productId: productId } },
+          responses: { some: { supplierId: supplierId } },
+        },
+      });
+
+      if (existingRfq) {
+        return errorResponse(
+          `You already have an active RFQ for this product from this supplier (RFQ #${existingRfq.id.slice(0, 8)}). Please close it before creating a new one.`,
+          409
+        );
+      }
     }
 
-    // ALWAYS save as JSON string (clean format)
+    // ─── AUTO DEADLINE: 7 days from now, or use provided deadline ───
+    let deadlineDate = deadline ? new Date(deadline) : null;
+    if (!deadlineDate) {
+      if (parsedData.neededBy) {
+        deadlineDate = new Date(parsedData.neededBy);
+      } else {
+        // Default: 7 days from now
+        deadlineDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      }
+    }
+
+    // RFQ price expires 7 days after approval
+    const rfqExpiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
     const cleanDescription = JSON.stringify({
       productName: parsedData.productName || title.replace('RFQ: ', ''),
-      productId: parsedData.productId || '',
+      productId: parsedData.productId || productId || '',
+      supplierId: supplierId || parsedData.supplierId || '',
       marketPrice: parsedData.marketPrice || null,
       expectedPrice: parsedData.expectedPrice || null,
       neededBy: parsedData.neededBy || null,
       notes: parsedData.notes || '',
+      rfqExpiry: rfqExpiryDate.toISOString(),
     });
 
     const rfq = await prisma.rFQ.create({
@@ -90,6 +115,13 @@ export async function POST(request) {
         deadline: deadlineDate,
         status: "PUBLISHED",
         isPublic: true,
+        items: productId ? {
+          create: [{
+            productId: productId,
+            quantity: parseInt(quantity),
+            unit: unit || 'PCS',
+          }]
+        } : undefined,
       },
     });
 

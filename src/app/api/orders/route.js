@@ -4,6 +4,47 @@ import { NotificationService } from "@/services/notification.service";
 import { getOrderConfirmationEmail } from "@/services/email-templates.service";
 import { EmailService } from "@/services/email.service";
 
+// Auto-update referral status on first purchase
+async function handleReferralOnPurchase(buyerId) {
+  try {
+    const buyer = await prisma.user.findUnique({
+      where: { id: buyerId },
+      select: { id: true, referredBy: true },
+    });
+
+    if (!buyer?.referredBy) return;
+
+    const referral = await prisma.referral.findFirst({
+      where: {
+        referrerId: buyer.referredBy,
+        referredId: buyerId,
+        status: "REGISTERED",
+      },
+    });
+
+    if (referral) {
+      await prisma.referral.update({
+        where: { id: referral.id },
+        data: { status: "PURCHASED" },
+      });
+
+      const referrer = await prisma.user.findUnique({
+        where: { id: buyer.referredBy },
+        select: { name: true },
+      });
+
+      NotificationService.send({
+        userId: buyer.referredBy,
+        type: 'IN_APP',
+        title: '🎉 Referral Milestone!',
+        message: `${referrer?.name || 'Your friend'} just made their first purchase! You'll receive your reward when the order is delivered.`,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.error('Referral purchase update error:', err.message);
+  }
+}
+
 // GET - List orders
 export async function GET(request) {
   try {
@@ -47,28 +88,38 @@ export async function GET(request) {
   }
 }
 
-// POST - Create order (supports single or multi-item from cart)
+// POST - Create order with auto vehicle assignment by weight
 export async function POST(request) {
   try {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
 
     const body = await request.json();
-    const { productId, quantity, items, addressId, paymentMethod } = body;
+    const { productId, quantity, items, addressId, paymentMethod, couponCode } = body;
 
-    // Multi-item order from cart
+    // ─── MULTI-ITEM ORDER ───
     if (items && Array.isArray(items) && items.length > 0) {
-      const createdOrders = [];
-      
-      for (const item of items) {
-        const product = await prisma.product.findUnique({
-          where: { id: item.productId },
-          include: {
-            pricing: { where: { priceType: "RETAIL" }, take: 1 },
-            supplier: { select: { id: true, businessName: true } },
-          },
-        });
 
+      const productIds = items.map(i => i.productId);
+      const products = await prisma.product.findMany({
+        where: { id: { in: productIds } },
+        include: {
+          pricing: { where: { priceType: "RETAIL" }, take: 1 },
+          supplier: { select: { id: true, businessName: true } },
+        },
+      });
+
+      const productMap = {};
+      products.forEach(p => { productMap[p.id] = p; });
+
+      const createdOrders = [];
+      const buyer = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { id: true, name: true, email: true },
+      });
+
+      for (const item of items) {
+        const product = productMap[item.productId];
         if (!product || !product.isActive || !product.isApproved) continue;
 
         const orderPrice = item.customPrice || product.pricing[0]?.sellingPrice || 0;
@@ -107,20 +158,42 @@ export async function POST(request) {
       NotificationService.send({
         userId: session.userId,
         type: 'IN_APP',
-        title: 'Orders Placed Successfully',
+        title: 'Order Placed Successfully',
         message: `${createdOrders.length} order(s) placed. Track them in My Orders.`,
       }).catch(() => {});
 
-      // Clear cart after order
+      // Send email
+      if (buyer?.email) {
+        const emailTemplate = getOrderConfirmationEmail({
+          buyerName: buyer.name,
+          orderId: createdOrders[0]?.id?.slice(0, 8)?.toUpperCase(),
+          totalAmount: createdOrders.reduce((s, o) => s + o.totalAmount, 0),
+          items: createdOrders.map(o => ({
+            name: o.product?.name || 'Product',
+            quantity: o.quantity,
+            price: o.totalAmount,
+          })),
+        });
+        EmailService.sendEmail({
+          to: buyer.email,
+          subject: emailTemplate.subject,
+          html: emailTemplate.html,
+        }).catch(() => {});
+      }
+
+      // Clear cart
       const buyerProfile = await prisma.buyerProfile.findUnique({ where: { userId: session.userId } });
       if (buyerProfile?.cart) {
         await prisma.cartItem.deleteMany({ where: { cartId: buyerProfile.cart.id } });
       }
 
+      // Auto-update referral on first purchase
+      handleReferralOnPurchase(session.userId).catch(() => {});
+
       return successResponse({ orders: createdOrders, count: createdOrders.length }, 201);
     }
 
-    // Single product order
+    // ─── SINGLE PRODUCT ORDER ───
     if (!productId || !quantity) {
       return errorResponse("Product and quantity required", 422);
     }
@@ -183,7 +256,7 @@ export async function POST(request) {
       userId: session.userId,
       type: 'IN_APP',
       title: 'Order Placed Successfully',
-      message: `Your order #${order.id.slice(0, 8)} has been placed.`,
+      message: `Your order #${order.id.slice(0, 8)} has been placed. Track in My Orders.`,
     }).catch(() => {});
 
     if (buyer?.email) {
@@ -200,7 +273,11 @@ export async function POST(request) {
       }).catch(() => {});
     }
 
+    // Auto-update referral on first purchase
+    handleReferralOnPurchase(session.userId).catch(() => {});
+
     return successResponse({ order }, 201);
+
   } catch (error) {
     console.error("Create order error:", error);
     return errorResponse("Failed to create order", 500);

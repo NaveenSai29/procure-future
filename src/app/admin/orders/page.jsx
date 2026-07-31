@@ -2,11 +2,11 @@
 import { useState, useEffect } from "react";
 import {
   Search, Download, CheckCircle, XCircle, Truck, Store,
-  ChevronDown, IndianRupee, Package, User, Clock, Loader2,
+  ChevronDown, IndianRupee, Package, User, Clock, Loader2, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 
-const STATUS_OPTIONS = ["", "PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"];
+const STATUS_OPTIONS = ["", "PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "DECLINED", "RETURNED"];
 const STATUS_COLORS = {
   PENDING: "bg-yellow-100 text-yellow-700",
   CONFIRMED: "bg-blue-100 text-blue-700",
@@ -14,6 +14,7 @@ const STATUS_COLORS = {
   SHIPPED: "bg-indigo-100 text-indigo-700",
   DELIVERED: "bg-green-100 text-green-700",
   CANCELLED: "bg-red-100 text-red-700",
+  DECLINED: "bg-gray-100 text-gray-700",
   RETURNED: "bg-orange-100 text-orange-700",
 };
 
@@ -81,7 +82,7 @@ export default function AdminOrdersPage() {
 
   const exportCSV = () => {
     const orders = data?.orders || [];
-    const headers = ["Order ID", "Buyer", "Email", "Product", "Supplier", "Qty", "Amount", "Status", "Date"];
+    const headers = ["Order ID", "Buyer", "Email", "Product", "Supplier", "Qty", "Amount", "Status", "Decline Reason", "Date"];
     const rows = orders.map((o) => [
       o.id?.slice(0, 8),
       o.buyer?.name || "N/A",
@@ -91,6 +92,7 @@ export default function AdminOrdersPage() {
       o.quantity,
       o.totalAmount,
       o.status,
+      o.status === "DECLINED" ? (o.statusHistory?.[0]?.notes || "N/A") : "",
       new Date(o.createdAt).toLocaleDateString(),
     ]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
@@ -116,6 +118,7 @@ export default function AdminOrdersPage() {
     { label: "Shipped", value: stats.shipped || 0, color: "text-indigo-600 bg-indigo-50" },
     { label: "Delivered", value: stats.delivered || 0, color: "text-green-600 bg-green-50" },
     { label: "Cancelled", value: stats.cancelled || 0, color: "text-red-600 bg-red-50" },
+    { label: "Declined", value: stats.declined || 0, color: "text-gray-600 bg-gray-50" },
   ];
 
   return (
@@ -140,7 +143,7 @@ export default function AdminOrdersPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {statCards.map((stat) => (
           <div key={stat.label} className={`rounded-xl border p-3 ${stat.color} bg-opacity-30`}>
             <p className="text-xl font-bold">{stat.value}</p>
@@ -228,7 +231,15 @@ export default function AdminOrdersPage() {
                     <td className="px-4 py-3">
                       <input type="checkbox" checked={selectedOrders.includes(o.id)} onChange={() => toggleSelect(o.id)} className="rounded" />
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs text-blue-600">#{o.id?.slice(0, 8)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-blue-600">
+                      <div>#{o.id?.slice(0, 8)}</div>
+                      {o.status === "DECLINED" && o.statusHistory?.[0]?.notes && (
+                        <div className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {o.statusHistory[0].notes.replace("Declined: ", "")}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-gray-400" />
