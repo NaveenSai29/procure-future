@@ -33,6 +33,7 @@
     "cloudinary": "^2.10.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "expo-server-sdk": "^7.0.0",
     "framer-motion": "^12.42.2",
     "jose": "^6.2.4",
     "jsonwebtoken": "^9.0.3",

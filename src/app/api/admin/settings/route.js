@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { clearFeatureCache } from '@/lib/features';
 
 // GET - Get all platform settings
 export async function GET(request) {
@@ -40,6 +41,22 @@ export async function GET(request) {
       prisma.order.count({ where: { createdAt: { gte: new Date(new Date().setHours(0,0,0,0)) } } })
     ]);
 
+    // Build features from settings
+    const fSettings = settingsMap.FEATURES || {};
+    const features = {
+      marketplace: fSettings.marketplace !== false,
+      payments: fSettings.payments !== false,
+      delivery: fSettings.delivery !== false,
+      rfq: fSettings.rfq === true,
+      wallet: fSettings.wallet === true,
+      referrals: fSettings.referrals === true,
+      loyalty: fSettings.loyalty === true,
+      ai: fSettings.ai === true,
+      bulkImport: fSettings.bulkImport === true,
+      sponsoredProducts: fSettings.sponsoredProducts === true,
+      sms: fSettings.sms === true,
+    };
+
     return NextResponse.json({
       platform: {
         name: settingsMap.GENERAL?.platformName || 'PROCURE',
@@ -57,16 +74,7 @@ export async function GET(request) {
         totalRevenue: totalRevenue._sum?.totalAmount || 0, todayOrders
       },
       settings: settingsMap,
-      features: {
-        ai: settingsMap.FEATURES?.ai !== false,
-        sms: settingsMap.FEATURES?.sms === true,
-        payments: settingsMap.FEATURES?.payments !== false,
-        delivery: settingsMap.FEATURES?.delivery !== false,
-        rfq: settingsMap.FEATURES?.rfq !== false,
-        wallet: settingsMap.FEATURES?.wallet !== false,
-        referrals: settingsMap.FEATURES?.referrals === true,
-        loyalty: settingsMap.FEATURES?.loyalty === true,
-      }
+      features,
     });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -106,6 +114,11 @@ export async function PATCH(request) {
     );
 
     await prisma.$transaction(operations);
+
+    // Clear feature cache if FEATURES category was updated
+    if (category === 'FEATURES') {
+      clearFeatureCache();
+    }
 
     // Log audit
     await prisma.auditLog.create({

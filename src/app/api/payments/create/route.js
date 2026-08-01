@@ -14,11 +14,15 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
     }
 
+    // Generate short receipt (max 40 chars for Razorpay)
+    const shortId = orderId ? orderId.substring(0, 8) : Date.now().toString(36);
+    const receipt = `rcpt_${shortId}_${Date.now().toString(36)}`.substring(0, 40);
+
     // Create Razorpay order
     const razorpayOrder = await RazorpayService.createOrder({
       amount,
       currency,
-      receipt: `order_${orderId || Date.now()}`,
+      receipt,
       notes: {
         orderId: orderId || 'direct_payment',
         userId: user.id,
@@ -32,6 +36,7 @@ export async function POST(request) {
       keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
+    console.error('Razorpay create order error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

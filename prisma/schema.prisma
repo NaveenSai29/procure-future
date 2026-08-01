@@ -15,8 +15,12 @@ model User {
   id             String    @id @default(uuid())
   email          String    @unique
   emailVerified  Boolean   @default(false)
+  expoPushToken  String?
   verificationToken   String?
   verificationExpires DateTime?
+  newEmail            String?
+  emailChangeToken    String?
+  emailChangeExpires  DateTime?
   password       String?
   mobile         String?   @unique
   mobileVerified Boolean   @default(false)
@@ -650,26 +654,35 @@ model ProductPricing {
 // ============================================
 
 model Order {
-  id            String               @id @default(uuid())
-  buyerId       String
-  productId     String
-  quantity      Int                  @default(1)
-  price         Float
-  totalAmount   Float
-  status        String               @default("PENDING")
-  notes         String?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+    id            String               @id @default(uuid())
+    buyerId       String
+    productId     String
+    quantity      Int                  @default(1)
+    price         Float
+    totalAmount   Float
+    deliveryFee   Float                @default(0)
+    platformFee   Float                @default(0)
+    gstAmount     Float                @default(0)
+    couponCode    String?
+    couponDiscount Float               @default(0)
+    walletDeduction Float              @default(0)
+    paymentMethod String               @default("ONLINE")
+    razorpayPaymentId String?
+    paymentDetails  Json?
+    status        String               @default("PENDING")
+    notes         String?
+    createdAt     DateTime             @default(now())
+    updatedAt     DateTime             @updatedAt
 
-  buyer         User                 @relation("UserOrders", fields: [buyerId], references: [id])
-  product       Product              @relation("ProductOrders", fields: [productId], references: [id])
-  delivery      Delivery?
-  statusHistory OrderStatusHistory[]
-  returnRequest ReturnRequest?
+    buyer         User                 @relation("UserOrders", fields: [buyerId], references: [id])
+    product       Product              @relation("ProductOrders", fields: [productId], references: [id])
+    delivery      Delivery?
+    statusHistory OrderStatusHistory[]
+    returnRequest ReturnRequest?
 
-  @@index([buyerId])
-  @@index([productId])
-  @@index([status])
+    @@index([buyerId])
+    @@index([productId])
+    @@index([status])
 }
 
 model OrderStatusHistory {
@@ -905,17 +918,19 @@ model ReturnRequest {
 }
 
 model RefundTransaction {
-  id              String        @id @default(uuid())
-  returnRequestId String        @unique
+  id              String         @id @default(uuid())
+  returnRequestId String?        @unique
+  orderId         String?
+  userId          String?
   amount          Float
-  paymentMethod   String        @default("WALLET")
+  paymentMethod   String         @default("WALLET")
   transactionId   String?
-  status          String        @default("PENDING")
+  status          String         @default("PENDING")
   processedAt     DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
-  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  returnRequest   ReturnRequest? @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
 }
 
 // ============================================

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
-import { Search, X } from "lucide-react";
+import { Search, X, Eye } from "lucide-react";
 
 const DECLINE_REASONS = [
   "Out of Stock",
@@ -22,7 +22,9 @@ export default function SupplierOrdersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [declineModal, setDeclineModal] = useState(null);
   const [declineReason, setDeclineReason] = useState("");
+  const [customReason, setCustomReason] = useState("");
   const [declineProcessing, setDeclineProcessing] = useState(false);
+  const [viewNotes, setViewNotes] = useState(null);
 
   useEffect(() => { 
     fetchOrders(); 
@@ -34,6 +36,7 @@ export default function SupplierOrdersPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
+      params.set("limit", "100");
       const res = await fetch(`/api/orders?${params}`);
       const data = await res.json();
       if (data.success) setOrders(data.data.orders || []);
@@ -57,24 +60,51 @@ export default function SupplierOrdersPage() {
     } catch { toast.error("Failed to update order"); }
   };
 
-  const handleDecline = (order) => { setDeclineModal(order); setDeclineReason(""); };
+  const handleDecline = (order) => { 
+    setDeclineModal(order); 
+    setDeclineReason(""); 
+    setCustomReason(""); 
+  };
 
   const submitDecline = async () => {
-    if (!declineReason) { toast.error("Please select a reason"); return; }
+    const finalReason = declineReason === "Other" 
+      ? `Other: ${customReason.trim()}` 
+      : declineReason;
+    
+    if (!finalReason || finalReason === "Other: ") { 
+      toast.error("Please select or type a reason"); 
+      return; 
+    }
+    
     setDeclineProcessing(true);
     try {
       const res = await fetch(`/api/orders/${declineModal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "DECLINED", declineReason }),
+        body: JSON.stringify({ status: "DECLINED", declineReason: finalReason }),
       });
       const data = await res.json();
       if (!data.success) { toast.error(data.message); return; }
       toast.success("Order declined");
-      setDeclineModal(null); setDeclineReason(""); fetchOrders();
+      setDeclineModal(null); 
+      setDeclineReason(""); 
+      setCustomReason("");
+      fetchOrders();
       window.dispatchEvent(new CustomEvent('order-updated'));
     } catch { toast.error("Failed"); }
     finally { setDeclineProcessing(false); }
+  };
+
+  const getDeclineReason = (order) => {
+    if (order.status !== 'DECLINED' && order.status !== 'CANCELLED') return null;
+    const historyNote = order.statusHistory?.find(h => h.notes?.includes('Declined:') || h.notes?.includes('Cancelled:'));
+    if (historyNote) {
+      return historyNote.notes
+        .replace('Declined: ', '')
+        .replace('Cancelled: ', '')
+        .replace('Other: ', '');
+    }
+    return null;
   };
 
   const statusColors = {
@@ -122,22 +152,27 @@ export default function SupplierOrdersPage() {
         </div>
       </div>
 
+      {/* Status Filter Tabs */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 overflow-x-auto">
-          {statuses.map(s => (
-            <button key={s} onClick={() => setStatusFilter(statusFilter === s ? "" : s)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition ${statusFilter === s ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
-              {s.replace('_', ' ')}
-            </button>
-          ))}
-        </div>
-        <div className="relative flex-1 max-w-xs">
+        <button
+          onClick={() => setStatusFilter("")}
+          className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition ${statusFilter === "" ? 'bg-gray-900 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:text-gray-700'}`}>
+          All ({orders.length})
+        </button>
+        {statuses.map(s => (
+          <button key={s} onClick={() => setStatusFilter(statusFilter === s ? "" : s)}
+            className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition ${statusFilter === s ? 'bg-white shadow-sm text-gray-900 border border-gray-300' : 'bg-gray-100 text-gray-500 hover:text-gray-700'}`}>
+            {s.replace('_', ' ')} ({orders.filter(o => o.status === s).length})
+          </button>
+        ))}
+        <div className="relative flex-1 max-w-xs ml-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input type="text" placeholder="Search orders..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
         </div>
       </div>
 
+      {/* Orders Table */}
       <div className="bg-white rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -148,17 +183,19 @@ export default function SupplierOrdersPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Buyer</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Reason</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {loading ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-400">Loading...</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-400">Loading...</td></tr>
               ) : filteredOrders.length === 0 ? (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-400">No orders found</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-400">No orders found</td></tr>
               ) : (
                 filteredOrders.map(order => {
                   const actions = supplierActions[order.status] || [];
+                  const declineReasonText = getDeclineReason(order);
                   return (
                     <tr key={order.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
@@ -172,6 +209,18 @@ export default function SupplierOrdersPage() {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${statusColors[order.status] || 'bg-gray-100'}`}>
                           {order.status.replace('_', ' ')}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {declineReasonText ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600 max-w-[120px] truncate">{declineReasonText}</span>
+                            <button onClick={() => setViewNotes(declineReasonText)} className="p-1 hover:bg-gray-100 rounded">
+                              <Eye className="h-3 w-3 text-gray-400" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -198,6 +247,7 @@ export default function SupplierOrdersPage() {
         </div>
       </div>
 
+      {/* Confirm Dialog */}
       {confirmAction && (
         <ConfirmDialog
           open={!!confirmAction}
@@ -209,6 +259,25 @@ export default function SupplierOrdersPage() {
         />
       )}
 
+      {/* View Notes Modal */}
+      {viewNotes && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Decline / Cancel Reason</h3>
+              <button onClick={() => setViewNotes(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-sm text-gray-700">{viewNotes}</p>
+            </div>
+            <button onClick={() => setViewNotes(null)} className="mt-4 w-full px-4 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800">
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Decline Modal with Custom Reason */}
       {declineModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full">
@@ -226,16 +295,33 @@ export default function SupplierOrdersPage() {
               <label className="text-sm font-medium text-gray-700">Reason for declining</label>
               <div className="space-y-2">
                 {DECLINE_REASONS.map(reason => (
-                  <button key={reason} onClick={() => setDeclineReason(reason)}
+                  <button 
+                    key={reason} 
+                    onClick={() => { setDeclineReason(reason); if (reason !== "Other") setCustomReason(""); }}
                     className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition ${declineReason === reason ? 'border-red-500 bg-red-50 text-red-700 font-medium' : 'border-gray-200 hover:border-gray-300 text-gray-700'}`}>
                     {reason}
                   </button>
                 ))}
               </div>
+              {declineReason === "Other" && (
+                <div>
+                  <textarea
+                    value={customReason}
+                    onChange={(e) => setCustomReason(e.target.value)}
+                    placeholder="Type your reason here..."
+                    className="w-full px-3 py-2.5 border rounded-lg text-sm mt-1 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    rows={3}
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-400 mt-1">{customReason.length} characters</p>
+                </div>
+              )}
             </div>
             <div className="flex gap-2 mt-6">
               <button onClick={() => setDeclineModal(null)} className="flex-1 px-4 py-2.5 bg-gray-100 rounded-lg text-sm font-medium hover:bg-gray-200">Cancel</button>
-              <button onClick={submitDecline} disabled={!declineReason || declineProcessing}
+              <button 
+                onClick={submitDecline} 
+                disabled={!declineReason || (declineReason === "Other" && !customReason.trim()) || declineProcessing}
                 className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
                 {declineProcessing ? 'Declining...' : 'Decline Order'}
               </button>

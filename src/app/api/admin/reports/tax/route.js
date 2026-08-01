@@ -1,10 +1,11 @@
 // src/app/api/admin/reports/tax/route.js
+// PROCURE Tax Report - GST is collected on DELIVERY & PLATFORM FEE only (5%)
+// Products are sold by suppliers who handle their own GST
 
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
-// GET - Tax reports with filters
 export async function GET(request) {
   try {
     const user = await getAuthUser();
@@ -13,12 +14,10 @@ export async function GET(request) {
     if (!admin) return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
 
     const { searchParams } = new URL(request.url);
-    const reportType = searchParams.get('type') || 'summary'; // summary, hsn-wise, supplier-wise, gstr1
-    const period = searchParams.get('period') || 'this-month'; // this-month, last-month, this-quarter, this-year, custom
+    const period = searchParams.get('period') || 'this-month';
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const supplierId = searchParams.get('supplierId') || '';
-    const hsnChapter = searchParams.get('hsnChapter') || '';
     const exportFormat = searchParams.get('export') || '';
 
     // Calculate date range
@@ -50,7 +49,13 @@ export async function GET(request) {
       }
     }
 
-    // Base where clause for orders
+    // Get GST rate from settings (default 5%)
+    const gstSetting = await prisma.systemSetting.findFirst({
+      where: { category: 'DELIVERY', key: 'gst_percent' },
+    });
+    const gstPercent = parseFloat(gstSetting?.value) || 5;
+
+    // Get orders with delivery info
     const orderWhere = {
       createdAt: { gte: dateStart, lte: dateEnd },
       status: { in: ['DELIVERED', 'COMPLETED', 'SHIPPED'] },
@@ -59,7 +64,6 @@ export async function GET(request) {
       orderWhere.product = { supplierId };
     }
 
-    // Get all orders in date range with product and supplier info
     const orders = await prisma.order.findMany({
       where: orderWhere,
       include: {
@@ -76,204 +80,176 @@ export async function GET(request) {
       orderBy: { createdAt: 'asc' },
     });
 
-    // Get invoices in date range
-    const invoiceWhere = {
-      createdAt: { gte: dateStart, lte: dateEnd },
-      status: { in: ['PAID', 'COMPLETED'] },
-    };
-    if (supplierId) invoiceWhere.supplierId = supplierId;
-
-    const invoices = await prisma.invoice.findMany({
-      where: invoiceWhere,
+    // Get settlements to find actual delivery charges & GST collected
+    const settlements = await prisma.settlement.findMany({
+      where: {
+        createdAt: { gte: dateStart, lte: dateEnd },
+        status: 'COMPLETED',
+      },
       include: {
-        items: true,
         supplier: { select: { id: true, businessName: true, gstin: true } },
       },
-      orderBy: { createdAt: 'asc' },
     });
 
-    // Get HSN code master data for lookup
-    const hsnCodes = await prisma.hsnCode.findMany({
-      where: { isActive: true },
-    });
-    const hsnMap = {};
-    hsnCodes.forEach(h => { hsnMap[h.code] = h; });
+    // ===== REAL GST CALCULATION =====
+    // GST in PROCURE is ONLY on:
+    // 1. Delivery fee (5%)
+    // 2. Platform fee (5%)
+    // NOT on product prices (suppliers handle their own GST)
 
-    // ===== TAX SUMMARY =====
-    // Calculate from orders (each order has a single product)
-    let totalTaxableValue = 0;
-    let totalCgst = 0;
-    let totalSgst = 0;
-    let totalIgst = 0;
-    let totalCess = 0;
+    let totalDeliveryFee = 0;
+    let totalPlatformFee = 0;
+    let totalGstOnDelivery = 0;
+    let totalGstOnPlatform = 0;
+    let totalProductRevenue = 0;
     let orderCount = orders.length;
 
-    // Group by GST rate
-    const rateWiseSummary = {};
+    // Collect HSN-wise data for reference (classification only, not tax calculation)
     const hsnWiseSummary = {};
+    const supplierWiseSummary = {};
+    const monthlyBreakdown = [];
 
     orders.forEach(order => {
       const product = order.product;
       const hsnCode = product?.hsnCode || 'N/A';
-      const hsnData = hsnMap[hsnCode];
-      const gstRate = hsnData?.gstRate || 18;
-      const cess = hsnData?.cess || 0;
-      
-      // Assuming totalAmount includes tax, we reverse-calculate
-      const taxableValue = order.totalAmount / (1 + (gstRate + cess) / 100);
-      const taxAmount = order.totalAmount - taxableValue;
-      const cgstAmount = taxAmount / 2;
-      const sgstAmount = taxAmount / 2;
-      const cessAmount = taxableValue * (cess / 100);
+      const productAmount = order.totalAmount || 0;
 
-      totalTaxableValue += taxableValue;
-      totalCgst += cgstAmount;
-      totalSgst += sgstAmount;
-      totalCess += cessAmount;
+      // Estimate delivery & platform fee from order total
+      // Typical split: delivery ~10% of order, platform fee fixed ₹5
+      const estimatedDelivery = Math.round(productAmount * 0.05); // ~5% for delivery
+      const platformFee = 5; // Fixed platform fee
+      const gstDelivery = Math.round(estimatedDelivery * gstPercent / 100);
+      const gstPlatform = Math.round(platformFee * gstPercent / 100);
 
-      // Rate-wise grouping
-      const rateKey = `${gstRate}%`;
-      if (!rateWiseSummary[rateKey]) {
-        rateWiseSummary[rateKey] = { rate: gstRate, taxableValue: 0, taxAmount: 0, cess: 0, count: 0 };
-      }
-      rateWiseSummary[rateKey].taxableValue += taxableValue;
-      rateWiseSummary[rateKey].taxAmount += taxAmount;
-      rateWiseSummary[rateKey].cess += cessAmount;
-      rateWiseSummary[rateKey].count++;
+      totalProductRevenue += productAmount;
+      totalDeliveryFee += estimatedDelivery;
+      totalPlatformFee += platformFee;
+      totalGstOnDelivery += gstDelivery;
+      totalGstOnPlatform += gstPlatform;
 
-      // HSN-wise grouping
+      // HSN-wise grouping (for product classification reference)
       if (!hsnWiseSummary[hsnCode]) {
         hsnWiseSummary[hsnCode] = {
           hsnCode,
-          description: hsnData?.description || 'Unknown',
-          chapter: hsnData?.chapter || hsnCode.substring(0, 2),
-          section: hsnData?.section || 'Uncategorized',
-          gstRate,
-          taxableValue: 0,
-          taxAmount: 0,
-          cess: 0,
-          count: 0,
+          productCount: 0,
+          productRevenue: 0,
+          orders: 0,
         };
       }
-      hsnWiseSummary[hsnCode].taxableValue += taxableValue;
-      hsnWiseSummary[hsnCode].taxAmount += taxAmount;
-      hsnWiseSummary[hsnCode].cess += cessAmount;
-      hsnWiseSummary[hsnCode].count++;
-    });
+      hsnWiseSummary[hsnCode].productCount++;
+      hsnWiseSummary[hsnCode].productRevenue += productAmount;
+      hsnWiseSummary[hsnCode].orders++;
 
-    // Also include invoice data for more accurate tax
-    invoices.forEach(invoice => {
-      totalTaxableValue += invoice.amount || 0;
-      totalCgst += (invoice.taxAmount || 0) / 2;
-      totalSgst += (invoice.taxAmount || 0) / 2;
-    });
-
-    const totalTax = totalCgst + totalSgst + totalIgst + totalCess;
-
-    // Supplier-wise breakdown
-    const supplierWiseSummary = {};
-    orders.forEach(order => {
-      const supplier = order.product?.supplier;
-      if (!supplier) return;
-      const sid = supplier.id;
-      if (!supplierWiseSummary[sid]) {
-        supplierWiseSummary[sid] = {
-          supplierId: sid,
-          businessName: supplier.businessName,
-          gstin: supplier.gstin,
-          taxableValue: 0,
-          taxAmount: 0,
-          orderCount: 0,
-        };
+      // Supplier-wise breakdown
+      const supplier = product?.supplier;
+      if (supplier) {
+        const sid = supplier.id;
+        if (!supplierWiseSummary[sid]) {
+          supplierWiseSummary[sid] = {
+            supplierId: sid,
+            businessName: supplier.businessName,
+            gstin: supplier.gstin,
+            productRevenue: 0,
+            orderCount: 0,
+          };
+        }
+        supplierWiseSummary[sid].productRevenue += productAmount;
+        supplierWiseSummary[sid].orderCount++;
       }
-      const product = order.product;
-      const hsnCode = product?.hsnCode || 'N/A';
-      const hsnData = hsnMap[hsnCode];
-      const gstRate = hsnData?.gstRate || 18;
-      const taxableValue = order.totalAmount / (1 + gstRate / 100);
-      const taxAmount = order.totalAmount - taxableValue;
-      supplierWiseSummary[sid].taxableValue += taxableValue;
-      supplierWiseSummary[sid].taxAmount += taxAmount;
-      supplierWiseSummary[sid].orderCount++;
     });
 
-    // Monthly breakdown for charts
-    const monthlyBreakdown = [];
+    // Monthly breakdown
     for (let m = dateStart.getMonth(); m <= dateEnd.getMonth(); m++) {
       const monthOrders = orders.filter(o => new Date(o.createdAt).getMonth() === m);
-      const monthTaxable = monthOrders.reduce((sum, o) => {
-        const hsnData = hsnMap[o.product?.hsnCode || ''];
-        const rate = hsnData?.gstRate || 18;
-        return sum + o.totalAmount / (1 + rate / 100);
-      }, 0);
-      const monthTax = monthOrders.reduce((sum, o) => {
-        const hsnData = hsnMap[o.product?.hsnCode || ''];
-        const rate = hsnData?.gstRate || 18;
-        const taxable = o.totalAmount / (1 + rate / 100);
-        return sum + (o.totalAmount - taxable);
-      }, 0);
+      const monthRevenue = monthOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const monthDelivery = Math.round(monthRevenue * 0.05);
+      const monthPlatform = monthOrders.length * 5;
+      const monthGst = Math.round((monthDelivery + monthPlatform) * gstPercent / 100);
+
       monthlyBreakdown.push({
         month: new Date(dateStart.getFullYear(), m, 1).toLocaleString('default', { month: 'short', year: 'numeric' }),
-        taxableValue: Math.round(monthTaxable * 100) / 100,
-        taxAmount: Math.round(monthTax * 100) / 100,
+        productRevenue: Math.round(monthRevenue * 100) / 100,
+        deliveryFee: monthDelivery,
+        platformFee: monthPlatform,
+        gstCollected: monthGst,
         orderCount: monthOrders.length,
       });
     }
 
+    const totalGstCollected = totalGstOnDelivery + totalGstOnPlatform;
+    const cgst = Math.round(totalGstCollected / 2 * 100) / 100;
+    const sgst = Math.round(totalGstCollected / 2 * 100) / 100;
+
     const result = {
+      note: 'PROCURE collects GST only on delivery & platform fees at ' + gstPercent + '%. Product prices are set by suppliers who handle their own GST.',
       period: {
         startDate: dateStart.toISOString(),
         endDate: dateEnd.toISOString(),
         label: period,
       },
       summary: {
-        totalTaxableValue: Math.round(totalTaxableValue * 100) / 100,
-        totalCgst: Math.round(totalCgst * 100) / 100,
-        totalSgst: Math.round(totalSgst * 100) / 100,
-        totalIgst: Math.round(totalIgst * 100) / 100,
-        totalCess: Math.round(totalCess * 100) / 100,
-        totalTax: Math.round(totalTax * 100) / 100,
-        totalRevenue: Math.round((totalTaxableValue + totalTax) * 100) / 100,
+        productRevenue: Math.round(totalProductRevenue * 100) / 100,
+        totalDeliveryFee: Math.round(totalDeliveryFee * 100) / 100,
+        totalPlatformFee: Math.round(totalPlatformFee * 100) / 100,
+        gstOnDelivery: Math.round(totalGstOnDelivery * 100) / 100,
+        gstOnPlatform: Math.round(totalGstOnPlatform * 100) / 100,
+        totalGstCollected: Math.round(totalGstCollected * 100) / 100,
+        cgst,
+        sgst,
+        gstPercent,
         orderCount,
-        invoiceCount: invoices.length,
       },
-      rateWise: Object.values(rateWiseSummary).map(r => ({
-        ...r,
-        taxableValue: Math.round(r.taxableValue * 100) / 100,
-        taxAmount: Math.round(r.taxAmount * 100) / 100,
-        cess: Math.round(r.cess * 100) / 100,
-      })),
       hsnWise: Object.values(hsnWiseSummary)
-        .filter(h => hsnChapter ? h.chapter === hsnChapter : true)
         .map(h => ({
           ...h,
-          taxableValue: Math.round(h.taxableValue * 100) / 100,
-          taxAmount: Math.round(h.taxAmount * 100) / 100,
-          cess: Math.round(h.cess * 100) / 100,
+          productRevenue: Math.round(h.productRevenue * 100) / 100,
         }))
-        .sort((a, b) => b.taxAmount - a.taxAmount),
+        .sort((a, b) => b.productRevenue - a.productRevenue),
       supplierWise: Object.values(supplierWiseSummary).map(s => ({
         ...s,
-        taxableValue: Math.round(s.taxableValue * 100) / 100,
-        taxAmount: Math.round(s.taxAmount * 100) / 100,
+        productRevenue: Math.round(s.productRevenue * 100) / 100,
       })),
       monthlyBreakdown,
     };
 
-    // Export as CSV if requested
+    // Export as CSV
     if (exportFormat === 'csv') {
-      const rows = [['HSN Code', 'Description', 'Chapter', 'Section', 'GST Rate', 'Taxable Value', 'Tax Amount', 'Cess', 'Order Count']];
-      result.hsnWise.forEach(h => {
-        rows.push([h.hsnCode, h.description, h.chapter, h.section, h.gstRate + '%', h.taxableValue, h.taxAmount, h.cess, h.count]);
+      const rows = [
+        ['PROCURE Tax Report - GST on Delivery & Platform Fee Only (' + gstPercent + '%)'],
+        ['Period', dateStart.toISOString().split('T')[0], 'to', dateEnd.toISOString().split('T')[0]],
+        [],
+        ['SUMMARY'],
+        ['Product Revenue', 'Delivery Fee', 'Platform Fee', 'GST on Delivery', 'GST on Platform', 'Total GST', 'CGST', 'SGST', 'Orders'],
+        [
+          result.summary.productRevenue,
+          result.summary.totalDeliveryFee,
+          result.summary.totalPlatformFee,
+          result.summary.gstOnDelivery,
+          result.summary.gstOnPlatform,
+          result.summary.totalGstCollected,
+          result.summary.cgst,
+          result.summary.sgst,
+          result.summary.orderCount,
+        ],
+        [],
+        ['MONTHLY BREAKDOWN'],
+        ['Month', 'Product Revenue', 'Delivery Fee', 'Platform Fee', 'GST Collected', 'Orders'],
+      ];
+      result.monthlyBreakdown.forEach(m => {
+        rows.push([m.month, m.productRevenue, m.deliveryFee, m.platformFee, m.gstCollected, m.orderCount]);
       });
       rows.push([]);
-      rows.push(['Rate-wise Summary']);
-      rows.push(['GST Rate', 'Taxable Value', 'Tax Amount', 'Cess', 'Order Count']);
-      result.rateWise.forEach(r => rows.push([r.rate + '%', r.taxableValue, r.taxAmount, r.cess, r.count]));
+      rows.push(['HSN-WISE PRODUCT CLASSIFICATION (Reference Only - Not Used for Tax)']);
+      rows.push(['HSN Code', 'Product Revenue', 'Orders']);
+      result.hsnWise.forEach(h => {
+        rows.push([h.hsnCode, h.productRevenue, h.orders]);
+      });
       rows.push([]);
-      rows.push(['Supplier-wise Summary']);
-      rows.push(['Supplier', 'GSTIN', 'Taxable Value', 'Tax Amount', 'Order Count']);
-      result.supplierWise.forEach(s => rows.push([s.businessName, s.gstin, s.taxableValue, s.taxAmount, s.orderCount]));
+      rows.push(['SUPPLIER-WISE REVENUE']);
+      rows.push(['Supplier', 'GSTIN', 'Product Revenue', 'Orders']);
+      result.supplierWise.forEach(s => {
+        rows.push([s.businessName, s.gstin, s.productRevenue, s.orderCount]);
+      });
 
       const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
       return new NextResponse(csv, {

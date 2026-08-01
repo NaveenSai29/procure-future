@@ -28,7 +28,7 @@ async function getTrafficMultiplier(lat1, lng1, lat2, lng2) {
       const multiplier = actualDuration / freeFlowDuration;
       
       return {
-        multiplier: Math.max(1.0, Math.min(multiplier, 3.0)),
+        multiplier: Math.max(1.0, Math.min(multiplier, 2.5)),
         actualDurationSeconds: actualDuration,
         actualDistanceKm: actualDistance,
         isHeavyTraffic: multiplier > 1.5,
@@ -43,40 +43,29 @@ async function getTrafficMultiplier(lat1, lng1, lat2, lng2) {
   }
 }
 
-function getTimeBasedTrafficMultiplier(lat, lng) {
+function getTimeBasedTrafficMultiplier() {
   const now = new Date();
   const hour = now.getHours();
   const day = now.getDay();
-  const month = now.getMonth();
   
   let multiplier = 1.0;
   let trafficLevel = 'Normal';
   
   if (day >= 1 && day <= 5 && hour >= 8 && hour <= 10) {
-    multiplier = 1.8;
+    multiplier = 1.5;
     trafficLevel = 'Morning rush';
   } else if (day >= 1 && day <= 5 && hour >= 17 && hour <= 20) {
-    multiplier = 2.0;
+    multiplier = 1.7;
     trafficLevel = 'Evening rush';
   } else if (hour >= 12 && hour <= 14) {
-    multiplier = 1.3;
+    multiplier = 1.2;
     trafficLevel = 'Lunch traffic';
   } else if (hour >= 23 || hour <= 5) {
-    multiplier = 0.6;
-    trafficLevel = 'Light traffic';
+    multiplier = 0.7;
+    trafficLevel = 'Night';
   } else if ((day === 0 || day === 6) && hour >= 11 && hour <= 18) {
-    multiplier = 1.4;
-    trafficLevel = 'Weekend traffic';
-  } else if (hour >= 6 && hour <= 20) {
-    multiplier = 1.1;
-    trafficLevel = 'Normal traffic';
-  }
-  
-  if (month >= 10 || month <= 1) {
-    multiplier *= 1.1;
-  }
-  if (month >= 5 && month <= 8) {
-    multiplier *= 1.15;
+    multiplier = 1.3;
+    trafficLevel = 'Weekend';
   }
   
   return { multiplier, trafficLevel };
@@ -153,7 +142,6 @@ export class DeliveryService {
     vehicleType,
     isRaining,
     isHeavyRain,
-    surgeReason,
     buyerLat,
     buyerLng,
     warehouseLat,
@@ -163,59 +151,26 @@ export class DeliveryService {
     const now = new Date();
     const hour = now.getHours();
     const day = now.getDay();
-    const month = now.getMonth();
 
-    // 1. SUPPLIER ACCEPTANCE TIME
-    let acceptanceTime;
-    if (hour >= 23 || hour < 5) {
-      acceptanceTime = 30;
-    } else if (hour >= 22 || hour < 6) {
-      acceptanceTime = 20;
-    } else if (hour >= 13 && hour <= 15) {
-      acceptanceTime = 18;
-    } else if (day === 0) {
-      acceptanceTime = 25;
+    // 1. PROCESSING TIME (order confirmation + picking + packing)
+    // Simplified: based on item count only
+    const items = itemCount || Math.max(1, Math.ceil(totalWeight / 5));
+    let processingMinutes;
+    
+    if (items <= 3) {
+      processingMinutes = 5 + items * 2; // 7-11 min for small orders
+    } else if (items <= 10) {
+      processingMinutes = 10 + items * 1.5; // 12-25 min
     } else {
-      acceptanceTime = 12;
+      processingMinutes = 15 + items * 1; // 25-65 min for large orders
+    }
+    
+    // Night time: add delay
+    if (hour >= 23 || hour < 6) {
+      processingMinutes += 10;
     }
 
-    // 2. PICKING & PACKING TIME
-    if (!itemCount || itemCount <= 0) {
-      itemCount = Math.max(1, Math.ceil(totalWeight / 5));
-    }
-    
-    const basePickingPerItem = 2.5;
-    let pickingMinutes = itemCount * basePickingPerItem;
-    
-    if (itemCount > 20) pickingMinutes *= 0.8;
-    if (itemCount > 50) pickingMinutes *= 0.7;
-    
-    const avgItemWeight = totalWeight / itemCount;
-    if (avgItemWeight > 25) pickingMinutes *= 1.3;
-    if (avgItemWeight > 100) pickingMinutes *= 1.5;
-    
-    const pickingTime = Math.max(8, Math.round(pickingMinutes));
-
-    // 3. LOADING TIME
-    let loadingTime = 10;
-    const loadingStaffAvailable = (hour >= 9 && hour <= 18) ? 2 : 1;
-    const kgPerMinute = loadingStaffAvailable * 10;
-    const loadingMinutesFromWeight = Math.ceil(totalWeight / kgPerMinute);
-    loadingTime += loadingMinutesFromWeight;
-    
-    if (vehicleType?.includes('truck') || vehicleType?.includes('trailer')) {
-      loadingTime += 15;
-    } else if (vehicleType?.includes('tempo') || vehicleType?.includes('lcv')) {
-      loadingTime += 8;
-    }
-    
-    if (loadingStaffAvailable === 1 && totalWeight > 200) {
-      loadingTime = Math.round(loadingTime * 1.5);
-    }
-    
-    loadingTime = Math.min(loadingTime, 60);
-
-    // 4. TRAVEL TIME
+    // 2. TRAVEL TIME
     let travelMinutes;
     let trafficInfo = null;
     let trafficLabel = '';
@@ -232,72 +187,61 @@ export class DeliveryService {
         trafficLabel = 'Heavy traffic';
       }
     } else {
-      const { multiplier, trafficLevel } = getTimeBasedTrafficMultiplier(warehouseLat, warehouseLng);
-      const baseSpeed = 20;
+      const { multiplier, trafficLevel } = getTimeBasedTrafficMultiplier();
+      const baseSpeed = 30; // Increased from 20 to 30 km/h (urban average)
       const effectiveSpeed = baseSpeed / multiplier;
       travelMinutes = Math.round((distanceKm / effectiveSpeed) * 60);
       trafficLabel = trafficLevel;
     }
     
+    // Weather impact
     if (isRaining) {
       if (isHeavyRain) {
-        travelMinutes = Math.round(travelMinutes * 1.5);
+        travelMinutes = Math.round(travelMinutes * 1.35);
         trafficLabel = trafficLabel ? `${trafficLabel} + Heavy rain` : 'Heavy rain';
       } else {
-        travelMinutes = Math.round(travelMinutes * 1.25);
-        trafficLabel = trafficLabel ? `${trafficLabel} + Light rain` : 'Light rain';
+        travelMinutes = Math.round(travelMinutes * 1.15);
+        trafficLabel = trafficLabel ? `${trafficLabel} + Rain` : 'Rain';
       }
     }
     
+    // Vehicle type impact
     if (vehicleType?.includes('truck') || vehicleType?.includes('trailer')) {
-      travelMinutes = Math.round(travelMinutes * 1.3);
-    } else if (vehicleType?.includes('tempo') || vehicleType?.includes('lcv') || vehicleType?.includes('tata ace')) {
-      travelMinutes = Math.round(travelMinutes * 1.15);
+      travelMinutes = Math.round(travelMinutes * 1.2);
+    } else if (vehicleType?.includes('tempo') || vehicleType?.includes('lcv')) {
+      travelMinutes = Math.round(travelMinutes * 1.1);
     }
 
-    // 5. UNLOADING TIME
-    let unloadingTime = 5;
-    const unloadKgPerMinute = 15;
-    unloadingTime += Math.ceil(totalWeight / unloadKgPerMinute);
-    if (vehicleType?.includes('truck')) unloadingTime += 10;
-    unloadingTime = Math.min(unloadingTime, 45);
+    // 3. TOTAL (simplified: processing + travel, with small buffer)
+    const subtotalMinutes = processingMinutes + travelMinutes;
+    const buffer = Math.round(subtotalMinutes * 0.1); // 10% buffer (reduced from 15%)
 
-    // 6. HANDOVER & VERIFICATION
-    let handoverTime = 5;
-    if (itemCount > 10) handoverTime = 8;
-    if (totalWeight > 500) handoverTime += 5;
+    let totalMinutes = subtotalMinutes + buffer;
 
-    // 7. SAFETY BUFFER (15% for unexpected delays)
-    const subtotalMinutes = acceptanceTime + pickingTime + loadingTime + travelMinutes + unloadingTime + handoverTime;
-    const safetyBuffer = Math.round(subtotalMinutes * 0.15);
-
-    // TOTAL
-    const totalMinutes = subtotalMinutes + safetyBuffer;
-
-    let finalTotal;
+    // Express: cut time in half
     if (isExpress) {
-      finalTotal = Math.round(totalMinutes * 0.5);
-    } else {
-      finalTotal = totalMinutes;
+      totalMinutes = Math.round(totalMinutes * 0.5);
     }
+
+    // Ensure minimum 8 minutes
+    totalMinutes = Math.max(8, totalMinutes);
 
     // Build context labels
     const contextLabels = [];
-    if (trafficLabel) contextLabels.push(trafficLabel);
+    if (trafficLabel && trafficLabel !== 'Normal') contextLabels.push(trafficLabel);
     if (isRaining) contextLabels.push(isHeavyRain ? 'Heavy rain' : 'Rain');
-    if (totalWeight > 100) contextLabels.push(`${totalWeight}kg`);
-    if (vehicleType?.includes('truck')) contextLabels.push('Truck');
+    if (totalWeight > 50) contextLabels.push(`${totalWeight}kg`);
     if (isExpress) contextLabels.push('Express');
     
     const contextStr = contextLabels.length > 0 ? ` · ${contextLabels.join(' · ')}` : '';
 
     // Format as single time
     let estimatedTime;
-    if (finalTotal < 60) {
-      estimatedTime = `${finalTotal} mins${contextStr}`;
+    if (totalMinutes < 60) {
+      estimatedTime = `${totalMinutes} mins${contextStr}`;
     } else {
-      const hours = Math.floor(finalTotal / 60);
-      const mins = finalTotal % 60;
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
       if (hours === 1) {
         estimatedTime = `1 hr ${mins > 0 ? `${mins} mins` : ''}${contextStr}`;
       } else {
@@ -306,19 +250,15 @@ export class DeliveryService {
     }
 
     return {
-      totalMinutes: finalTotal,
+      totalMinutes,
       estimatedTime,
       contextStr,
       breakdown: {
-        acceptanceTime,
-        pickingTime,
-        loadingTime,
+        processingMinutes,
         travelMinutes,
-        unloadingTime,
-        handoverTime,
-        safetyBuffer,
+        buffer,
       },
-      trafficInfo: trafficInfo ? { label: trafficLabel } : null,
+      trafficInfo: trafficLabel && trafficLabel !== 'Normal' ? { label: trafficLabel } : null,
     };
   }
 
@@ -347,7 +287,7 @@ export class DeliveryService {
         ],
         isFree: true,
         distanceKm: 0,
-        estimatedTime: '30 mins',
+        estimatedTime: '25-30 mins',
         surgeReason: null,
         isDeliverable: true,
         isRaining: false,
@@ -461,7 +401,6 @@ export class DeliveryService {
       vehicleType: bestVehicle?.type,
       isRaining,
       isHeavyRain,
-      surgeReason,
       buyerLat,
       buyerLng,
       warehouseLat,

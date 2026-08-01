@@ -1,11 +1,18 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
+import { isFeatureEnabled } from "@/lib/features";
 
 // GET - Get buyer wallet with transactions
 export async function GET() {
   try {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
+
+    // Check if wallet feature is enabled
+    const walletEnabled = await isFeatureEnabled('wallet');
+    if (!walletEnabled) {
+      return errorResponse("Wallet feature is currently disabled", 403);
+    }
 
     let wallet = await prisma.buyerWallet.findUnique({
       where: { userId: session.userId },
@@ -17,7 +24,6 @@ export async function GET() {
       },
     });
 
-    // Auto-create wallet if doesn't exist
     if (!wallet) {
       wallet = await prisma.buyerWallet.create({
         data: { userId: session.userId },
@@ -37,7 +43,6 @@ export async function GET() {
     );
 
     for (const t of expiredTransactions) {
-      // Check if already processed
       const alreadyExpired = await prisma.buyerWalletTransaction.findFirst({
         where: { referenceId: t.id, type: "EXPIRED" },
       });
@@ -66,7 +71,6 @@ export async function GET() {
       }
     }
 
-    // Refresh wallet after expiry processing
     wallet = await prisma.buyerWallet.findUnique({
       where: { userId: session.userId },
       include: {
@@ -93,6 +97,12 @@ export async function POST(request) {
   try {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
+
+    // Check if wallet feature is enabled
+    const walletEnabled = await isFeatureEnabled('wallet');
+    if (!walletEnabled) {
+      return errorResponse("Wallet feature is currently disabled", 403);
+    }
 
     const { amount, referenceType, referenceId, description } = await request.json();
 

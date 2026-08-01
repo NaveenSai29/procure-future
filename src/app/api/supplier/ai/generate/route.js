@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
+import { isFeatureEnabled } from "@/lib/features";
 
 export async function POST(req) {
   try {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
+
+    // Check if AI feature is enabled
+    const aiEnabled = await isFeatureEnabled('ai');
+    if (!aiEnabled) {
+      return errorResponse("AI features are currently disabled by admin", 403);
+    }
 
     const staff = await prisma.supplierStaff.findFirst({
       where: { userId: session.userId },
@@ -129,11 +136,9 @@ Respond in JSON format as key-value pairs:
     
     if (type === "meta") {
       try {
-        // Try to parse JSON from AI response
         const cleaned = generatedContent.replace(/```json\n?|\n?```/g, "").trim();
         result = JSON.parse(cleaned);
       } catch {
-        // Fallback parsing
         const lines = generatedContent.split("\n").filter(Boolean);
         result.metaTitle = lines.find(l => l.toLowerCase().includes("meta title"))?.replace(/.*?:/, "").trim() || `${productName} - Best Price Online | PROCURE`;
         result.metaDescription = lines.find(l => l.toLowerCase().includes("meta description"))?.replace(/.*?:/, "").trim() || `Buy ${productName} at the best price on PROCURE. ✓ Best Quality ✓ Fast Delivery ✓ Best Price. Order now!`;

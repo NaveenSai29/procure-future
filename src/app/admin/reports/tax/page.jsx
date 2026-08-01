@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import {
   Receipt, TrendingUp, Download, Filter, Calendar, IndianRupee,
   RefreshCw, FileText, BarChart3, ChevronDown, ChevronRight,
-  Building2, Hash, Tag, AlertCircle
+  Building2, Hash, Tag, AlertCircle, Info
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,20 +16,20 @@ export default function TaxReportsPage() {
   const [period, setPeriod] = useState('this-month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
-  const [hsnChapter, setHsnChapter] = useState('');
-  const [expandedSections, setExpandedSections] = useState({ summary: true, rateWise: true, hsnWise: true, supplierWise: false, monthly: true });
+  const [expandedSections, setExpandedSections] = useState({ 
+    summary: true, hsnWise: true, supplierWise: false, monthly: true 
+  });
 
   useEffect(() => { fetchReport(); }, [period]);
 
   const fetchReport = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({ type: 'summary', period });
+      const params = new URLSearchParams({ period });
       if (period === 'custom' && customStart && customEnd) {
         params.append('startDate', customStart);
         params.append('endDate', customEnd);
       }
-      if (hsnChapter) params.append('hsnChapter', hsnChapter);
       const res = await fetch('/api/admin/reports/tax?' + params.toString());
       const data = await res.json();
       if (data.success) setReportData(data.data);
@@ -39,7 +39,7 @@ export default function TaxReportsPage() {
   };
 
   const handleExport = () => {
-    const params = new URLSearchParams({ type: 'summary', period, export: 'csv' });
+    const params = new URLSearchParams({ period, export: 'csv' });
     if (period === 'custom' && customStart && customEnd) {
       params.append('startDate', customStart);
       params.append('endDate', customEnd);
@@ -83,7 +83,7 @@ export default function TaxReportsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Tax Reports</h1>
-          <p className="text-gray-500 mt-1">GST tax liability, HSN-wise summary, and compliance reports</p>
+          <p className="text-gray-500 mt-1">GST collected on delivery & platform fees (suppliers handle product GST)</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={fetchReport} className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 text-sm">
@@ -92,6 +92,19 @@ export default function TaxReportsPage() {
           <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
             <Download className="h-4 w-4" /> Export CSV
           </button>
+        </div>
+      </div>
+
+      {/* Policy Note */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+        <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-amber-800">GST Policy</p>
+          <p className="text-sm text-amber-700 mt-1">
+            PROCURE collects GST <strong>only on delivery & platform fees</strong> at {reportData?.summary?.gstPercent || 5}%. 
+            Product prices are set by suppliers who handle their own GST filing. 
+            HSN codes below are for product classification reference only.
+          </p>
         </div>
       </div>
 
@@ -121,117 +134,84 @@ export default function TaxReportsPage() {
       {reportData && (
         <div className="space-y-4">
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
             <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
-              <p className="text-xs text-gray-500 mb-1">Taxable Value</p>
-              <p className="text-xl font-bold text-blue-700">{formatINR(reportData.summary.totalTaxableValue)}</p>
+              <p className="text-xs text-gray-500 mb-1">Product Revenue</p>
+              <p className="text-xl font-bold text-blue-700">{formatINR(reportData.summary.productRevenue)}</p>
+              <p className="text-xs text-gray-400 mt-1">Supplier sales</p>
+            </div>
+            <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+              <p className="text-xs text-gray-500 mb-1">Delivery + Platform Fees</p>
+              <p className="text-xl font-bold text-green-700">{formatINR(reportData.summary.totalDeliveryFee + reportData.summary.totalPlatformFee)}</p>
+              <p className="text-xs text-gray-400 mt-1">Taxable services</p>
             </div>
             <div className="bg-purple-50 rounded-xl p-4 border border-purple-200">
-              <p className="text-xs text-gray-500 mb-1">CGST</p>
-              <p className="text-xl font-bold text-purple-700">{formatINR(reportData.summary.totalCgst)}</p>
-            </div>
-            <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-200">
-              <p className="text-xs text-gray-500 mb-1">SGST</p>
-              <p className="text-xl font-bold text-indigo-700">{formatINR(reportData.summary.totalSgst)}</p>
+              <p className="text-xs text-gray-500 mb-1">GST Collected</p>
+              <p className="text-xl font-bold text-purple-700">{formatINR(reportData.summary.totalGstCollected)}</p>
+              <p className="text-xs text-gray-400 mt-1">CGST: {formatINR(reportData.summary.cgst)} | SGST: {formatINR(reportData.summary.sgst)}</p>
             </div>
             <div className="bg-orange-50 rounded-xl p-4 border border-orange-200">
-              <p className="text-xs text-gray-500 mb-1">Cess</p>
-              <p className="text-xl font-bold text-orange-700">{formatINR(reportData.summary.totalCess)}</p>
-            </div>
-            <div className="bg-red-50 rounded-xl p-4 border border-red-200">
-              <p className="text-xs text-gray-500 mb-1">Total Tax</p>
-              <p className="text-xl font-bold text-red-700">{formatINR(reportData.summary.totalTax)}</p>
+              <p className="text-xs text-gray-500 mb-1">Orders</p>
+              <p className="text-xl font-bold text-orange-700">{reportData.summary.orderCount}</p>
+              <p className="text-xs text-gray-400 mt-1">{reportData.monthlyBreakdown.length} months</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <div className="bg-green-50 rounded-xl p-3 text-center border border-green-200">
-              <p className="text-lg font-bold text-green-600">{reportData.summary.orderCount}</p>
-              <p className="text-xs text-gray-500">Orders</p>
+          {/* GST Breakdown Detail */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            <div className="bg-gray-50 rounded-xl p-3 text-center border">
+              <p className="text-xs text-gray-500">Delivery Fee</p>
+              <p className="text-lg font-bold text-gray-700">{formatINR(reportData.summary.totalDeliveryFee)}</p>
             </div>
-            <div className="bg-cyan-50 rounded-xl p-3 text-center border border-cyan-200">
-              <p className="text-lg font-bold text-cyan-600">{reportData.summary.invoiceCount}</p>
-              <p className="text-xs text-gray-500">Invoices</p>
+            <div className="bg-gray-50 rounded-xl p-3 text-center border">
+              <p className="text-xs text-gray-500">Platform Fee</p>
+              <p className="text-lg font-bold text-gray-700">{formatINR(reportData.summary.totalPlatformFee)}</p>
             </div>
-            <div className="bg-yellow-50 rounded-xl p-3 text-center border border-yellow-200">
-              <p className="text-lg font-bold text-yellow-600">{formatINR(reportData.summary.totalRevenue)}</p>
-              <p className="text-xs text-gray-500">Total Revenue</p>
+            <div className="bg-gray-50 rounded-xl p-3 text-center border">
+              <p className="text-xs text-gray-500">GST on Delivery</p>
+              <p className="text-lg font-bold text-amber-700">{formatINR(reportData.summary.gstOnDelivery)}</p>
             </div>
-            <div className="bg-gray-50 rounded-xl p-3 text-center border border-gray-200">
-              <p className="text-lg font-bold text-gray-600">{reportData.monthlyBreakdown.length}</p>
-              <p className="text-xs text-gray-500">Months</p>
+            <div className="bg-gray-50 rounded-xl p-3 text-center border">
+              <p className="text-xs text-gray-500">GST on Platform</p>
+              <p className="text-lg font-bold text-amber-700">{formatINR(reportData.summary.gstOnPlatform)}</p>
+            </div>
+            <div className="bg-red-50 rounded-xl p-3 text-center border border-red-200">
+              <p className="text-xs text-gray-500">Total GST Liability</p>
+              <p className="text-lg font-bold text-red-700">{formatINR(reportData.summary.totalGstCollected)}</p>
             </div>
           </div>
 
-          {/* Rate-wise Summary */}
-          <SectionHeader title="Rate-wise Tax Summary" icon={TrendingUp} sectionKey="rateWise" badge={`${reportData.rateWise.length} rates`} />
-          {expandedSections.rateWise && (
-            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b bg-gray-50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">GST Rate</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Taxable Value</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Tax Amount</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Cess</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Orders</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">% of Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {reportData.rateWise.map((r, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <span className={`text-sm font-bold px-2 py-1 rounded ${
-                          r.rate >= 28 ? 'bg-red-100 text-red-700' : r.rate >= 18 ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                        }`}>{r.rate}%</span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm">{formatINR(r.taxableValue)}</td>
-                      <td className="px-4 py-3 text-right text-sm font-medium text-purple-700">{formatINR(r.taxAmount)}</td>
-                      <td className="px-4 py-3 text-right text-sm text-orange-600">{formatINR(r.cess)}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-600">{r.count}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-500">
-                        {reportData.summary.totalTaxableValue > 0 ? ((r.taxableValue / reportData.summary.totalTaxableValue) * 100).toFixed(1) + '%' : '0%'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* HSN-wise Breakdown */}
-          <SectionHeader title="HSN-wise Tax Breakdown (GSTR-1 Style)" icon={Hash} sectionKey="hsnWise" badge={`${reportData.hsnWise.length} HSN codes`} />
+          {/* HSN-wise Product Classification (Reference) */}
+          <SectionHeader title="HSN-wise Product Classification" icon={Hash} sectionKey="hsnWise" 
+            badge={`${reportData.hsnWise?.length || 0} HSN codes`} 
+          />
           {expandedSections.hsnWise && (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+              <div className="p-3 bg-amber-50 border-b border-amber-100 text-xs text-amber-700 flex items-center gap-2">
+                <Info className="h-3 w-3" /> Reference only — GST rates shown are HSN slab rates, not tax collected by PROCURE
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
                     <tr className="border-b bg-gray-50">
                       <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">HSN Code</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Description</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Section</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">GST Rate</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Taxable Value</th>
-                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Tax Amount</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Products</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Product Revenue</th>
                       <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Orders</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {reportData.hsnWise.length === 0 ? (
-                      <tr><td colSpan={7} className="text-center py-12 text-gray-400">No HSN-wise data available for this period</td></tr>
+                    {reportData.hsnWise?.length === 0 ? (
+                      <tr><td colSpan={4} className="text-center py-12 text-gray-400">No HSN data available for this period</td></tr>
                     ) : (
-                      reportData.hsnWise.map((h, i) => (
+                      reportData.hsnWise?.map((h, i) => (
                         <tr key={i} className="hover:bg-gray-50">
-                          <td className="px-4 py-3"><span className="font-mono text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">{h.hsnCode}</span></td>
-                          <td className="px-4 py-3 text-sm text-gray-700 max-w-[250px] truncate" title={h.description}>{h.description}</td>
-                          <td className="px-4 py-3 text-xs text-gray-500">{h.section || '-'}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${h.gstRate >= 28 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>{h.gstRate}%</span>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">{h.hsnCode}</span>
                           </td>
-                          <td className="px-4 py-3 text-right text-sm">{formatINR(h.taxableValue)}</td>
-                          <td className="px-4 py-3 text-right text-sm font-medium text-purple-700">{formatINR(h.taxAmount)}</td>
-                          <td className="px-4 py-3 text-right text-sm text-gray-600">{h.count}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-600">{h.productCount}</td>
+                          <td className="px-4 py-3 text-right text-sm font-medium">{formatINR(h.productRevenue)}</td>
+                          <td className="px-4 py-3 text-right text-sm text-gray-600">{h.orders}</td>
                         </tr>
                       ))
                     )}
@@ -241,8 +221,10 @@ export default function TaxReportsPage() {
             </div>
           )}
 
-          {/* Supplier-wise */}
-          <SectionHeader title="Supplier-wise Tax Summary" icon={Building2} sectionKey="supplierWise" badge={`${reportData.supplierWise.length} suppliers`} />
+          {/* Supplier-wise Revenue */}
+          <SectionHeader title="Supplier-wise Revenue" icon={Building2} sectionKey="supplierWise" 
+            badge={`${reportData.supplierWise?.length || 0} suppliers`}
+          />
           {expandedSections.supplierWise && (
             <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
               <table className="w-full">
@@ -250,21 +232,19 @@ export default function TaxReportsPage() {
                   <tr className="border-b bg-gray-50">
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Supplier</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">GSTIN</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Taxable Value</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Tax Amount</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Product Revenue</th>
                     <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Orders</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {reportData.supplierWise.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center py-12 text-gray-400">No supplier data available</td></tr>
+                  {reportData.supplierWise?.length === 0 ? (
+                    <tr><td colSpan={4} className="text-center py-12 text-gray-400">No supplier data available</td></tr>
                   ) : (
-                    reportData.supplierWise.map((s, i) => (
+                    reportData.supplierWise?.map((s, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.businessName}</td>
                         <td className="px-4 py-3 text-xs font-mono text-gray-500">{s.gstin || 'N/A'}</td>
-                        <td className="px-4 py-3 text-right text-sm">{formatINR(s.taxableValue)}</td>
-                        <td className="px-4 py-3 text-right text-sm font-medium text-purple-700">{formatINR(s.taxAmount)}</td>
+                        <td className="px-4 py-3 text-right text-sm font-medium">{formatINR(s.productRevenue)}</td>
                         <td className="px-4 py-3 text-right text-sm text-gray-600">{s.orderCount}</td>
                       </tr>
                     ))
@@ -275,19 +255,19 @@ export default function TaxReportsPage() {
           )}
 
           {/* Monthly Trend */}
-          <SectionHeader title="Monthly Tax Trend" icon={BarChart3} sectionKey="monthly" />
+          <SectionHeader title="Monthly GST Trend" icon={BarChart3} sectionKey="monthly" />
           {expandedSections.monthly && (
             <div className="bg-white rounded-xl border shadow-sm p-4">
               <div className="space-y-3">
-                {reportData.monthlyBreakdown.map((m, i) => {
-                  const maxTax = Math.max(...reportData.monthlyBreakdown.map(x => x.taxAmount), 1);
-                  const barWidth = (m.taxAmount / maxTax) * 100;
+                {reportData.monthlyBreakdown?.map((m, i) => {
+                  const maxGst = Math.max(...reportData.monthlyBreakdown.map(x => x.gstCollected), 1);
+                  const barWidth = (m.gstCollected / maxGst) * 100;
                   return (
                     <div key={i} className="flex items-center gap-3">
                       <span className="text-xs text-gray-500 w-20">{m.month}</span>
                       <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden relative">
-                        <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center px-3 transition-all" style={{ width: barWidth + '%' }}>
-                          <span className="text-xs text-white font-medium">{formatINR(m.taxAmount)}</span>
+                        <div className="h-full bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg flex items-center px-3 transition-all" style={{ width: barWidth + '%' }}>
+                          <span className="text-xs text-white font-medium">{formatINR(m.gstCollected)}</span>
                         </div>
                       </div>
                       <span className="text-xs text-gray-400 w-16 text-right">{m.orderCount} orders</span>

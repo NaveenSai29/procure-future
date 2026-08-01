@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
+import { isFeatureEnabled } from "@/lib/features";
 
 export async function GET(request) {
   try {
@@ -15,7 +16,6 @@ export async function GET(request) {
       const staff = await prisma.supplierStaff.findFirst({ where: { userId: session.userId } });
       if (!staff) return errorResponse("Not a supplier", 403);
       
-      // Show: PUBLISHED RFQs + RFQs where this supplier has responded or been awarded
       where = {
         OR: [
           { status: "PUBLISHED", isPublic: true },
@@ -46,6 +46,12 @@ export async function POST(request) {
   try {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
+
+    // Check if RFQ feature is enabled
+    const rfqEnabled = await isFeatureEnabled('rfq');
+    if (!rfqEnabled) {
+      return errorResponse("RFQ feature is currently disabled by admin", 403);
+    }
 
     const body = await request.json();
     const { title, quantity, unit, description, deadline, supplierId, productId } = body;
@@ -86,12 +92,10 @@ export async function POST(request) {
       if (parsedData.neededBy) {
         deadlineDate = new Date(parsedData.neededBy);
       } else {
-        // Default: 7 days from now
         deadlineDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       }
     }
 
-    // RFQ price expires 7 days after approval
     const rfqExpiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     const cleanDescription = JSON.stringify({

@@ -2,16 +2,79 @@ import prisma from '@/lib/prisma';
 
 export class NotificationService {
   /**
+   * Get notification settings from SystemSetting table
+   */
+  static async getSystemNotificationSettings() {
+    try {
+      const dbSettings = await prisma.systemSetting.findMany({
+        where: { category: 'NOTIFICATION' }
+      });
+      const settings = {};
+      dbSettings.forEach(s => {
+        try { settings[s.key] = JSON.parse(s.value); } 
+        catch { settings[s.key] = s.value; }
+      });
+      return {
+        emailEnabled: settings.emailEnabled !== false,
+        smsEnabled: settings.smsEnabled === true,
+        pushEnabled: settings.pushEnabled !== false,
+        whatsappEnabled: settings.whatsappEnabled === true,
+        orderConfirmation: settings.orderConfirmation !== false,
+        shippingUpdate: settings.shippingUpdate !== false,
+        deliveryOTP: settings.deliveryOTP !== false,
+        rfqAlert: settings.rfqAlert !== false,
+        paymentReceipt: settings.paymentReceipt !== false,
+        promotionalEmail: settings.promotionalEmail === true,
+      };
+    } catch {
+      // Default: email + push enabled, everything else off
+      return {
+        emailEnabled: true, smsEnabled: false, pushEnabled: true, whatsappEnabled: false,
+        orderConfirmation: true, shippingUpdate: true, deliveryOTP: true,
+        rfqAlert: true, paymentReceipt: true, promotionalEmail: false,
+      };
+    }
+  }
+
+  /**
+   * Check if a notification event type is enabled
+   */
+  static async isEventEnabled(eventType) {
+    const settings = await this.getSystemNotificationSettings();
+    const eventMap = {
+      'ORDER_CONFIRMATION': settings.orderConfirmation,
+      'SHIPPING_UPDATE': settings.shippingUpdate,
+      'DELIVERY_OTP': settings.deliveryOTP,
+      'RFQ_ALERT': settings.rfqAlert,
+      'PAYMENT_RECEIPT': settings.paymentReceipt,
+      'PROMOTIONAL': settings.promotionalEmail,
+    };
+    return eventMap[eventType] !== false;
+  }
+
+  /**
    * Create and send a notification to a user
    */
-  static async send({ userId, type, title, message, templateId = null, data = null }) {
+  static async send({ userId, type, title, message, eventType = null, templateId = null, data = null }) {
     try {
+      // Check system notification settings for this event type
+      if (eventType) {
+        const eventEnabled = await this.isEventEnabled(eventType);
+        if (!eventEnabled) {
+          console.log(`Notification event "${eventType}" is disabled in system settings. Skipping.`);
+          return null;
+        }
+      }
+
+      // Get system settings
+      const systemSettings = await this.getSystemNotificationSettings();
+
       // Check user preferences
       const prefs = await prisma.notificationPreference.findUnique({
         where: { userId }
       });
 
-      // Create in-app notification always
+      // Create in-app notification always (doesn't depend on channel settings)
       const notification = await prisma.notification.create({
         data: {
           userId,
@@ -24,20 +87,20 @@ export class NotificationService {
         }
       });
 
-      // Handle different notification types
+      // Handle different notification types with system setting checks
       switch (type) {
         case 'EMAIL':
-          if (prefs?.emailEnabled !== false) {
+          if (systemSettings.emailEnabled && prefs?.emailEnabled !== false) {
             await this.queueEmail(userId, title, message, templateId);
           }
           break;
         case 'SMS':
-          if (prefs?.smsEnabled === true) {
+          if (systemSettings.smsEnabled && prefs?.smsEnabled === true) {
             await this.queueSMS(userId, message, templateId);
           }
           break;
         case 'PUSH':
-          if (prefs?.pushEnabled !== false) {
+          if (systemSettings.pushEnabled && prefs?.pushEnabled !== false) {
             await this.sendPush(userId, title, message, data);
           }
           break;
@@ -53,12 +116,21 @@ export class NotificationService {
   /**
    * Send notification to multiple users
    */
-  static async sendBulk({ userIds, type, title, message, templateId = null, data = null }) {
+  static async sendBulk({ userIds, type, title, message, eventType = null, templateId = null, data = null }) {
+    // Check system settings first
+    if (eventType) {
+      const eventEnabled = await this.isEventEnabled(eventType);
+      if (!eventEnabled) {
+        console.log(`Bulk notification event "${eventType}" is disabled. Skipping.`);
+        return [];
+      }
+    }
+
     const notifications = [];
     for (const userId of userIds) {
       try {
-        const notification = await this.send({ userId, type, title, message, templateId, data });
-        notifications.push(notification);
+        const notification = await this.send({ userId, type, title, message, eventType, templateId, data });
+        if (notification) notifications.push(notification);
       } catch (error) {
         console.error(`Failed to send notification to user ${userId}:`, error);
       }
@@ -110,10 +182,45 @@ export class NotificationService {
   /**
    * Send push notification (placeholder - integrate with Firebase/OneSignal)
    */
-  static async sendPush(userId, title, message, data = null) {
-    // Placeholder for push notification integration
-    console.log(`Push notification to user ${userId}: ${title} - ${message}`);
-    return true;
+    static async sendPush(userId, title, message, data = null) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { expoPushToken: true },
+      });
+
+      if (!user?.expoPushToken) {
+        console.log(`No push token for user ${userId}`);
+        return false;
+      }
+
+      const { Expo } = await import('expo-server-sdk');
+      const expo = new Expo();
+
+      if (!Expo.isExpoPushToken(user.expoPushToken)) {
+        console.log(`Invalid push token for user ${userId}`);
+        return false;
+      }
+
+      const messages = [{
+        to: user.expoPushToken,
+        sound: 'default',
+        title,
+        body: message,
+        data: data || {},
+      }];
+
+      const chunks = expo.chunkPushNotifications(messages);
+      for (const chunk of chunks) {
+        await expo.sendPushNotificationsAsync(chunk);
+      }
+
+      console.log(`Push sent to user ${userId}: ${title}`);
+      return true;
+    } catch (error) {
+      console.error('Push notification error:', error.message);
+      return false;
+    }
   }
 
   /**
@@ -193,13 +300,12 @@ export class NotificationService {
     const emails = await prisma.emailQueue.findMany({
       where: {
         status: 'QUEUED',
-        attempts: { lt: prisma.emailQueue.fields.maxAttempts }
+        attempts: { lt: 3 }
       },
       take: batchSize,
       orderBy: { createdAt: 'asc' }
     });
 
-    // Import email service dynamically to avoid circular dependency
     const { EmailService } = await import('./email.service');
     
     for (const email of emails) {
@@ -224,7 +330,7 @@ export class NotificationService {
           data: {
             attempts: email.attempts + 1,
             lastError: error.message,
-            status: email.attempts + 1 >= email.maxAttempts ? 'FAILED' : 'QUEUED'
+            status: email.attempts + 1 >= 3 ? 'FAILED' : 'QUEUED'
           }
         });
       }

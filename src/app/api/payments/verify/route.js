@@ -26,31 +26,49 @@ export async function POST(request) {
     // Get payment details from Razorpay
     const payment = await RazorpayService.getPayment(razorpayPaymentId);
 
-    if (payment.status !== 'captured') {
+    if (payment.status !== 'captured' && payment.status !== 'authorized') {
       return NextResponse.json({ error: 'Payment not captured' }, { status: 400 });
     }
 
-    // Update order status if orderId provided
+    // Update order with payment details - keep as PENDING, supplier will accept
     if (orderId) {
-      await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          status: 'CONFIRMED',
-          statusHistory: {
-            create: {
-              fromStatus: 'PENDING',
-              toStatus: 'CONFIRMED',
-              changedBy: user.id,
+      const order = await prisma.order.findUnique({ where: { id: orderId } });
+      
+      if (order) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: {
+            paymentDetails: {
+              method: payment.method,
+              bank: payment.bank || null,
+              wallet: payment.wallet || null,
+              vpa: payment.vpa || null,
+              cardId: payment.card_id || null,
+              capturedAt: new Date().toISOString(),
             },
+            razorpayPaymentId: razorpayPaymentId,
           },
-        },
-      });
+        });
 
-      // Process commission
-      await CommissionService.processOrderCommission(orderId);
+        // Create status history entry
+        await prisma.orderStatusHistory.create({
+          data: {
+            orderId: orderId,
+            fromStatus: order.status || 'PENDING',
+            toStatus: order.status || 'PENDING',
+            changedBy: user.id,
+            notes: `Payment verified via ${payment.method?.toUpperCase() || 'Online'}. Payment ID: ${razorpayPaymentId}`,
+          },
+        });
+
+        // Process commission
+        CommissionService.processOrderCommission(orderId).catch((err) => {
+          console.error('Commission processing error:', err.message);
+        });
+      }
     }
 
-    // Record payment in database
+    // Record payment
     await prisma.auditLog.create({
       data: {
         userId: user.id,
@@ -62,19 +80,17 @@ export async function POST(request) {
       },
     });
 
-    // ─── SEND PAYMENT NOTIFICATIONS ───
+    // Notifications
     try {
       const amount = payment.amount / 100;
 
-      // Notify buyer
       NotificationService.send({
         userId: user.id,
         type: 'IN_APP',
         title: '💳 Payment Successful',
-        message: `Payment of ₹${amount.toLocaleString('en-IN')} received. Your order is now confirmed.`,
+        message: `Payment of ₹${amount.toLocaleString('en-IN')} received via ${payment.method?.toUpperCase() || 'Online'}. Waiting for supplier confirmation.`,
       }).catch(() => {});
 
-      // Notify supplier if order exists
       if (orderId) {
         const order = await prisma.order.findUnique({
           where: { id: orderId },
@@ -95,8 +111,8 @@ export async function POST(request) {
           NotificationService.send({
             userId: order.product.supplier.staff[0].userId,
             type: 'IN_APP',
-            title: '💰 Payment Received',
-            message: `Payment of ₹${amount.toLocaleString('en-IN')} received for order #${orderId.slice(0,8)}. Process the order now.`,
+            title: '💰 New Paid Order',
+            message: `Payment received for order #${orderId.slice(0, 8)}. Accept the order now.`,
           }).catch(() => {});
         }
       }
@@ -111,6 +127,7 @@ export async function POST(request) {
       method: payment.method,
     });
   } catch (error) {
+    console.error('Payment verify error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
