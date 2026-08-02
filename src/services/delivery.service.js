@@ -106,30 +106,25 @@ export class DeliveryService {
     return peak ? { isPeak: true, peak } : { isPeak: false, peak: null };
   }
 
-  static getDeliveryChargeForVehicle(vehicle, distanceKm) {
+    static getDeliveryChargeForVehicle(vehicle, distanceKm) {
     const slabs = vehicle.distanceSlabs;
     if (!slabs || slabs.length === 0) {
-      return Math.round(Math.max(1, distanceKm) * 25);
+      return Math.round(distanceKm * 25);
     }
 
-    const effectiveDistance = Math.max(1, distanceKm);
+    const effectiveDistance = distanceKm;
     let totalCharge = 0;
     let remainingKm = effectiveDistance;
     let previousUpTo = 0;
     const sortedSlabs = [...slabs].sort((a, b) => a.upToKm - b.upToKm);
 
     for (const slab of sortedSlabs) {
-      if (remainingKm <= 0) break;
+      if (remainingKm <= 0.001) break;
       const slabRange = slab.upToKm - previousUpTo;
       const kmInThisSlab = Math.min(remainingKm, slabRange);
-      totalCharge += kmInThisSlab * (slab.perKmRate || slab.charge || 25);
-      remainingKm -= kmInThisSlab;
+      totalCharge += Math.round(kmInThisSlab * (slab.perKmRate || slab.charge || 25));
+      remainingKm = Math.max(0, remainingKm - kmInThisSlab);
       previousUpTo = slab.upToKm;
-    }
-
-    if (remainingKm > 0 && sortedSlabs.length > 0) {
-      const lastSlab = sortedSlabs[sortedSlabs.length - 1];
-      totalCharge += remainingKm * (lastSlab.perKmRate || lastSlab.charge || 25);
     }
 
     return Math.round(totalCharge);
@@ -152,25 +147,21 @@ export class DeliveryService {
     const hour = now.getHours();
     const day = now.getDay();
 
-    // 1. PROCESSING TIME (order confirmation + picking + packing)
-    // Simplified: based on item count only
     const items = itemCount || Math.max(1, Math.ceil(totalWeight / 5));
     let processingMinutes;
     
     if (items <= 3) {
-      processingMinutes = 5 + items * 2; // 7-11 min for small orders
+      processingMinutes = 5 + items * 2;
     } else if (items <= 10) {
-      processingMinutes = 10 + items * 1.5; // 12-25 min
+      processingMinutes = 10 + items * 1.5;
     } else {
-      processingMinutes = 15 + items * 1; // 25-65 min for large orders
+      processingMinutes = 15 + items * 1;
     }
     
-    // Night time: add delay
     if (hour >= 23 || hour < 6) {
       processingMinutes += 10;
     }
 
-    // 2. TRAVEL TIME
     let travelMinutes;
     let trafficInfo = null;
     let trafficLabel = '';
@@ -188,13 +179,12 @@ export class DeliveryService {
       }
     } else {
       const { multiplier, trafficLevel } = getTimeBasedTrafficMultiplier();
-      const baseSpeed = 30; // Increased from 20 to 30 km/h (urban average)
+      const baseSpeed = 30;
       const effectiveSpeed = baseSpeed / multiplier;
       travelMinutes = Math.round((distanceKm / effectiveSpeed) * 60);
       trafficLabel = trafficLevel;
     }
     
-    // Weather impact
     if (isRaining) {
       if (isHeavyRain) {
         travelMinutes = Math.round(travelMinutes * 1.35);
@@ -205,28 +195,23 @@ export class DeliveryService {
       }
     }
     
-    // Vehicle type impact
     if (vehicleType?.includes('truck') || vehicleType?.includes('trailer')) {
       travelMinutes = Math.round(travelMinutes * 1.2);
     } else if (vehicleType?.includes('tempo') || vehicleType?.includes('lcv')) {
       travelMinutes = Math.round(travelMinutes * 1.1);
     }
 
-    // 3. TOTAL (simplified: processing + travel, with small buffer)
     const subtotalMinutes = processingMinutes + travelMinutes;
-    const buffer = Math.round(subtotalMinutes * 0.1); // 10% buffer (reduced from 15%)
+    const buffer = Math.round(subtotalMinutes * 0.1);
 
     let totalMinutes = subtotalMinutes + buffer;
 
-    // Express: cut time in half
     if (isExpress) {
       totalMinutes = Math.round(totalMinutes * 0.5);
     }
 
-    // Ensure minimum 8 minutes
     totalMinutes = Math.max(8, totalMinutes);
 
-    // Build context labels
     const contextLabels = [];
     if (trafficLabel && trafficLabel !== 'Normal') contextLabels.push(trafficLabel);
     if (isRaining) contextLabels.push(isHeavyRain ? 'Heavy rain' : 'Rain');
@@ -235,7 +220,6 @@ export class DeliveryService {
     
     const contextStr = contextLabels.length > 0 ? ` · ${contextLabels.join(' · ')}` : '';
 
-    // Format as single time
     let estimatedTime;
     if (totalMinutes < 60) {
       estimatedTime = `${totalMinutes} mins${contextStr}`;
@@ -273,40 +257,83 @@ export class DeliveryService {
   }) {
     const settings = await this.getSettings();
 
-    // FREE DELIVERY
-    if (orderTotal >= settings.freeDeliveryAbove) {
-      return {
-        deliveryFee: 0,
-        platformFee: settings.platformFee,
-        gst: Math.round(settings.platformFee * settings.gstPercent / 100),
-        total: settings.platformFee + Math.round(settings.platformFee * settings.gstPercent / 100),
-        breakdown: [
-          { label: 'Delivery', amount: 0, sub: 'FREE' },
-          { label: 'Platform Fee', amount: settings.platformFee },
-          { label: `GST (${settings.gstPercent}%)`, amount: Math.round(settings.platformFee * settings.gstPercent / 100) },
-        ],
-        isFree: true,
-        distanceKm: 0,
-        estimatedTime: '25-30 mins',
-        surgeReason: null,
-        isDeliverable: true,
-        isRaining: false,
-        selectedVehicle: null,
-      };
-    }
-
-    // DISTANCE
+    // DISTANCE — must calculate before any checks
     let distanceKm = 0;
     if (buyerLat && buyerLng && warehouseLat && warehouseLng) {
       distanceKm = haversineDistance(buyerLat, buyerLng, warehouseLat, warehouseLng);
     }
 
+    // Use effective distance for calculations (minimum 1km)
+    const effectiveDistance = Math.round(distanceKm);
+
+    // MAX DISTANCE CHECK — must run BEFORE free delivery check
     if (distanceKm > settings.maxDistance) {
       return {
         deliveryFee: null,
         isDeliverable: false,
         distanceKm: Math.round(distanceKm),
         message: `Delivery not available. Distance ${Math.round(distanceKm)} km exceeds maximum ${settings.maxDistance} km.`,
+      };
+    }
+
+    // FREE DELIVERY — calculate exact fee for strikethrough, then zero it
+    if (orderTotal >= settings.freeDeliveryAbove) {
+      let originalFee = 0;
+      let bestVehicleType = null;
+      const capableVehicles = settings.vehicles?.filter(v => v.maxWeight >= totalWeight) || [];
+      
+      if (capableVehicles.length > 0) {
+        let bestVehicle = null;
+        let bestCharge = Infinity;
+        for (const v of capableVehicles) {
+          const charge = this.getDeliveryChargeForVehicle(v, effectiveDistance);
+          if (charge < bestCharge) {
+            bestCharge = charge;
+            bestVehicle = v;
+          }
+        }
+        
+        let calculatedFee = bestCharge;
+        
+        // Weight surcharge
+        const extraKg = Math.max(0, totalWeight - settings.freeWeightUpTo);
+        const weightSurcharge = Math.round(extraKg * settings.weightChargePerKg);
+        calculatedFee += weightSurcharge;
+        
+        // Express delivery
+        if (isExpress) {
+          calculatedFee = Math.round(calculatedFee * settings.expressMultiplier);
+        }
+        
+        // Minimum delivery fee
+        const minFromVehicle = bestVehicle?.distanceSlabs?.[0]?.perKmRate || bestVehicle?.distanceSlabs?.[0]?.charge;
+        const absoluteMin = minFromVehicle || settings.minDeliveryFee || 25;
+        if (calculatedFee < absoluteMin) {
+          calculatedFee = absoluteMin;
+        }
+        
+        originalFee = calculatedFee;
+        bestVehicleType = bestVehicle?.type || null;
+      }
+      
+      return {
+        deliveryFee: 0,
+        originalDeliveryFee: originalFee,
+        platformFee: settings.platformFee,
+        gst: 0,
+        total: settings.platformFee,
+        breakdown: [
+          { label: 'Delivery', amount: 0, originalAmount: originalFee, sub: bestVehicleType ? `${bestVehicleType} - ${Math.round(effectiveDistance)} km` : 'FREE' },
+          { label: 'Platform Fee', amount: settings.platformFee },
+          { label: `GST (${settings.gstPercent}%)`, amount: 0 },
+        ],
+        isFree: true,
+        distanceKm: Math.round(effectiveDistance * 10) / 10,
+        estimatedTime: '25-30 mins',
+        surgeReason: null,
+        isDeliverable: true,
+        isRaining: false,
+        selectedVehicle: bestVehicleType,
       };
     }
 
@@ -332,7 +359,7 @@ export class DeliveryService {
     let bestVehicle = null;
     let bestCharge = Infinity;
     for (const v of capableVehicles) {
-      const charge = this.getDeliveryChargeForVehicle(v, distanceKm);
+      const charge = this.getDeliveryChargeForVehicle(v, effectiveDistance);
       if (charge < bestCharge) {
         bestCharge = charge;
         bestVehicle = v;
@@ -395,7 +422,7 @@ export class DeliveryService {
 
     // ESTIMATED TIME
     const timeEstimate = await this.calculateEstimatedTime({
-      distanceKm,
+      distanceKm: effectiveDistance,
       totalWeight,
       itemCount,
       vehicleType: bestVehicle?.type,
@@ -412,7 +439,7 @@ export class DeliveryService {
 
     // BREAKDOWN
     const breakdown = [
-      { label: 'Delivery', amount: deliveryFee, sub: `${bestVehicle?.type || 'Delivery'} - ${Math.round(distanceKm)} km` },
+      { label: 'Delivery', amount: deliveryFee, sub: `${bestVehicle?.type || 'Delivery'} - ${Math.round(effectiveDistance)} km` },
       codAmount > 0 && { label: 'COD Charge', amount: codAmount },
       surgeAmount > 0 && { label: surgeReason, amount: surgeAmount, isSurge: true },
       { label: 'Platform Fee', amount: platformFee },
@@ -430,7 +457,7 @@ export class DeliveryService {
       total,
       isFree: false,
       isDeliverable: true,
-      distanceKm: Math.round(distanceKm * 10) / 10,
+      distanceKm: Math.round(effectiveDistance * 10) / 10,
       selectedVehicle: bestVehicle?.type,
       estimatedTime,
       breakdown,

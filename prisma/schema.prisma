@@ -189,7 +189,7 @@ model BuyerProfile {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   addresses   Address[]
   wishlist    Wishlist?
-  cart        Cart?
+  carts       Cart[]
 }
 
 model Address {
@@ -232,13 +232,17 @@ model WishlistItem {
 }
 
 model Cart {
-  id        String     @id @default(uuid())
-  buyerId   String     @unique
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id         String     @id @default(uuid())
+  buyerId    String
+  supplierId String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
-  buyer     BuyerProfile @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  items     CartItem[]
+  buyer      BuyerProfile @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  supplier   Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  items      CartItem[]
+
+  @@unique([buyerId, supplierId])
 }
 
 model CartItem {
@@ -335,6 +339,7 @@ model Supplier {
   offers         Offer[]
   campaigns      Campaign[]
   referrals      Referral[]
+  carts          Cart[]
   loyaltyPoints  LoyaltyPoint[]
   sponsoredProducts SponsoredProduct[]
   subscription    Subscription?

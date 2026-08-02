@@ -1,49 +1,78 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 
-// Helper to get or create cart for a user
-async function getOrCreateCart(userId) {
+// Helper to get or create cart for a user + supplier
+async function getOrCreateCart(userId, supplierId) {
+  // Get buyer profile
   let buyerProfile = await prisma.buyerProfile.findUnique({
     where: { userId },
-    include: { cart: true },
   });
 
   if (!buyerProfile) {
     buyerProfile = await prisma.buyerProfile.create({
       data: { userId, buyerType: "INDIVIDUAL" },
-      include: { cart: true },
     });
   }
 
-  if (!buyerProfile.cart) {
-    await prisma.cart.create({
-      data: { buyerId: buyerProfile.id },
-    });
-    buyerProfile = await prisma.buyerProfile.findUnique({
-      where: { userId },
-      include: { cart: true },
+  // Find existing cart for this buyer + supplier
+  let cart = await prisma.cart.findUnique({
+    where: {
+      buyerId_supplierId: {
+        buyerId: buyerProfile.id,
+        supplierId,
+      },
+    },
+  });
+
+  if (!cart) {
+    cart = await prisma.cart.create({
+      data: {
+        buyerId: buyerProfile.id,
+        supplierId,
+      },
     });
   }
 
-  return buyerProfile.cart.id;
+  return cart.id;
 }
 
-export async function GET() {
+// Helper to get product supplier
+async function getProductSupplier(productId) {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { supplierId: true },
+  });
+  return product?.supplierId || null;
+}
+
+export async function GET(request) {
   try {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
 
-    const cartId = await getOrCreateCart(session.userId);
+    // Get all carts for this buyer, grouped by supplier
+    const buyerProfile = await prisma.buyerProfile.findUnique({
+      where: { userId: session.userId },
+      select: { id: true },
+    });
 
-    const cart = await prisma.cart.findUnique({
-      where: { id: cartId },
+    if (!buyerProfile) {
+      return successResponse({ carts: [], items: [] });
+    }
+
+    const carts = await prisma.cart.findMany({
+      where: { buyerId: buyerProfile.id },
       include: {
+        supplier: {
+          select: { id: true, businessName: true, isVerified: true },
+        },
         items: {
           include: {
             product: {
               select: {
                 id: true,
                 name: true,
+                weight: true,
                 supplier: { select: { id: true, businessName: true, isVerified: true } },
                 images: { take: 1, orderBy: { sortOrder: "asc" } },
                 pricing: { take: 1, orderBy: { minQty: "asc" } },
@@ -71,40 +100,59 @@ export async function GET() {
       // Ignore RFQ query errors
     }
 
-    const formattedItems = (cart?.items || []).map(item => {
-      // Parse RFQ descriptions to find matching product
-      let rfqDeadline = null;
-      for (const rfq of awardedRfqs) {
-        try {
-          const desc = JSON.parse(rfq.description || '{}');
-          if (desc.productId === item.productId) {
-            rfqDeadline = rfq.deadline;
-            break;
-          }
-        } catch (e) {}
-      }
+    // Format all items across all carts (for backward compatibility with cartMap)
+    const allItems = [];
+    const formattedCarts = carts.map(cart => {
+      const cartItems = (cart.items || []).map(item => {
+        let rfqDeadline = null;
+        for (const rfq of awardedRfqs) {
+          try {
+            const desc = JSON.parse(rfq.description || '{}');
+            if (desc.productId === item.productId) {
+              rfqDeadline = rfq.deadline;
+              break;
+            }
+          } catch (e) {}
+        }
 
-      const isExpired = rfqDeadline ? new Date(rfqDeadline) < new Date() : false;
-      const hasCustomPrice = !!item.customPrice;
+        const isExpired = rfqDeadline ? new Date(rfqDeadline) < new Date() : false;
+        const hasCustomPrice = !!item.customPrice;
+
+        const formatted = {
+          id: item.id,
+          productId: item.productId,
+          productName: item.product?.name,
+          supplier: item.product?.supplier?.businessName || cart.supplier?.businessName,
+          supplierId: item.product?.supplier?.id || cart.supplierId,
+          isVerified: item.product?.supplier?.isVerified || cart.supplier?.isVerified,
+          image: item.product?.images[0]?.url || null,
+          price: (hasCustomPrice && !isExpired) ? item.customPrice : (item.product?.pricing[0]?.sellingPrice || 0),
+          mrp: item.product?.pricing[0]?.mrp || 0,
+          isRfqPrice: hasCustomPrice && !isExpired,
+          rfqExpiresAt: hasCustomPrice ? (rfqDeadline || null) : null,
+          moq: item.product?.pricing[0]?.minQty || 1,
+          weight: item.product?.weight || 1,
+          quantity: item.quantity,
+        };
+        allItems.push(formatted);
+        return formatted;
+      });
 
       return {
-        id: item.id,
-        productId: item.productId,
-        productName: item.product?.name,
-        supplier: item.product?.supplier?.businessName,
-        supplierId: item.product?.supplier?.id,
-        isVerified: item.product?.supplier?.isVerified,
-        image: item.product?.images[0]?.url || null,
-        price: (hasCustomPrice && !isExpired) ? item.customPrice : (item.product?.pricing[0]?.sellingPrice || 0),
-        mrp: item.product?.pricing[0]?.mrp || 0,
-        isRfqPrice: hasCustomPrice && !isExpired,
-        rfqExpiresAt: hasCustomPrice ? (rfqDeadline || null) : null,
-        moq: item.product?.pricing[0]?.minQty || 1,
-        quantity: item.quantity,
+        id: cart.id,
+        supplierId: cart.supplierId,
+        supplierName: cart.supplier?.businessName,
+        isVerified: cart.supplier?.isVerified,
+        items: cartItems,
+        itemCount: cartItems.length,
+        subtotal: cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
       };
     });
 
-    return successResponse({ id: cart?.id, items: formattedItems });
+    return successResponse({
+      carts: formattedCarts,
+      items: allItems, // backward compatibility
+    });
   } catch (error) {
     console.error("Cart GET error:", error);
     return errorResponse("Failed to fetch cart", 500);
@@ -117,9 +165,16 @@ export async function POST(request) {
     if (!session) return errorResponse("Not authenticated", 401);
 
     const body = await request.json();
-    const { productId, quantity = 1, customPrice } = body;
+    const { productId, quantity = 1, customPrice, supplierId } = body;
 
     if (!productId) return errorResponse("Product ID required", 422);
+
+    // Get product supplier if not provided
+    let effectiveSupplierId = supplierId;
+    if (!effectiveSupplierId) {
+      effectiveSupplierId = await getProductSupplier(productId);
+    }
+    if (!effectiveSupplierId) return errorResponse("Could not determine supplier", 400);
 
     // Check product exists
     const product = await prisma.product.findUnique({
@@ -128,9 +183,10 @@ export async function POST(request) {
     });
     if (!product) return errorResponse("Product not found", 404);
 
-    const cartId = await getOrCreateCart(session.userId);
+    // Get or create cart for this buyer + supplier
+    const cartId = await getOrCreateCart(session.userId, effectiveSupplierId);
 
-    // Check for active awarded RFQ price (only if customPrice not already passed)
+    // Check for active awarded RFQ price
     let rfqPrice = customPrice || null;
     if (!rfqPrice) {
       try {
@@ -147,9 +203,7 @@ export async function POST(request) {
               where: { status: 'ACCEPTED' },
               take: 1,
               orderBy: { createdAt: 'desc' },
-              select: {
-                items: true,
-              },
+              select: { items: true },
             },
           },
         });
@@ -167,7 +221,7 @@ export async function POST(request) {
           } catch (e) {}
         }
       } catch (e) {
-        // Ignore RFQ errors, just add without custom price
+        // Ignore RFQ errors
       }
     }
 
@@ -194,7 +248,23 @@ export async function POST(request) {
       });
     }
 
-    return successResponse({ message: "Added to cart" });
+    // Return updated carts
+    const buyerProfile = await prisma.buyerProfile.findUnique({
+      where: { userId: session.userId },
+      select: { id: true },
+    });
+
+    const carts = await prisma.cart.findMany({
+      where: { buyerId: buyerProfile.id },
+      select: { id: true, supplierId: true, _count: { select: { items: true } } },
+    });
+
+    return successResponse({
+      message: "Added to cart",
+      cartId,
+      supplierId: effectiveSupplierId,
+      carts,
+    });
   } catch (error) {
     console.error("Cart POST error:", error.message);
     return errorResponse("Failed to add to cart", 500);
@@ -230,16 +300,30 @@ export async function DELETE(request) {
     const { searchParams } = new URL(request.url);
     const itemId = searchParams.get("itemId");
 
-    const cartId = await getOrCreateCart(session.userId);
-
     if (itemId) {
       // Delete single item
       await prisma.cartItem.delete({ where: { id: itemId } });
       return successResponse({ message: "Removed" });
     } else {
-      // Delete all items (clear cart)
-      await prisma.cartItem.deleteMany({ where: { cartId } });
-      return successResponse({ message: "Cart cleared" });
+      // Clear all carts for this buyer
+      const buyerProfile = await prisma.buyerProfile.findUnique({
+        where: { userId: session.userId },
+        select: { id: true },
+      });
+
+      if (buyerProfile) {
+        const carts = await prisma.cart.findMany({
+          where: { buyerId: buyerProfile.id },
+          select: { id: true },
+        });
+
+        const cartIds = carts.map(c => c.id);
+        await prisma.cartItem.deleteMany({
+          where: { cartId: { in: cartIds } },
+        });
+      }
+
+      return successResponse({ message: "All carts cleared" });
     }
   } catch (error) {
     return errorResponse("Failed to remove", 500);
