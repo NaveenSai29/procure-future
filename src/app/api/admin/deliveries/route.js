@@ -8,7 +8,6 @@ export async function GET(request) {
       return errorResponse('Unauthorized', 401);
     }
 
-    // Verify admin role
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
       include: {
@@ -26,11 +25,10 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const partnerId = searchParams.get('partnerId');
-    const date = searchParams.get('date'); // YYYY-MM-DD
+    const date = searchParams.get('date');
     const limit = parseInt(searchParams.get('limit') || '20');
     const page = parseInt(searchParams.get('page') || '1');
 
-    // Build where clause
     const where = {};
     if (status) where.status = status;
     if (partnerId) where.partnerId = partnerId;
@@ -60,11 +58,12 @@ export async function GET(request) {
           partner: {
             select: {
               id: true,
-              vehicleType: true,
-              vehicleNumber: true,
               rating: true,
               currentLat: true,
               currentLng: true,
+              activeVehicle: {
+                select: { vehicleType: true, vehicleNumber: true },
+              },
               user: {
                 select: { id: true, name: true, mobile: true },
               },
@@ -100,7 +99,6 @@ export async function POST(request) {
       return errorResponse('Unauthorized', 401);
     }
 
-    // Verify admin role
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
       include: {
@@ -122,7 +120,6 @@ export async function POST(request) {
       return errorResponse('orderId and partnerId are required', 400);
     }
 
-    // Check if order exists and not already assigned
     const existingDelivery = await prisma.delivery.findUnique({
       where: { orderId },
     });
@@ -131,7 +128,6 @@ export async function POST(request) {
       return errorResponse('Order already has a delivery assigned', 400);
     }
 
-    // Check if order exists
     const order = await prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -140,9 +136,9 @@ export async function POST(request) {
       return errorResponse('Order not found', 404);
     }
 
-    // Check if partner exists and is verified
     const partner = await prisma.deliveryPartner.findUnique({
       where: { id: partnerId },
+      include: { activeVehicle: { select: { vehicleType: true } }, user: { select: { name: true } } },
     });
 
     if (!partner) {
@@ -153,7 +149,6 @@ export async function POST(request) {
       return errorResponse('Delivery partner is not verified', 400);
     }
 
-    // Create delivery assignment
     const delivery = await prisma.delivery.create({
       data: {
         orderId,
@@ -172,8 +167,9 @@ export async function POST(request) {
         partner: {
           select: {
             id: true,
-            vehicleType: true,
-            vehicleNumber: true,
+            activeVehicle: {
+              select: { vehicleType: true, vehicleNumber: true },
+            },
             user: {
               select: { id: true, name: true, mobile: true },
             },
@@ -182,20 +178,18 @@ export async function POST(request) {
       },
     });
 
-    // Update order status
     await prisma.order.update({
       where: { id: orderId },
       data: { status: 'READY_FOR_PICKUP' },
     });
 
-    // Create order status history
     await prisma.orderStatusHistory.create({
       data: {
         orderId,
         fromStatus: order.status,
         toStatus: 'READY_FOR_PICKUP',
         changedBy: session.userId,
-        notes: `Delivery assigned to ${partner.user?.name || partner.vehicleType}`,
+        notes: `Delivery assigned to ${partner.user?.name || partner.activeVehicle?.vehicleType || 'Partner'}`,
       },
     });
 

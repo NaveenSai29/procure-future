@@ -86,6 +86,7 @@ async function main() {
   const adminRole = await prisma.role.findUnique({ where: { name: 'ADMIN' } });
   const supplierRole = await prisma.role.findUnique({ where: { name: 'SUPPLIER' } });
   const buyerRole = await prisma.role.findUnique({ where: { name: 'BUYER' } });
+  const deliveryPartnerRole = await prisma.role.findUnique({ where: { name: 'DELIVERY_PARTNER' } });
   const hashedPassword = await bcrypt.hash('Admin@123', 12);
 
   // Super Admin
@@ -135,6 +136,30 @@ async function main() {
       roles: { create: { roleId: buyerRole.id } },
     },
   });
+
+    // Demo Delivery Partner
+  const demoDeliveryPartner = await prisma.user.upsert({
+    where: { mobile: '9876543210' },
+    update: {},
+    create: {
+      name: 'Rajesh Kumar',
+      email: '9876543210@procure.delivery',
+      password: hashedPassword,
+      mobile: '9876543210',
+      mobileVerified: true,
+      roles: { create: { roleId: deliveryPartnerRole.id } },
+      deliveryPartner: {
+        create: {
+          vehicleType: 'Bike',
+          vehicleNumber: 'KA 01 AB 1234',
+          licenseNumber: 'DL-KA-20240001',
+          isVerified: true,
+        },
+      },
+      notificationPrefs: { create: { pushEnabled: true } },
+    },
+  });
+  console.log('  🛵 Demo Delivery Partner: 9876543210 / Admin@123');
 
   console.log('✅ Users created');
 
@@ -841,6 +866,7 @@ async function main() {
   console.log('📧 Super Admin: admin@procure.com / Admin@123');
   console.log('🏭 Supplier: supplier@demo.com / Admin@123');
   console.log('🛒 Buyer: buyer@demo.com / Admin@123');
+  console.log('🛵 Delivery Partner: 9876543210 / Admin@123');
 }
 
 main()

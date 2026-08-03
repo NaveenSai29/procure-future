@@ -1,52 +1,30 @@
 import prisma from '@/lib/prisma';
-import { 
-  getSessionUser, 
-  successResponse, 
-  errorResponse, 
-  hashPassword 
-} from '@/lib/auth';
-import { z } from 'zod';
-
-const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Invalid email address'),
-  mobile: z.string().regex(/^[6-9]\d{9}$/, 'Invalid Indian mobile number'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
-  vehicleType: z.string().min(1, 'Vehicle type is required'),
-  vehicleNumber: z.string().optional(),
-  licenseNumber: z.string().optional(),
-});
+import { successResponse, errorResponse, hashPassword } from '@/lib/auth';
+import { deliveryPartnerRegisterSchema } from '@/lib/validators';
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    
+
     // Validate input
-    const validation = registerSchema.safeParse(body);
+    const validation = deliveryPartnerRegisterSchema.safeParse(body);
     if (!validation.success) {
       return errorResponse('Validation failed', 400, validation.error.flatten().fieldErrors);
     }
 
-    const { name, email, mobile, password, vehicleType, vehicleNumber, licenseNumber } = validation.data;
+    const { name, mobile, password, vehicleType, vehicleNumber, licenseNumber } = validation.data;
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email },
-          { mobile },
-        ],
-      },
+    // Check if mobile already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { mobile },
     });
 
     if (existingUser) {
-      return errorResponse(
-        existingUser.email === email 
-          ? 'Email already registered' 
-          : 'Mobile number already registered',
-        409
-      );
+      return errorResponse('This mobile number is already registered', 409);
     }
+
+    // Generate a unique email from mobile (for database constraint)
+    const email = `${mobile}@procure.delivery`;
 
     // Hash password
     const hashedPassword = await hashPassword(password);
@@ -57,6 +35,7 @@ export async function POST(request) {
         name,
         email,
         mobile,
+        mobileVerified: false,
         password: hashedPassword,
         roles: {
           create: {
@@ -76,7 +55,6 @@ export async function POST(request) {
       select: {
         id: true,
         name: true,
-        email: true,
         mobile: true,
         deliveryPartner: {
           select: {
@@ -92,11 +70,11 @@ export async function POST(request) {
     });
 
     return successResponse({
-      message: 'Delivery partner registered successfully',
+      message: 'Registration successful! Please login to continue.',
       user,
     }, 201);
   } catch (error) {
     console.error('Delivery partner registration error:', error);
-    return errorResponse('Registration failed', 500);
+    return errorResponse('Registration failed. Please try again.', 500);
   }
 }

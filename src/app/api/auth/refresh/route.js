@@ -4,8 +4,19 @@ import prisma from "@/lib/prisma";
 
 export async function POST(request) {
   try {
+    let oldRefreshToken = null;
+
+    // Try cookie first (web browser)
     const cookieStore = await cookies();
-    const oldRefreshToken = cookieStore.get("refresh_token")?.value;
+    oldRefreshToken = cookieStore.get("refresh_token")?.value;
+
+    // Try request body (mobile apps send token in body)
+    if (!oldRefreshToken) {
+      try {
+        const body = await request.clone().json();
+        oldRefreshToken = body.refresh_token;
+      } catch {}
+    }
 
     if (!oldRefreshToken) {
       return errorResponse("No refresh token", 401);
@@ -57,7 +68,7 @@ export async function POST(request) {
       },
     });
 
-    // Set new cookies
+    // Set new cookies (for web)
     cookieStore.set("access_token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -74,7 +85,12 @@ export async function POST(request) {
       path: "/",
     });
 
-    return successResponse({ roles });
+    // Return tokens in body for mobile apps
+    return successResponse({ 
+      roles,
+      access_token: accessToken,
+      refresh_token: newRefreshToken,
+    });
   } catch (error) {
     console.error("Refresh error:", error);
     return errorResponse("Token refresh failed", 500);

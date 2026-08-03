@@ -14,16 +14,21 @@ export async function POST(request) {
 
     const { email, password } = parsed.data;
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email },
+    // Check if input is email or mobile number
+    const isMobile = /^[6-9]\d{9}$/.test(email);
+
+    // Find user by email OR mobile
+    const user = await prisma.user.findFirst({
+      where: isMobile
+        ? { mobile: email }
+        : { email: email.toLowerCase() },
       include: {
         roles: { include: { role: true } },
       },
     });
 
     if (!user || !user.password) {
-      return errorResponse("Invalid email or password", 401);
+      return errorResponse("Invalid credentials", 401);
     }
 
     if (!user.isActive) {
@@ -36,7 +41,7 @@ export async function POST(request) {
       await prisma.loginHistory.create({
         data: { userId: user.id, action: "FAILED" },
       });
-      return errorResponse("Invalid email or password", 401);
+      return errorResponse("Invalid credentials", 401);
     }
 
     // Update login info
@@ -84,7 +89,13 @@ export async function POST(request) {
 
     // ALSO return tokens in response body for mobile apps
     return successResponse({
-      user: { id: user.id, name: user.name, email: user.email, referralCode: user.referralCode },
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        mobile: user.mobile,
+        referralCode: user.referralCode,
+      },
       roles,
       access_token: accessToken,
       refresh_token: refreshToken,

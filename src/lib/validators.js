@@ -12,6 +12,12 @@ export const passwordSchema = z
   .regex(/[a-z]/, "Must contain at least one lowercase letter")
   .regex(/[0-9]/, "Must contain at least one number");
 
+// Password (simple - for delivery partners, no uppercase requirement)
+export const simplePasswordSchema = z
+  .string()
+  .min(6, "Password must be at least 6 characters")
+  .max(100);
+
 // Mobile (India)
 export const mobileSchema = z
   .string()
@@ -29,10 +35,26 @@ export const registerSchema = z.object({
   path: ["confirmPassword"],
 });
 
-// Login
+// Login (supports email OR mobile)
 export const loginSchema = z.object({
-  email: emailSchema,
+  email: z.string().min(1, "Email or mobile is required"),
   password: z.string().min(1, "Password is required"),
+});
+
+// Mobile Login (for delivery partners)
+export const mobileLoginSchema = z.object({
+  mobile: mobileSchema,
+  password: z.string().min(1, "Password is required"),
+});
+
+// Delivery Partner Registration (mobile-only, simple password)
+export const deliveryPartnerRegisterSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(100).trim(),
+  mobile: mobileSchema,
+  password: simplePasswordSchema,
+  vehicleType: z.string().min(1, 'Vehicle type is required'),
+  vehicleNumber: z.string().optional(),
+  licenseNumber: z.string().optional(),
 });
 
 // OTP

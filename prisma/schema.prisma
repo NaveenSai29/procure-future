@@ -136,7 +136,7 @@ model RefreshToken {
   token      String   @unique @db.VarChar(500)
   expiresAt  DateTime
   isRevoked  Boolean  @default(false)
-  replacedBy String?
+  replacedBy String? @db.VarChar(500)
   createdAt  DateTime @default(now())
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -709,23 +709,64 @@ model OrderStatusHistory {
 // ============================================
 
 model DeliveryPartner {
-  id              String    @id @default(uuid())
-  userId          String    @unique
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  licenseNumber     String?
+  licenseDoc        String?
+  profilePhoto      String?
+  selfieWithVehicle String?
+  isVerified        Boolean   @default(false)
+  verificationStatus String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  verificationNote  String?
+  isOnline          Boolean   @default(false)
+  currentLat        Float?
+  currentLng        Float?
+  rating            Float     @default(0.0)
+  totalDeliveries   Int       @default(0)
+  activeVehicleId   String?   // Currently active vehicle
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries        Delivery[]
+  vehicles          PartnerVehicle[]
+  documentChecks    DocumentVerification[]
+  activeVehicle     PartnerVehicle? @relation("ActiveVehicle", fields: [activeVehicleId], references: [id])
+  chats            DeliveryChat[]
+}
+
+model PartnerVehicle {
+  id              String   @id @default(uuid())
+  partnerId       String
   vehicleType     String
   vehicleNumber   String?
-  licenseNumber   String?
-  licenseDoc      String?
-  isVerified      Boolean   @default(false)
-  isOnline        Boolean   @default(false)
-  currentLat      Float?
-  currentLng      Float?
-  rating          Float     @default(0.0)
-  totalDeliveries Int       @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  rcDocument      String?
+  isVerified      Boolean  @default(false)
+  verificationStatus String @default("PENDING") // PENDING, APPROVED, REJECTED
+  verificationNote String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deliveries      Delivery[]
+  partner         DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  activeForPartner DeliveryPartner[] @relation("ActiveVehicle")
+
+  @@index([partnerId])
+}
+
+model DocumentVerification {
+  id              String   @id @default(uuid())
+  partnerId       String
+  documentType    String   // licenseDoc, profilePhoto, selfieWithVehicle
+  documentUrl     String?
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  partner         DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerId, documentType])
+  @@index([partnerId])
 }
 
 model Delivery {
@@ -744,6 +785,20 @@ model Delivery {
 
   order          Order           @relation(fields: [orderId], references: [id])
   partner        DeliveryPartner @relation(fields: [partnerId], references: [id])
+}
+
+model DeliveryChat {
+  id          String   @id @default(uuid())
+  partnerId   String
+  senderId    String
+  senderType  String   // ADMIN or PARTNER
+  message     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  partner     DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
 }
 
 // ============================================

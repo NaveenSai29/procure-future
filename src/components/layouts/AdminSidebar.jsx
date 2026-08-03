@@ -45,6 +45,7 @@ const menuGroups = [
       { title: "Wallet", href: "/admin/wallet", icon: Wallet },
       { title: "Bank Accounts", href: "/admin/finance/bank-accounts", icon: Landmark },
       { title: "Finance Overview", href: "/admin/finance", icon: TrendingUp },
+      { title: "Settlements", href: "/admin/finance/settlements", icon: Banknote },
     ],
   },
   {
@@ -53,6 +54,8 @@ const menuGroups = [
       { title: "RFQ Management", href: "/admin/rfq", icon: ClipboardList },
       { title: "Messages", href: "/admin/messages", icon: MessageSquare },
       { title: "Deliveries", href: "/admin/deliveries", icon: Truck },
+      { title: "Delivery Partners", href: "/admin/delivery-partners", icon: Users },
+      { title: "Delivery Chats", href: "/admin/delivery-chats", icon: MessageSquare },
       { title: "Live Map", href: "/admin/map", icon: Map },
       { title: "Returns & Refunds", href: "/admin/returns", icon: RotateCcw },
       { title: "Support Tickets", href: "/admin/support", icon: HeartHandshake },

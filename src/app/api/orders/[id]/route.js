@@ -121,7 +121,6 @@ export async function GET(request, { params }) {
     });
     if (!order) return errorResponse("Order not found", 404);
 
-    // Get refund info if order is cancelled/declined
     let refund = null;
     if (['CANCELLED', 'DECLINED'].includes(order.status)) {
       refund = await prisma.refundTransaction.findFirst({
@@ -198,7 +197,29 @@ export async function PATCH(request, { params }) {
     const updated = await prisma.order.update({ where: { id }, data: { status } });
     const historyData = { orderId: order.id, fromStatus: order.status, toStatus: status, changedBy: session.userId };
     if (status === "DECLINED") historyData.notes = `Declined: ${declineReason}`;
-    if (status === "READY_FOR_PICKUP") historyData.notes = "Order packed and ready for pickup";
+    
+    if (status === "READY_FOR_PICKUP") {
+      historyData.notes = "Order packed and ready for pickup";
+      // ─── AUTO-ASSIGN DELIVERY PARTNER ───
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const assignRes = await fetch(`${baseUrl}/api/delivery/auto-assign`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId: id }),
+        });
+        const assignData = await assignRes.json();
+        if (assignData.success) {
+          historyData.notes += ` | ✅ Auto-assigned: ${assignData.data?.message || 'Partner assigned'}`;
+        } else {
+          historyData.notes += ` | ⚠️ ${assignData.message || 'Auto-assign failed'}`;
+        }
+      } catch (e) {
+        historyData.notes += ' | Auto-assign error';
+        console.error('Auto-assign error:', e.message);
+      }
+    }
+    
     await prisma.orderStatusHistory.create({ data: historyData });
 
     if (status === 'DECLINED' || status === 'CANCELLED') { handleAutoRefund(order, status === 'DECLINED' ? 'declined by supplier' : 'cancelled')
