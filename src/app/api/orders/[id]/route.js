@@ -117,6 +117,27 @@ export async function GET(request, { params }) {
         },
         buyer: { select: { name: true, email: true } },
         statusHistory: { orderBy: { createdAt: "desc" }, take: 10 },
+        delivery: {
+          select: {
+            id: true,
+            status: true,
+            otp: true,
+            pickupTime: true,
+            deliveryTime: true,
+            partner: {
+              select: {
+                id: true,
+                rating: true,
+                activeVehicle: {
+                  select: { vehicleType: true, vehicleNumber: true },
+                },
+                user: {
+                  select: { id: true, name: true, mobile: true },
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (!order) return errorResponse("Order not found", 404);
@@ -203,6 +224,7 @@ export async function PATCH(request, { params }) {
       // ─── AUTO-ASSIGN DELIVERY PARTNER ───
       try {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        console.log('🔄 Auto-assigning delivery for order:', id.slice(0, 8));
         const assignRes = await fetch(`${baseUrl}/api/delivery/auto-assign`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -210,13 +232,15 @@ export async function PATCH(request, { params }) {
         });
         const assignData = await assignRes.json();
         if (assignData.success) {
+          console.log('✅ Auto-assigned:', assignData.data?.message);
           historyData.notes += ` | ✅ Auto-assigned: ${assignData.data?.message || 'Partner assigned'}`;
         } else {
+          console.log('⚠️ Auto-assign failed:', assignData.message);
           historyData.notes += ` | ⚠️ ${assignData.message || 'Auto-assign failed'}`;
         }
       } catch (e) {
-        historyData.notes += ' | Auto-assign error';
-        console.error('Auto-assign error:', e.message);
+        console.error('❌ Auto-assign error:', e.message);
+        historyData.notes += ' | Auto-assign error: ' + e.message;
       }
     }
     

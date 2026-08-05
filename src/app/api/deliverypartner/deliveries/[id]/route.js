@@ -56,9 +56,10 @@ export async function GET(request, { params }) {
         partner: {
           select: {
             id: true,
-            vehicleType: true,
-            vehicleNumber: true,
             rating: true,
+            activeVehicle: {
+              select: { vehicleType: true, vehicleNumber: true },
+            },
           },
         },
       },
@@ -121,44 +122,40 @@ export async function PATCH(request, { params }) {
 
     switch (action) {
       case 'ACCEPT':
-        // Can only accept ASSIGNED deliveries
         if (delivery.status !== 'ASSIGNED') {
           return errorResponse('Delivery is not in ASSIGNED status', 400);
         }
-        updateData = {
-          status: 'ACCEPTED',
-          pickupTime: new Date(),
-        };
+        updateData = { status: 'ACCEPTED', pickupTime: new Date() };
         orderUpdate = { status: 'PROCESSING' };
         responseMessage = 'Delivery accepted';
         break;
 
       case 'PICKUP':
-        // Can only pickup ACCEPTED deliveries
         if (delivery.status !== 'ACCEPTED') {
           return errorResponse('Delivery is not in ACCEPTED status', 400);
         }
-        const pickupOTP = generateOTP();
-        updateData = {
-          status: 'PICKED_UP',
-          otp: pickupOTP,
-        };
+        // Check OTP threshold — only generate OTP for orders above threshold
+        const otpThresholdSetting = await prisma.systemSetting.findFirst({
+          where: { category: 'DELIVERY', key: 'otpThreshold' },
+        });
+        const otpThreshold = otpThresholdSetting ? parseFloat(otpThresholdSetting.value) : 0;
+        const orderAmountForOTP = delivery.order.totalAmount || 0;
+        const pickupOTP = orderAmountForOTP >= otpThreshold ? generateOTP() : null;
+        updateData = { status: 'PICKED_UP', otp: pickupOTP };
         orderUpdate = { status: 'SHIPPED' };
         responseMessage = 'Order picked up';
         break;
 
       case 'DELIVER':
-        // Can only deliver PICKED_UP orders
         if (delivery.status !== 'PICKED_UP') {
           return errorResponse('Delivery is not in PICKED_UP status', 400);
         }
-        // Verify OTP if provided
-        if (otp && otp !== delivery.otp) {
+        // Only validate OTP if one was generated (orders above threshold)
+        if (delivery.otp && otp !== delivery.otp) {
           return errorResponse('Invalid OTP', 400);
         }
         updateData = {
-          status: 'DELIVERED',
-          deliveryTime: new Date(),
+          status: 'DELIVERED', deliveryTime: new Date(),
           notes: notes || delivery.notes,
           signatureImage: signatureImage || delivery.signatureImage,
           proofImage: proofImage || delivery.proofImage,
@@ -168,14 +165,10 @@ export async function PATCH(request, { params }) {
         break;
 
       case 'REJECT':
-        // Can only reject ASSIGNED deliveries
         if (delivery.status !== 'ASSIGNED') {
           return errorResponse('Delivery is not in ASSIGNED status', 400);
         }
-        updateData = {
-          status: 'REJECTED',
-          notes: notes || 'Rejected by delivery partner',
-        };
+        updateData = { status: 'REJECTED', notes: notes || 'Rejected by delivery partner' };
         responseMessage = 'Delivery rejected';
         break;
 
@@ -183,36 +176,23 @@ export async function PATCH(request, { params }) {
         return errorResponse('Invalid action. Valid actions: ACCEPT, PICKUP, DELIVER, REJECT', 400);
     }
 
-    // Update delivery and order in transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Update delivery
       const updatedDelivery = await tx.delivery.update({
         where: { id },
         data: updateData,
         include: {
           order: {
             select: {
-              id: true,
-              totalAmount: true,
-              deliveryFee: true,
-              paymentMethod: true,
-              status: true,
-              buyer: {
-                select: { id: true, name: true, mobile: true },
-              },
+              id: true, totalAmount: true, deliveryFee: true,
+              paymentMethod: true, status: true,
+              buyer: { select: { id: true, name: true, mobile: true } },
             },
           },
         },
       });
 
-      // Update order status if needed
       if (Object.keys(orderUpdate).length > 0) {
-        await tx.order.update({
-          where: { id: delivery.orderId },
-          data: orderUpdate,
-        });
-
-        // Create order status history
+        await tx.order.update({ where: { id: delivery.orderId }, data: orderUpdate });
         await tx.orderStatusHistory.create({
           data: {
             orderId: delivery.orderId,
@@ -224,23 +204,64 @@ export async function PATCH(request, { params }) {
         });
       }
 
-      // Update partner stats on delivery
       if (action === 'DELIVER') {
+        // Increment delivery count
         await tx.deliveryPartner.update({
           where: { id: user.deliveryPartner.id },
-          data: {
-            totalDeliveries: { increment: 1 },
+          data: { totalDeliveries: { increment: 1 } },
+        });
+
+        const deliveryFee = delivery.order.deliveryFee || 0;
+
+        // Update or create partner wallet — track earnings + COD
+        await tx.partnerWallet.upsert({
+          where: { partnerId: user.deliveryPartner.id },
+          create: {
+            partnerId: user.deliveryPartner.id,
+            totalEarned: deliveryFee,
+            codCollected: delivery.order.paymentMethod === 'COD' ? (delivery.order.totalAmount || 0) : 0,
+            codPending: delivery.order.paymentMethod === 'COD' ? (delivery.order.totalAmount || 0) : 0,
+          },
+          update: {
+            totalEarned: { increment: deliveryFee },
+            ...(delivery.order.paymentMethod === 'COD' ? {
+              codCollected: { increment: delivery.order.totalAmount || 0 },
+              codPending: { increment: delivery.order.totalAmount || 0 },
+            } : {}),
           },
         });
+
+        // COD Settlement: Create settlement entry for tracking
+        if (delivery.order.paymentMethod === 'COD') {
+          const orderAmount = delivery.order.totalAmount || 0;
+          const codAmountToSettle = orderAmount - deliveryFee;
+
+          if (codAmountToSettle > 0) {
+            await tx.settlement.create({
+              data: {
+                supplierId: delivery.order.supplierId,
+                partnerId: user.deliveryPartner.id,
+                amount: codAmountToSettle,
+                status: 'PENDING',
+                settlementType: 'COD_COLLECTION',
+                referenceId: delivery.orderId,
+                notes: `COD ₹${orderAmount} collected. Fee: ₹${deliveryFee}. Net: ₹${codAmountToSettle}`,
+              },
+            });
+          }
+        }
       }
 
       return updatedDelivery;
     });
 
-    return successResponse({
-      message: responseMessage,
-      delivery: result,
-    });
+    // Return OTP on pickup so partner can see it
+    const responseData = { message: responseMessage, delivery: result };
+    if (action === 'PICKUP') {
+      responseData.otp = result.otp;
+    }
+
+    return successResponse(responseData);
   } catch (error) {
     console.error('Update delivery error:', error);
     return errorResponse('Failed to update delivery', 500);

@@ -84,7 +84,7 @@ export async function PATCH(request) {
     if (!isAdmin) return errorResponse('Forbidden', 403);
 
     const body = await request.json();
-    const { partnerId, action, reason } = body;
+    const { partnerId, action, reason, documentType, vehicleId, name, mobile, licenseNumber, vehicleNumber, vehicleType } = body;
 
     if (!partnerId || !action) return errorResponse('partnerId and action required', 400);
 
@@ -121,7 +121,6 @@ export async function PATCH(request) {
         return successResponse({ message: 'Partner unverified' });
 
       case 'approve_doc':
-        const { documentType } = body;
         if (!documentType) return errorResponse('documentType is required', 400);
         await prisma.documentVerification.upsert({
           where: { partnerId_documentType: { partnerId, documentType } },
@@ -131,17 +130,15 @@ export async function PATCH(request) {
         return successResponse({ message: `${documentType} approved` });
 
       case 'reject_doc':
-        const { documentType: docType, reason: docReason } = body;
-        if (!docType) return errorResponse('documentType is required', 400);
+        if (!documentType) return errorResponse('documentType is required', 400);
         await prisma.documentVerification.upsert({
-          where: { partnerId_documentType: { partnerId, documentType: docType } },
-          create: { partnerId, documentType: docType, status: 'REJECTED', rejectionReason: docReason || 'Document rejected' },
-          update: { status: 'REJECTED', rejectionReason: docReason || 'Document rejected' },
+          where: { partnerId_documentType: { partnerId, documentType } },
+          create: { partnerId, documentType, status: 'REJECTED', rejectionReason: reason || 'Document rejected' },
+          update: { status: 'REJECTED', rejectionReason: reason || 'Document rejected' },
         });
-        return successResponse({ message: `${docType} rejected` });
+        return successResponse({ message: `${documentType} rejected` });
 
       case 'approve_vehicle':
-        const { vehicleId } = body;
         if (!vehicleId) return errorResponse('vehicleId is required', 400);
         await prisma.partnerVehicle.update({
           where: { id: vehicleId },
@@ -150,16 +147,40 @@ export async function PATCH(request) {
         return successResponse({ message: 'Vehicle approved' });
 
       case 'reject_vehicle':
-        const { vehicleId: vId, reason: vReason } = body;
-        if (!vId) return errorResponse('vehicleId is required', 400);
+        if (!vehicleId) return errorResponse('vehicleId is required', 400);
         await prisma.partnerVehicle.update({
-          where: { id: vId },
-          data: { isVerified: false, verificationStatus: 'REJECTED', verificationNote: vReason || 'Vehicle rejected' },
+          where: { id: vehicleId },
+          data: { isVerified: false, verificationStatus: 'REJECTED', verificationNote: reason || 'Vehicle rejected' },
         });
         return successResponse({ message: 'Vehicle rejected' });
 
+      case 'update_partner':
+        // Update user info
+        if (name || mobile) {
+          const userUpdateData = {};
+          if (name) userUpdateData.name = name;
+          if (mobile) userUpdateData.mobile = mobile;
+          await prisma.user.update({ where: { id: partner.userId }, data: userUpdateData });
+        }
+        // Update partner info
+        const partnerUpdateData = {};
+        if (licenseNumber !== undefined) partnerUpdateData.licenseNumber = licenseNumber;
+        if (Object.keys(partnerUpdateData).length > 0) {
+          await prisma.deliveryPartner.update({ where: { id: partnerId }, data: partnerUpdateData });
+        }
+        // Update active vehicle
+        if (vehicleNumber || vehicleType) {
+          if (partner.activeVehicleId) {
+            const vehicleUpdateData = {};
+            if (vehicleNumber) vehicleUpdateData.vehicleNumber = vehicleNumber;
+            if (vehicleType) vehicleUpdateData.vehicleType = vehicleType;
+            await prisma.partnerVehicle.update({ where: { id: partner.activeVehicleId }, data: vehicleUpdateData });
+          }
+        }
+        return successResponse({ message: 'Partner details updated successfully' });
+
       default:
-        return errorResponse('Invalid action. Use: verify, reject, unverify, approve_doc, reject_doc, approve_vehicle, reject_vehicle', 400);
+        return errorResponse('Invalid action. Use: verify, reject, unverify, approve_doc, reject_doc, approve_vehicle, reject_vehicle, update_partner', 400);
     }
   } catch (error) {
     console.error('Admin update partner error:', error);

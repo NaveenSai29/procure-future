@@ -4,7 +4,7 @@ import {
   Truck, Search, CheckCircle, XCircle, Eye, Phone, Bike, MapPin,
   Clock, Package, User, ChevronLeft, ChevronRight,
   Wallet, Banknote, MessageSquare, Settings2, IndianRupee,
-  Weight, Ruler, Gauge, Sliders,
+  Weight, Ruler, Gauge, Sliders, Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -40,6 +40,9 @@ export default function AdminDeliveriesPage() {
   const [assignLoading, setAssignLoading] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState(null);
   const [autoAssignRange, setAutoAssignRange] = useState(7);
+  const [codMaxPending, setCodMaxPending] = useState(5000);
+  const [codSecurityDeposit, setCodSecurityDeposit] = useState(1000);
+  const [otpThreshold, setOtpThreshold] = useState(0);
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => { fetchDeliveries(); fetchSettings(); }, [statusFilter, page]);
@@ -77,15 +80,13 @@ export default function AdminDeliveriesPage() {
     try {
       const res = await fetch('/api/admin/settings');
       const data = await res.json();
-      // API returns: { platform, stats, settings: { DELIVERY: {...}, GENERAL: {...}, ... }, features }
       const deliverySettingsData = data.settings?.DELIVERY;
       if (deliverySettingsData) {
         setDeliverySettings(deliverySettingsData);
-        // Load saved auto-assign range from database
-        const savedRange = deliverySettingsData.autoAssignRange;
-        if (savedRange) {
-          setAutoAssignRange(parseFloat(savedRange));
-        }
+        if (deliverySettingsData.autoAssignRange) setAutoAssignRange(parseFloat(deliverySettingsData.autoAssignRange));
+        if (deliverySettingsData.codMaxPending) setCodMaxPending(parseFloat(deliverySettingsData.codMaxPending));
+        if (deliverySettingsData.codSecurityDeposit) setCodSecurityDeposit(parseFloat(deliverySettingsData.codSecurityDeposit));
+        if (deliverySettingsData.otpThreshold) setOtpThreshold(parseFloat(deliverySettingsData.otpThreshold));
       }
     } catch (e) { console.log('Settings load failed:', e); }
   };
@@ -103,12 +104,50 @@ export default function AdminDeliveriesPage() {
       });
       const data = await res.json();
       if (data.success || !data.error) {
-        // Update local state immediately so it persists visually
         setDeliverySettings(prev => ({ ...prev, autoAssignRange: autoAssignRange.toString() }));
         toast.success(`Range saved: ${autoAssignRange}km`);
       } else {
         toast.error(data.error || 'Failed to save');
       }
+    } catch (e) { toast.error('Failed to save'); }
+    finally { setSavingSettings(false); }
+  };
+
+  const saveCODSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: 'DELIVERY',
+          settings: {
+            codMaxPending: codMaxPending.toString(),
+            codSecurityDeposit: codSecurityDeposit.toString(),
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) toast.success('COD settings saved');
+      else toast.error(data.error || 'Failed to save');
+    } catch (e) { toast.error('Failed to save'); }
+    finally { setSavingSettings(false); }
+  };
+
+  const saveOTPThreshold = async () => {
+    setSavingSettings(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: 'DELIVERY',
+          settings: { otpThreshold: otpThreshold.toString() },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) toast.success('OTP threshold saved');
+      else toast.error(data.error || 'Failed to save');
     } catch (e) { toast.error('Failed to save'); }
     finally { setSavingSettings(false); }
   };
@@ -211,6 +250,52 @@ export default function AdminDeliveriesPage() {
               <span className="text-lg font-bold text-orange-700 w-16 text-center">{autoAssignRange} km</span>
               <button onClick={saveAutoAssignRange} disabled={savingSettings}
                 className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50">
+                {savingSettings ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+
+          {/* COD Settings */}
+          <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 mb-4">
+            <p className="text-sm font-bold text-amber-800 mb-2">💰 COD Controls</p>
+            <p className="text-xs text-amber-600 mb-3">Limit how much COD cash a partner can hold before depositing</p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-amber-700 font-medium">Max COD Pending per Partner (₹)</label>
+                <div className="flex items-center gap-3 mt-1">
+                  <input type="range" min="1000" max="20000" step="500" value={codMaxPending}
+                    onChange={(e) => setCodMaxPending(parseInt(e.target.value))}
+                    className="flex-1 accent-amber-500" />
+                  <span className="text-lg font-bold text-amber-700 w-20 text-center">₹{codMaxPending}</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-amber-700 font-medium">Security Deposit for COD Access (₹)</label>
+                <div className="flex items-center gap-3 mt-1">
+                  <input type="range" min="500" max="5000" step="100" value={codSecurityDeposit}
+                    onChange={(e) => setCodSecurityDeposit(parseInt(e.target.value))}
+                    className="flex-1 accent-amber-500" />
+                  <span className="text-lg font-bold text-amber-700 w-20 text-center">₹{codSecurityDeposit}</span>
+                </div>
+              </div>
+              <button onClick={saveCODSettings} disabled={savingSettings}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50">
+                {savingSettings ? 'Saving...' : 'Save COD Settings'}
+              </button>
+            </div>
+          </div>
+
+          {/* OTP Threshold */}
+          <div className="p-4 bg-purple-50 rounded-xl border border-purple-200 mb-4">
+            <p className="text-sm font-bold text-purple-800 mb-2">🔐 OTP Threshold</p>
+            <p className="text-xs text-purple-600 mb-3">OTP required only for orders above this amount. Set 0 to always require OTP.</p>
+            <div className="flex items-center gap-3">
+              <input type="range" min="0" max="5000" step="100" value={otpThreshold}
+                onChange={(e) => setOtpThreshold(parseInt(e.target.value))}
+                className="flex-1 accent-purple-500" />
+              <span className="text-lg font-bold text-purple-700 w-20 text-center">₹{otpThreshold}</span>
+              <button onClick={saveOTPThreshold} disabled={savingSettings}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50">
                 {savingSettings ? 'Saving...' : 'Save'}
               </button>
             </div>

@@ -733,6 +733,9 @@ model DeliveryPartner {
   documentChecks    DocumentVerification[]
   activeVehicle     PartnerVehicle? @relation("ActiveVehicle", fields: [activeVehicleId], references: [id])
   chats            DeliveryChat[]
+  settlements      Settlement[]
+  wallet           PartnerWallet?
+  codDeposits      CODDeposit[]
 }
 
 model PartnerVehicle {
@@ -799,6 +802,41 @@ model DeliveryChat {
   partner     DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   @@index([partnerId])
+}
+
+model PartnerWallet {
+  id                String   @id @default(uuid())
+  partnerId         String   @unique
+  securityDeposit   Float    @default(0)
+  codCollected      Float    @default(0)
+  codPending        Float    @default(0)
+  totalEarned       Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  partner           DeliveryPartner @relation(fields: [partnerId], references: [id])
+  deposits          CODDeposit[]
+
+  @@index([partnerId])
+}
+
+model CODDeposit {
+  id              String   @id @default(uuid())
+  partnerId       String
+  walletId        String
+  amount          Float
+  referenceNumber String?
+  proofImage      String?
+  status          String   @default("PENDING")
+  adminNote       String?
+  createdAt       DateTime @default(now())
+  processedAt     DateTime?
+
+  partner         DeliveryPartner @relation(fields: [partnerId], references: [id])
+  wallet          PartnerWallet   @relation(fields: [walletId], references: [id])
+
+  @@index([partnerId])
+  @@index([status])
 }
 
 // ============================================
@@ -1137,21 +1175,24 @@ model InvoiceItem {
 }
 
 model Settlement {
-  id              String   @id @default(uuid())
-  supplierId      String
-  amount          Float
-  status          String   @default("PENDING")
-  settlementType  String   @default("AUTO")
-  referenceId     String?
-  notes           String?  @db.Text
-  processedAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+    id              String   @id @default(uuid())
+    supplierId      String
+    partnerId       String?
+    amount          Float
+    status          String   @default("PENDING")
+    settlementType  String   @default("AUTO")
+    referenceId     String?
+    notes           String?  @db.Text
+    processedAt     DateTime?
+    createdAt       DateTime @default(now())
+    updatedAt       DateTime @updatedAt
 
-  supplier        Supplier @relation(fields: [supplierId], references: [id])
+    supplier        Supplier          @relation(fields: [supplierId], references: [id])
+    partner         DeliveryPartner?  @relation(fields: [partnerId], references: [id])
 
-  @@index([supplierId])
-  @@index([status])
+    @@index([supplierId])
+    @@index([partnerId])
+    @@index([status])
 }
 
 model SupplierWallet {

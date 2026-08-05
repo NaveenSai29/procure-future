@@ -18,7 +18,10 @@ export async function GET(request) {
         include: {
           partner: {
             select: {
-              id: true, vehicleType: true,
+              id: true,
+              activeVehicle: {
+                select: { vehicleType: true },
+              },
               user: { select: { id: true, name: true, mobile: true } },
             },
           },

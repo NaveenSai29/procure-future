@@ -149,6 +149,25 @@ export async function POST(request) {
       return errorResponse('Delivery partner is not verified', 400);
     }
 
+    // COD limit check for manual assignment
+    if (order.paymentMethod === 'COD') {
+      const codMaxPendingSetting = await prisma.systemSetting.findFirst({
+        where: { category: 'DELIVERY', key: 'codMaxPending' },
+      });
+      const codMaxPending = codMaxPendingSetting ? parseFloat(codMaxPendingSetting.value) : 5000;
+
+      const wallet = await prisma.partnerWallet.findUnique({ where: { partnerId } });
+      const codPending = wallet?.codPending || 0;
+      const orderAmount = order.totalAmount || 0;
+
+      if ((codPending + orderAmount) > codMaxPending) {
+        return errorResponse(
+          `Partner's COD limit reached. Pending: ₹${codPending}, This order: ₹${orderAmount}, Limit: ₹${codMaxPending}. Partner needs to deposit first.`,
+          400
+        );
+      }
+    }
+
     const delivery = await prisma.delivery.create({
       data: {
         orderId,

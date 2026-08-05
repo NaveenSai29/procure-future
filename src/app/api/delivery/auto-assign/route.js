@@ -25,8 +25,8 @@ export async function POST(request) {
           include: {
             supplier: {
               include: {
-                branches: {
-                  include: { warehouse: true },
+                warehouses: {
+                  where: { isActive: true, isPickupLocation: true },
                   take: 1,
                 },
               },
@@ -48,8 +48,14 @@ export async function POST(request) {
     });
     const maxRange = rangeSetting ? parseFloat(rangeSetting.value) : 7;
 
+    // Get COD limit from settings (default ₹5000)
+    const codMaxPendingSetting = await prisma.systemSetting.findFirst({
+      where: { category: 'DELIVERY', key: 'codMaxPending' },
+    });
+    const codMaxPending = codMaxPendingSetting ? parseFloat(codMaxPendingSetting.value) : 5000;
+
     // Get supplier warehouse coordinates
-    const warehouse = order.product?.supplier?.branches?.[0]?.warehouse;
+    const warehouse = order.product?.supplier?.warehouses?.[0];
     const pickupLat = warehouse?.latitude || 12.9716;
     const pickupLng = warehouse?.longitude || 77.5946;
 
@@ -70,20 +76,40 @@ export async function POST(request) {
       return errorResponse('No online partners available', 404);
     }
 
-    // Calculate distance for each partner and sort by closest
+    // Get all partner wallets for COD limit check
+    const partnerIds = onlinePartners.map(p => p.id);
+    const partnerWallets = await prisma.partnerWallet.findMany({
+      where: { partnerId: { in: partnerIds } },
+    });
+    const walletMap = {};
+    partnerWallets.forEach(w => { walletMap[w.partnerId] = w; });
+
+    // Calculate distance for each partner, filter by range, filter by COD limit, sort by closest
     const partnersWithDistance = onlinePartners
       .map(p => ({
         ...p,
         distance: haversineDistance(pickupLat, pickupLng, p.currentLat, p.currentLng),
       }))
       .filter(p => p.distance <= maxRange)
+      .filter(p => {
+        // If order is COD, check partner's COD limit
+        if (order.paymentMethod === 'COD') {
+          const wallet = walletMap[p.id];
+          const codPending = wallet?.codPending || 0;
+          const orderAmount = order.totalAmount || 0;
+          // Partner can take this order only if pending + new order ≤ limit
+          return (codPending + orderAmount) <= codMaxPending;
+        }
+        // Non-COD orders: no limit check needed
+        return true;
+      })
       .sort((a, b) => a.distance - b.distance || b.rating - a.rating);
 
     if (partnersWithDistance.length === 0) {
-      return errorResponse(`No partners within ${maxRange}km range`, 404);
+      return errorResponse(`No partners within ${maxRange}km range${order.paymentMethod === 'COD' ? ' with available COD limit' : ''}`, 404);
     }
 
-    // Assign to best partner (closest + highest rated)
+    // Assign to best partner (closest + highest rated + within COD limit)
     const bestPartner = partnersWithDistance[0];
 
     const delivery = await prisma.delivery.create({
@@ -99,8 +125,9 @@ export async function POST(request) {
         partner: {
           select: {
             id: true,
-            vehicleType: true,
-            vehicleNumber: true,
+            activeVehicle: {
+              select: { vehicleType: true, vehicleNumber: true },
+            },
             user: { select: { id: true, name: true, mobile: true } },
           },
         },
