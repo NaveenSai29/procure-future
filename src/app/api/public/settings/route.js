@@ -14,7 +14,7 @@ export async function GET() {
       catch { general[s.key] = s.value; }
     });
 
-    // Get DELIVERY settings for freeDeliveryAbove
+    // Get DELIVERY settings
     const deliverySettings = await prisma.systemSetting.findMany({
       where: { category: 'DELIVERY' },
     });
@@ -24,6 +24,12 @@ export async function GET() {
       try { delivery[s.key] = JSON.parse(s.value); } 
       catch { delivery[s.key] = s.value; }
     });
+
+    // Parse vehicles from delivery settings
+    let vehicles = [];
+    try {
+      vehicles = delivery.vehicles || [];
+    } catch { vehicles = []; }
 
     return NextResponse.json({
       success: true,
@@ -40,6 +46,7 @@ export async function GET() {
         },
         freeDeliveryAbove: parseFloat(delivery.freeDeliveryAbove) || 999,
         riderIconUrl: delivery.riderIconUrl || null,
+        vehicles: vehicles,
       },
     });
   } catch (error) {
@@ -54,6 +61,7 @@ export async function GET() {
         },
         freeDeliveryAbove: 999,
         riderIconUrl: null,
+        vehicles: [],
       },
     });
   }

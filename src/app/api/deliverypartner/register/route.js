@@ -29,7 +29,7 @@ export async function POST(request) {
     // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Create user with DELIVERY_PARTNER role
+    // Create user with DELIVERY_PARTNER role + PartnerVehicle
     const user = await prisma.user.create({
       data: {
         name,
@@ -46,12 +46,34 @@ export async function POST(request) {
         },
         deliveryPartner: {
           create: {
-            vehicleType,
-            vehicleNumber: vehicleNumber || null,
             licenseNumber: licenseNumber || null,
+            vehicles: {
+              create: {
+                vehicleType: vehicleType || 'Bike',
+                vehicleNumber: vehicleNumber || null,
+              },
+            },
           },
         },
       },
+      include: {
+        deliveryPartner: {
+          include: { vehicles: true },
+        },
+      },
+    });
+
+    // Set the newly created vehicle as active
+    if (user.deliveryPartner?.vehicles?.[0]) {
+      await prisma.deliveryPartner.update({
+        where: { id: user.deliveryPartner.id },
+        data: { activeVehicleId: user.deliveryPartner.vehicles[0].id },
+      });
+    }
+
+    // Re-fetch to include activeVehicle
+    const fullUser = await prisma.user.findUnique({
+      where: { id: user.id },
       select: {
         id: true,
         name: true,
@@ -59,11 +81,16 @@ export async function POST(request) {
         deliveryPartner: {
           select: {
             id: true,
-            vehicleType: true,
-            vehicleNumber: true,
             licenseNumber: true,
             isVerified: true,
             isOnline: true,
+            activeVehicle: {
+              select: {
+                id: true,
+                vehicleType: true,
+                vehicleNumber: true,
+              },
+            },
           },
         },
       },
@@ -71,7 +98,7 @@ export async function POST(request) {
 
     return successResponse({
       message: 'Registration successful! Please login to continue.',
-      user,
+      user: fullUser,
     }, 201);
   } catch (error) {
     console.error('Delivery partner registration error:', error);

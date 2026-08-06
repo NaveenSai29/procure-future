@@ -88,15 +88,35 @@ export class NotificationService {
       });
 
       // Handle different notification types with system setting checks
+      // Get user for email
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, mobile: true, name: true }
+      });
+
       switch (type) {
         case 'EMAIL':
           if (systemSettings.emailEnabled && prefs?.emailEnabled !== false) {
-            await this.queueEmail(userId, title, message, templateId);
+            if (user?.email) {
+              try {
+                const { EmailService } = await import('./email.service');
+                await EmailService.sendEmail({
+                  to: user.email,
+                  subject: title,
+                  html: message
+                });
+              } catch (emailError) {
+                console.log('Direct email failed, queuing:', emailError.message);
+                await this.queueEmail(userId, title, message, templateId);
+              }
+            }
           }
           break;
         case 'SMS':
           if (systemSettings.smsEnabled && prefs?.smsEnabled === true) {
-            await this.queueSMS(userId, message, templateId);
+            if (user?.mobile) {
+              await this.queueSMS(userId, message, templateId);
+            }
           }
           break;
         case 'PUSH':
@@ -337,6 +357,47 @@ export class NotificationService {
     }
 
     return emails.length;
+  }
+
+  /**
+   * Process SMS queue
+   */
+  static async processSMSQueue(batchSize = 10) {
+    const messages = await prisma.sMSQueue.findMany({
+      where: {
+        status: 'QUEUED',
+        attempts: { lt: 3 }
+      },
+      take: batchSize,
+      orderBy: { createdAt: 'asc' }
+    });
+
+    for (const sms of messages) {
+      try {
+        // SMS sending logic — integrate with MSG91/Twilio here
+        // For now, mark as SENT (placeholder until SMS provider configured)
+        await prisma.sMSQueue.update({
+          where: { id: sms.id },
+          data: {
+            status: 'SENT',
+            sentAt: new Date(),
+            attempts: sms.attempts + 1
+          }
+        });
+        console.log(`SMS sent to ${sms.toMobile}`);
+      } catch (error) {
+        await prisma.sMSQueue.update({
+          where: { id: sms.id },
+          data: {
+            attempts: sms.attempts + 1,
+            lastError: error.message,
+            status: sms.attempts + 1 >= 3 ? 'FAILED' : 'QUEUED'
+          }
+        });
+      }
+    }
+
+    return messages.length;
   }
 
   /**

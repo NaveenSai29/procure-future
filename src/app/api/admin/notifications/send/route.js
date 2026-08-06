@@ -19,11 +19,28 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { userIds, type, title, message, templateId, data } = body;
+    const { userIds, userType, type, title, message, templateId, data } = body;
 
-    // If no specific users, send to all active users
-    let targetUserIds = userIds;
-    if (!targetUserIds || targetUserIds.length === 0) {
+    // If userType specified, find users by role
+    let targetUserIds = userIds || [];
+    
+    if (userType && userType !== 'CUSTOM' && (!userIds || userIds.length === 0)) {
+      const roleFilter = {
+        BUYER: { roles: { some: { role: { name: 'BUYER' } } }, deliveryPartner: null, supplierStaff: null },
+        SUPPLIER: { supplierStaff: { some: {} } },
+        DELIVERY: { deliveryPartner: { isNot: null } },
+        ALL: {},
+      };
+
+      const where = { ...(roleFilter[userType] || {}), isActive: true };
+      
+      const users = await prisma.user.findMany({
+        where,
+        select: { id: true }
+      });
+      
+      targetUserIds = users.map(u => u.id);
+    } else if ((!userType || userType === 'ALL') && (!userIds || userIds.length === 0)) {
       const users = await prisma.user.findMany({
         where: { isActive: true },
         select: { id: true }
@@ -46,7 +63,7 @@ export async function POST(request) {
         userId: user.id,
         action: 'SEND_NOTIFICATION',
         entity: 'Notification',
-        newValue: { type, title, recipientCount: targetUserIds.length },
+        newValue: { type, title, userType: userType || 'ALL', recipientCount: targetUserIds.length },
         ipAddress: request.headers.get('x-forwarded-for') || 'unknown'
       }
     });

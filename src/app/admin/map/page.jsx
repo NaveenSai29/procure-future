@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
+import React from 'react';
 import { 
-  RefreshCw, MapPin, Truck, Store, Building2, AlertTriangle,
-  Search, Layers,
+  RefreshCw, MapPin, Truck, Building2, AlertTriangle,
+  Search, Layers, Package,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -12,6 +13,7 @@ const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapCo
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Marker = dynamic(() => import('react-leaflet').then(mod => mod.Marker), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
+const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline), { ssr: false });
 
 export default function LiveMapPage() {
   const [data, setData] = useState(null);
@@ -20,6 +22,7 @@ export default function LiveMapPage() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
   const [selectedDriver, setSelectedDriver] = useState(null);
+  const [selectedDelivery, setSelectedDelivery] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [mapCenter, setMapCenter] = useState([20.5937, 78.9629]);
   const [mapZoom, setMapZoom] = useState(5);
@@ -48,9 +51,7 @@ export default function LiveMapPage() {
       }
     } catch {
       toast.error('Failed to load map data');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -60,19 +61,19 @@ export default function LiveMapPage() {
   }, []);
 
   const focusWarehouse = (w) => {
-    setSelectedWarehouse(w);
-    if (w.latitude && w.longitude) {
-      setMapCenter([w.latitude, w.longitude]);
-      setMapZoom(15);
-    }
+    setSelectedWarehouse(w); setSelectedDriver(null); setSelectedDelivery(null);
+    if (w.latitude && w.longitude) { setMapCenter([w.latitude, w.longitude]); setMapZoom(15); }
   };
 
   const focusDriver = (d) => {
-    setSelectedDriver(d);
-    if (d.currentLat && d.currentLng) {
-      setMapCenter([d.currentLat, d.currentLng]);
-      setMapZoom(15);
-    }
+    setSelectedDriver(d); setSelectedWarehouse(null); setSelectedDelivery(null);
+    if (d.currentLat && d.currentLng) { setMapCenter([d.currentLat, d.currentLng]); setMapZoom(15); }
+  };
+
+  const focusDelivery = (d) => {
+    setSelectedDelivery(d); setSelectedWarehouse(null); setSelectedDriver(null);
+    const warehouse = d.order?.product?.supplier?.warehouses?.[0];
+    if (warehouse?.latitude) { setMapCenter([warehouse.latitude, warehouse.longitude]); setMapZoom(13); }
   };
 
   const warehouseIcon = useMemo(() => L && new L.DivIcon({
@@ -83,8 +84,14 @@ export default function LiveMapPage() {
 
   const truckIcon = useMemo(() => L && new L.DivIcon({
     className: 'custom-div-icon',
-    html: '<div style="background:linear-gradient(135deg,#f59e0b,#d97706);width:36px;height:36px;border-radius:50%;border:3px solid white;box-shadow:0 4px 12px rgba(245,158,11,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;">🚚</div>',
+    html: '<div style="background:linear-gradient(135deg,#f59e0b,#d97706);width:36px;height:36px;border-radius:50%;border:3px solid white;box-shadow:0 4px 12px rgba(245,158,11,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;">🛵</div>',
     iconSize: [36, 36], iconAnchor: [18, 18], popupAnchor: [0, -20],
+  }), [L]);
+
+  const deliveryIcon = useMemo(() => L && new L.DivIcon({
+    className: 'custom-div-icon',
+    html: '<div style="background:linear-gradient(135deg,#10b981,#059669);width:32px;height:32px;border-radius:50%;border:3px solid white;box-shadow:0 4px 12px rgba(16,185,129,0.4);display:flex;align-items:center;justify-content:center;font-size:14px;">📦</div>',
+    iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -18],
   }), [L]);
 
   const selectedIcon = useMemo(() => L && new L.DivIcon({
@@ -94,10 +101,10 @@ export default function LiveMapPage() {
   }), [L]);
 
   const tabs = [
-    { id: 'all', label: 'All', icon: MapPin, count: (data?.warehouses?.length || 0) + (data?.deliveryPartners?.length || 0) },
-    { id: 'warehouses', label: 'Warehouses', icon: Building2, count: data?.warehouses?.length || 0 },
+    { id: 'all', label: 'All', icon: MapPin, count: (data?.warehouses?.length || 0) + (data?.deliveryPartners?.length || 0) + (data?.activeDeliveries?.length || 0) },
+    { id: 'warehouses', label: 'Warehouses', icon: Building2, count: (data?.warehouses?.length || 0) + (data?.warehousesWithoutCoords?.length || 0) },
     { id: 'drivers', label: 'Drivers', icon: Truck, count: data?.deliveryPartners?.length || 0 },
-    { id: 'suppliers', label: 'Suppliers', icon: Store, count: data?.suppliers?.length || 0 },
+    { id: 'deliveries', label: 'Deliveries', icon: Package, count: data?.activeDeliveries?.length || 0 },
   ];
 
   const filteredWarehouses = data?.warehouses?.filter(w =>
@@ -123,9 +130,9 @@ export default function LiveMapPage() {
     <div className="p-6 max-w-full mx-auto">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Live Map</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Live Operations Map</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {data?.stats?.onMap || 0} warehouses • {data?.stats?.onlineDrivers || 0} drivers online
+            {data?.stats?.onMap || 0} warehouses • {data?.stats?.onlineDrivers || 0} drivers • {data?.stats?.activeDeliveries || 0} active deliveries
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -136,32 +143,25 @@ export default function LiveMapPage() {
         </div>
       </div>
 
-      {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         {[
-          { label: 'Total Warehouses', value: data?.stats?.totalWarehouses || 0, icon: Building2, color: 'text-blue-600 bg-blue-50' },
+          { label: 'Warehouses', value: data?.stats?.totalWarehouses || 0, icon: Building2, color: 'text-blue-600 bg-blue-50' },
           { label: 'On Map', value: data?.stats?.onMap || 0, icon: MapPin, color: 'text-green-600 bg-green-50' },
-          { label: 'Without Location', value: data?.stats?.withoutLocation || 0, icon: AlertTriangle, color: 'text-yellow-600 bg-yellow-50' },
-          { label: 'Online Drivers', value: data?.stats?.onlineDrivers || 0, icon: Truck, color: 'text-amber-600 bg-amber-50' },
-          { label: 'Suppliers', value: data?.suppliers?.length || 0, icon: Store, color: 'text-purple-600 bg-purple-50' },
+          { label: 'No Location', value: data?.stats?.withoutLocation || 0, icon: AlertTriangle, color: 'text-yellow-600 bg-yellow-50' },
+          { label: 'Drivers Online', value: data?.stats?.onlineDrivers || 0, icon: Truck, color: 'text-amber-600 bg-amber-50' },
+          { label: 'Active Del.', value: data?.stats?.activeDeliveries || 0, icon: Package, color: 'text-emerald-600 bg-emerald-50' },
         ].map(stat => (
           <div key={stat.label} className="bg-white rounded-xl border p-3 flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${stat.color}`}>
-              <stat.icon className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-lg font-bold text-gray-900">{stat.value}</p>
-              <p className="text-xs text-gray-500">{stat.label}</p>
-            </div>
+            <div className={`p-2 rounded-lg ${stat.color}`}><stat.icon className="h-4 w-4" /></div>
+            <div><p className="text-lg font-bold text-gray-900">{stat.value}</p><p className="text-xs text-gray-500">{stat.label}</p></div>
           </div>
         ))}
       </div>
 
-      {/* Tabs + Search */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
           {tabs.map(tab => (
-            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedWarehouse(null); setSelectedDriver(null); }}
+            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedWarehouse(null); setSelectedDriver(null); setSelectedDelivery(null); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === tab.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
               <tab.icon className="h-4 w-4" />{tab.label}
               <span className="text-xs bg-gray-200 px-1.5 py-0.5 rounded-full">{tab.count}</span>
@@ -170,7 +170,7 @@ export default function LiveMapPage() {
         </div>
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input type="text" placeholder="Search warehouses..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+          <input type="text" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
         </div>
         <button onClick={() => setShowList(!showList)} className="px-3 py-2 border rounded-lg text-sm flex items-center gap-1">
@@ -179,10 +179,9 @@ export default function LiveMapPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Map */}
-        <div className={`bg-white rounded-xl border overflow-hidden ${showList ? 'lg:col-span-3' : 'lg:col-span-4'}`} style={{ height: '600px' }}>
+        <div className={`bg-white rounded-xl border overflow-hidden ${showList ? 'lg:col-span-3' : 'lg:col-span-4'}`} style={{ height: '650px' }}>
           {L && (
-            <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }}>
+            <MapContainer key={JSON.stringify(mapCenter)} center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               
               {(activeTab === 'all' || activeTab === 'warehouses') && data?.warehouses?.map(w => (
@@ -190,11 +189,11 @@ export default function LiveMapPage() {
                   eventHandlers={{ click: () => focusWarehouse(w) }}>
                   <Popup>
                     <div style={{ minWidth: '200px' }}>
-                      <h4 style={{ fontWeight: 700, fontSize: '14px', margin: '0 0 4px' }}>{w.name}</h4>
+                      <h4 style={{ fontWeight: 700, fontSize: '14px', margin: '0 0 4px' }}>🏭 {w.name}</h4>
                       <p style={{ fontSize: '12px', color: '#666', margin: '0 0 2px' }}>{w.supplier?.businessName}</p>
                       <p style={{ fontSize: '11px', color: '#999', margin: '0' }}>{w.city}, {w.state}</p>
                       {w.isPickupLocation !== false && (
-                        <span style={{ fontSize: '10px', background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px' }}>Pickup Location</span>
+                        <span style={{ fontSize: '10px', background: '#dcfce7', color: '#15803d', padding: '2px 6px', borderRadius: '4px' }}>✅ Pickup Location</span>
                       )}
                     </div>
                   </Popup>
@@ -207,20 +206,45 @@ export default function LiveMapPage() {
                   <Popup>
                     <div style={{ minWidth: '180px' }}>
                       <h4 style={{ fontWeight: 700, fontSize: '14px', margin: '0 0 4px' }}>{d.user?.name || 'Driver'}</h4>
-                      <p style={{ fontSize: '12px', color: '#666', margin: '0 0 2px' }}>{d.vehicleType} • {d.vehicleNumber || 'N/A'}</p>
-                      <p style={{ fontSize: '11px', color: '#f59e0b', margin: '0' }}>⭐ {d.rating?.toFixed(1) || 'N/A'}</p>
+                      <p style={{ fontSize: '12px', color: '#666', margin: '0 0 2px' }}>{d.displayVehicle?.vehicleType || 'N/A'} • {d.displayVehicle?.vehicleNumber || ''}</p>
+                      <p style={{ fontSize: '11px', color: '#f59e0b', margin: '0' }}>⭐ {d.rating?.toFixed(1) || '0.0'} • {d.totalDeliveries || 0} deliveries</p>
                     </div>
                   </Popup>
                 </Marker>
               ))}
+
+              {(activeTab === 'all' || activeTab === 'deliveries') && data?.activeDeliveries?.map(d => {
+                const warehouse = d.order?.product?.supplier?.warehouses?.[0];
+                return (
+                  <React.Fragment key={`del-${d.id}`}>
+                    {warehouse?.latitude && (
+                      <Marker position={[warehouse.latitude, warehouse.longitude]} icon={selectedDelivery?.id === d.id ? selectedIcon : deliveryIcon}
+                        eventHandlers={{ click: () => focusDelivery(d) }}>
+                        <Popup>
+                          <div style={{ minWidth: '200px' }}>
+                            <h4 style={{ fontWeight: 700, fontSize: '14px', margin: '0 0 4px' }}>📦 Delivery #{d.order?.id?.slice(-8)}</h4>
+                            <p style={{ fontSize: '12px', color: '#666', margin: '0 0 2px' }}>Driver: {d.partner?.user?.name}</p>
+                            <p style={{ fontSize: '12px', color: '#666', margin: '0 0 2px' }}>Buyer: {d.order?.buyer?.name}</p>
+                            <p style={{ fontSize: '11px', color: '#f59e0b', margin: '0' }}>Amount: ₹{d.order?.totalAmount} • {d.status}</p>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    )}
+                    {d.partner?.currentLat && warehouse?.latitude && (
+                      <Polyline
+                        positions={[[d.partner.currentLat, d.partner.currentLng], [warehouse.latitude, warehouse.longitude]]}
+                        pathOptions={{ color: '#3b82f6', weight: 2, dashArray: '6, 6' }}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </MapContainer>
           )}
         </div>
 
-        {/* Sidebar List */}
         {showList && (
-          <div className="space-y-3 max-h-[600px] overflow-y-auto">
-            {/* Warehouses List */}
+          <div className="space-y-3 max-h-[650px] overflow-y-auto">
             {(activeTab === 'all' || activeTab === 'warehouses') && (
               <div className="bg-white rounded-xl border">
                 <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
@@ -234,12 +258,7 @@ export default function LiveMapPage() {
                       <div className="flex items-start gap-2">
                         <Building2 className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
                         <div className="min-w-0">
-                          <div className="flex items-center gap-1">
-                            <p className="text-sm font-medium text-gray-900 truncate">{w.name}</p>
-                            {w.isPickupLocation !== false && (
-                              <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full flex-shrink-0">Pickup</span>
-                            )}
-                          </div>
+                          <p className="text-sm font-medium text-gray-900 truncate">{w.name}</p>
                           <p className="text-xs text-gray-500">{w.supplier?.businessName}</p>
                           <p className="text-xs text-gray-400 truncate">{w.city}, {w.state}</p>
                         </div>
@@ -262,11 +281,10 @@ export default function LiveMapPage() {
               </div>
             )}
 
-            {/* Drivers List */}
             {(activeTab === 'all' || activeTab === 'drivers') && (
               <div className="bg-white rounded-xl border">
                 <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
-                  <h3 className="font-semibold text-sm flex items-center gap-2"><Truck className="h-4 w-4 text-amber-600" /> Drivers</h3>
+                  <h3 className="font-semibold text-sm flex items-center gap-2"><Truck className="h-4 w-4 text-amber-600" /> Online Drivers</h3>
                   <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{data?.deliveryPartners?.length || 0}</span>
                 </div>
                 <div className="divide-y max-h-[200px] overflow-y-auto">
@@ -276,9 +294,9 @@ export default function LiveMapPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-900">{d.user?.name || 'Driver'}</p>
-                          <p className="text-xs text-gray-500">{d.vehicleType} • {d.vehicleNumber || 'N/A'}</p>
+                          <p className="text-xs text-gray-500">{d.displayVehicle?.vehicleType || 'N/A'} • {d.displayVehicle?.vehicleNumber || ''}</p>
                         </div>
-                        <span className="text-xs text-amber-600">⭐ {d.rating?.toFixed(1) || 'N/A'}</span>
+                        <span className="text-xs text-amber-600">⭐ {d.rating?.toFixed(1) || '0.0'}</span>
                       </div>
                     </button>
                   ))}
@@ -289,21 +307,27 @@ export default function LiveMapPage() {
               </div>
             )}
 
-            {/* Suppliers List */}
-            {(activeTab === 'all' || activeTab === 'suppliers') && (
+            {(activeTab === 'all' || activeTab === 'deliveries') && (
               <div className="bg-white rounded-xl border">
                 <div className="p-3 border-b bg-gray-50 flex items-center justify-between">
-                  <h3 className="font-semibold text-sm flex items-center gap-2"><Store className="h-4 w-4 text-purple-600" /> Suppliers</h3>
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{data?.suppliers?.length || 0}</span>
+                  <h3 className="font-semibold text-sm flex items-center gap-2"><Package className="h-4 w-4 text-emerald-600" /> Active Deliveries</h3>
+                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{data?.activeDeliveries?.length || 0}</span>
                 </div>
-                <div className="divide-y max-h-[200px] overflow-y-auto">
-                  {data?.suppliers?.map(s => (
-                    <div key={`s-${s.id}`} className="p-3">
-                      <p className="text-sm font-medium text-gray-900">{s.businessName}</p>
-                      <p className="text-xs text-gray-500">{s._count?.products || 0} products • {s._count?.warehouses || 0} warehouses</p>
-                      <p className="text-xs text-gray-400">{s.branches?.[0]?.city}, {s.branches?.[0]?.state}</p>
-                    </div>
+                <div className="divide-y max-h-[300px] overflow-y-auto">
+                  {data?.activeDeliveries?.map(d => (
+                    <button key={`del-${d.id}`} onClick={() => focusDelivery(d)}
+                      className={`w-full text-left p-3 hover:bg-gray-50 transition ${selectedDelivery?.id === d.id ? 'bg-emerald-50 border-l-4 border-l-emerald-500' : ''}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-medium text-gray-900">#{d.order?.id?.slice(-8)}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${d.status === 'ACCEPTED' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{d.status?.replace('_', ' ')}</span>
+                      </div>
+                      <p className="text-xs text-gray-500">🛵 {d.partner?.user?.name} • {d.partner?.displayVehicle?.vehicleType || 'N/A'}</p>
+                      <p className="text-xs text-gray-400">👤 {d.order?.buyer?.name} • ₹{d.order?.totalAmount}</p>
+                    </button>
                   ))}
+                  {data?.activeDeliveries?.length === 0 && (
+                    <p className="p-4 text-center text-sm text-gray-400">No active deliveries</p>
+                  )}
                 </div>
               </div>
             )}

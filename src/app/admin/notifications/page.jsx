@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Mail, MessageSquare, Send, Users, Search, Plus, Edit, Trash2, Eye } from 'lucide-react';
+import { Bell, Mail, MessageSquare, Send, Users, Search, Plus, Edit, Trash2, Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminNotificationsPage() {
@@ -14,10 +14,18 @@ export default function AdminNotificationsPage() {
   // Send notification form
   const [sendForm, setSendForm] = useState({
     type: 'EMAIL',
+    userType: '',
     userIds: '',
     title: '',
     message: '',
     templateId: ''
+  });
+
+  // Template modal
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: '', subject: '', body: '', type: 'EMAIL', isActive: true
   });
 
   useEffect(() => {
@@ -67,14 +75,20 @@ export default function AdminNotificationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...sendForm,
-          userIds
+          type: sendForm.type,
+          userType: sendForm.userType || undefined,
+          userIds: userIds.length > 0 ? userIds : undefined,
+          title: sendForm.title,
+          message: sendForm.message,
+          templateId: sendForm.templateId || undefined
         })
       });
 
       if (res.ok) {
-        toast.success('Notification sent successfully');
-        setSendForm({ type: 'EMAIL', userIds: '', title: '', message: '', templateId: '' });
+        const data = await res.json();
+        toast.success(`Sent to ${data.sentCount} users!`);
+        setSendForm({ type: 'EMAIL', userType: '', userIds: '', title: '', message: '', templateId: '' });
+        fetchQueues();
       } else {
         throw new Error('Failed to send');
       }
@@ -94,11 +108,71 @@ export default function AdminNotificationsPage() {
       });
 
       if (res.ok) {
-        toast.success(`${type} queue processed`);
+        const data = await res.json();
+        toast.success(`${type} queue processed — ${data.processed} sent`);
         fetchQueues();
+      } else {
+        throw new Error('Failed');
       }
     } catch (error) {
       toast.error('Failed to process queue');
+    }
+  };
+
+  const openAddTemplate = () => {
+    setEditingTemplate(null);
+    setTemplateForm({ name: '', subject: '', body: '', type: 'EMAIL', isActive: true });
+    setShowTemplateModal(true);
+  };
+
+  const openEditTemplate = (template) => {
+    setEditingTemplate(template);
+    setTemplateForm({
+      name: template.name || '',
+      subject: template.subject || '',
+      body: template.body || '',
+      type: template.type || 'EMAIL',
+      isActive: template.isActive
+    });
+    setShowTemplateModal(true);
+  };
+
+  const saveTemplate = async () => {
+    try {
+      const url = editingTemplate
+        ? `/api/admin/notifications/templates/${editingTemplate.id}`
+        : '/api/admin/notifications/templates';
+      
+      const method = editingTemplate ? 'PATCH' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(templateForm)
+      });
+
+      if (res.ok) {
+        toast.success(editingTemplate ? 'Template updated' : 'Template created');
+        setShowTemplateModal(false);
+        fetchTemplates();
+      } else {
+        throw new Error('Failed');
+      }
+    } catch (error) {
+      toast.error('Failed to save template');
+    }
+  };
+
+  const deleteTemplate = async (id) => {
+    if (!confirm('Delete this template?')) return;
+    try {
+      const res = await fetch(`/api/admin/notifications/templates/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Template deleted');
+        fetchTemplates();
+      }
+    } catch (error) {
+      toast.error('Failed to delete template');
     }
   };
 
@@ -169,8 +243,24 @@ export default function AdminNotificationsPage() {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">User Type</label>
+              <select
+                value={sendForm.userType}
+                onChange={(e) => setSendForm(prev => ({ ...prev, userType: e.target.value, userIds: '' }))}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              >
+                <option value="">All Users</option>
+                <option value="BUYER">Buyers Only</option>
+                <option value="SUPPLIER">Suppliers Only</option>
+                <option value="DELIVERY">Delivery Partners Only</option>
+                <option value="CUSTOM">Specific Users (by ID)</option>
+              </select>
+            </div>
+
+            {sendForm.userType === 'CUSTOM' && (
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                User IDs (comma-separated, leave empty for all)
+                User IDs (comma-separated)
               </label>
               <input
                 type="text"
@@ -180,6 +270,7 @@ export default function AdminNotificationsPage() {
                 className="w-full px-3 py-2 border rounded-lg text-sm"
               />
             </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
@@ -224,7 +315,7 @@ export default function AdminNotificationsPage() {
         <div className="bg-white rounded-xl border shadow-sm">
           <div className="p-4 border-b flex items-center justify-between">
             <h2 className="font-semibold">Notification Templates</h2>
-            <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+            <button onClick={openAddTemplate} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
               <Plus className="h-4 w-4" />
               Add Template
             </button>
@@ -259,13 +350,10 @@ export default function AdminNotificationsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
-                        <button className="p-1.5 hover:bg-gray-100 rounded" title="View">
-                          <Eye className="h-4 w-4 text-gray-500" />
-                        </button>
-                        <button className="p-1.5 hover:bg-gray-100 rounded" title="Edit">
+                        <button onClick={() => openEditTemplate(template)} className="p-1.5 hover:bg-gray-100 rounded" title="Edit">
                           <Edit className="h-4 w-4 text-gray-500" />
                         </button>
-                        <button className="p-1.5 hover:bg-red-50 rounded" title="Delete">
+                        <button onClick={() => deleteTemplate(template.id)} className="p-1.5 hover:bg-red-50 rounded" title="Delete">
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </button>
                       </div>
@@ -289,7 +377,7 @@ export default function AdminNotificationsPage() {
       {activeTab === 'EMAIL_QUEUE' && (
         <div className="bg-white rounded-xl border shadow-sm">
           <div className="p-4 border-b flex items-center justify-between">
-            <h2 className="font-semibold">Email Queue</h2>
+            <h2 className="font-semibold">Email Queue (Fallback)</h2>
             <button
               onClick={() => processQueue('EMAIL')}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
@@ -348,7 +436,7 @@ export default function AdminNotificationsPage() {
       {activeTab === 'SMS_QUEUE' && (
         <div className="bg-white rounded-xl border shadow-sm">
           <div className="p-4 border-b flex items-center justify-between">
-            <h2 className="font-semibold">SMS Queue</h2>
+            <h2 className="font-semibold">SMS Queue (Fallback)</h2>
             <button
               onClick={() => processQueue('SMS')}
               className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
@@ -401,6 +489,61 @@ export default function AdminNotificationsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Template Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowTemplateModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex items-center justify-between">
+              <h3 className="text-lg font-bold">{editingTemplate ? 'Edit Template' : 'Add Template'}</h3>
+              <button onClick={() => setShowTemplateModal(false)} className="p-2 hover:bg-gray-100 rounded-lg"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Template Name</label>
+                <input type="text" value={templateForm.name} onChange={e => setTemplateForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="e.g., Order Confirmation" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select value={templateForm.type} onChange={e => setTemplateForm(prev => ({ ...prev, type: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="EMAIL">Email</option>
+                    <option value="SMS">SMS</option>
+                    <option value="PUSH">Push</option>
+                    <option value="IN_APP">In-App</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select value={templateForm.isActive} onChange={e => setTemplateForm(prev => ({ ...prev, isActive: e.target.value === 'true' }))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <input type="text" value={templateForm.subject} onChange={e => setTemplateForm(prev => ({ ...prev, subject: e.target.value }))}
+                  className="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Email subject line" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Body (HTML supported)</label>
+                <textarea value={templateForm.body} onChange={e => setTemplateForm(prev => ({ ...prev, body: e.target.value }))}
+                  rows={6} className="w-full px-3 py-2 border rounded-lg text-sm font-mono" placeholder="<h1>Hello</h1><p>Message body...</p>" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowTemplateModal(false)} className="flex-1 py-2.5 bg-gray-100 rounded-lg text-sm font-medium">Cancel</button>
+                <button onClick={saveTemplate} className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                  {editingTemplate ? 'Update Template' : 'Create Template'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

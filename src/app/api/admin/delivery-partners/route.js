@@ -136,7 +136,12 @@ export async function PATCH(request) {
           create: { partnerId, documentType, status: 'REJECTED', rejectionReason: reason || 'Document rejected' },
           update: { status: 'REJECTED', rejectionReason: reason || 'Document rejected' },
         });
-        return successResponse({ message: `${documentType} rejected` });
+        // Also unverify the partner so the app redirects to verification screen
+        await prisma.deliveryPartner.update({
+          where: { id: partnerId },
+          data: { isVerified: false, verificationStatus: 'REJECTED' },
+        });
+        return successResponse({ message: `${documentType} rejected — Partner unverified` });
 
       case 'approve_vehicle':
         if (!vehicleId) return errorResponse('vehicleId is required', 400);
@@ -152,7 +157,12 @@ export async function PATCH(request) {
           where: { id: vehicleId },
           data: { isVerified: false, verificationStatus: 'REJECTED', verificationNote: reason || 'Vehicle rejected' },
         });
-        return successResponse({ message: 'Vehicle rejected' });
+        // Also unverify the partner so the app redirects to verification screen
+        await prisma.deliveryPartner.update({
+          where: { id: partnerId },
+          data: { isVerified: false, verificationStatus: 'REJECTED' },
+        });
+        return successResponse({ message: 'Vehicle rejected — Partner unverified' });
 
       case 'update_partner':
         // Update user info

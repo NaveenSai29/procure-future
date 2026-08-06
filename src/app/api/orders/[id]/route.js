@@ -128,6 +128,8 @@ export async function GET(request, { params }) {
               select: {
                 id: true,
                 rating: true,
+                currentLat: true,
+                currentLng: true,
                 activeVehicle: {
                   select: { vehicleType: true, vehicleNumber: true },
                 },

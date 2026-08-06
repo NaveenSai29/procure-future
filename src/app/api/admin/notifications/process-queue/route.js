@@ -25,6 +25,11 @@ export async function POST(request) {
       return NextResponse.json({ success: true, processed });
     }
 
+    if (type === 'SMS') {
+      const processed = await NotificationService.processSMSQueue(20);
+      return NextResponse.json({ success: true, processed });
+    }
+
     return NextResponse.json({ error: 'Invalid queue type' }, { status: 400 });
   } catch (error) {
     console.error('Process queue error:', error);

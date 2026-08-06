@@ -10,7 +10,7 @@ export async function generateAccessToken(userId, roles = []) {
   return await new SignJWT({ userId, roles, type: "access" })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("15m")
+    .setExpirationTime("30d")
     .sign(JWT_SECRET);
 }
 

@@ -55,13 +55,15 @@ export async function POST(request) {
     // Generate URL
     const url = `/uploads/delivery-partners/${session.userId}/${filename}`;
 
+    // Get partner ID for document verification
+    const partner = await prisma.deliveryPartner.findUnique({
+      where: { userId: session.userId },
+      select: { id: true, activeVehicleId: true },
+    });
+
     // Update record based on document type
     if (documentType === 'rcDocument') {
       // RC document goes to PartnerVehicle (active vehicle)
-      const partner = await prisma.deliveryPartner.findUnique({
-        where: { userId: session.userId },
-        select: { id: true, activeVehicleId: true },
-      });
       if (partner?.activeVehicleId) {
         await prisma.partnerVehicle.update({
           where: { id: partner.activeVehicleId },
@@ -88,6 +90,16 @@ export async function POST(request) {
       await prisma.deliveryPartner.update({
         where: { userId: session.userId },
         data: updateData,
+      });
+    }
+
+    // Reset document verification status to PENDING on re-upload
+    // This ensures admin sees the document as "Pending Review" again
+    if (partner && documentType !== 'rcDocument') {
+      await prisma.documentVerification.upsert({
+        where: { partnerId_documentType: { partnerId: partner.id, documentType } },
+        create: { partnerId: partner.id, documentType, documentUrl: url, status: 'PENDING' },
+        update: { documentUrl: url, status: 'PENDING', rejectionReason: null },
       });
     }
 

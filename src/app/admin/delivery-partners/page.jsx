@@ -300,7 +300,7 @@ export default function AdminDeliveryPartnersPage() {
                 </div>
               </div>
 
-              {/* Document Verification */}
+              {/* Document Verification — 3 personal documents only (RC is in Vehicles section) */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><Camera className="h-4 w-4" /> Document Verification (Per-Document)</h4>
                 <div className="grid grid-cols-2 gap-3">
@@ -327,7 +327,7 @@ export default function AdminDeliveryPartnersPage() {
                               <button onClick={() => { setSelectedPartner({...selectedPartner, _rejectDoc: doc.key}); setShowRejectModal(true); }} className="flex-1 px-2 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium border border-red-200">✕ Reject</button>
                             </div>
                           )}
-                          {docStatus === 'APPROVED' && <button onClick={() => handleAction(selectedPartner.id, 'reject_doc', 'Document needs review', doc.key)} className="w-full px-2 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium border border-red-200">↩ Revoke</button>}
+                          {docStatus === 'APPROVED' && <button onClick={() => { setSelectedPartner({...selectedPartner, _rejectDoc: doc.key, _revoke: true}); setShowRejectModal(true); }} className="w-full px-2 py-1.5 text-xs bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 font-medium border border-amber-200">↩ Revoke</button>}
                         </div>
                       </div>
                     );
@@ -335,25 +335,37 @@ export default function AdminDeliveryPartnersPage() {
                 </div>
               </div>
 
-              {/* Vehicles Section */}
+              {/* Vehicles Section — RC document lives here with its own Approve/Reject */}
               {selectedPartner.vehicles && selectedPartner.vehicles.length > 0 && (
                 <div>
                   <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><Truck className="h-4 w-4" /> Vehicles ({selectedPartner.vehicles.length})</h4>
                   <div className="space-y-2">
-                    {selectedPartner.vehicles.map((v, i) => (
-                      <div key={v.id} className={`p-3 rounded-xl border ${selectedPartner.activeVehicleId === v.id ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}`}>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-semibold">{selectedPartner.activeVehicleId === v.id && '✅ '}{v.vehicleType} — {v.vehicleNumber || 'No number'}</p>
-                            <p className="text-xs text-gray-500">{v.isVerified ? '✓ Verified' : v.verificationStatus === 'REJECTED' ? '✕ Rejected' : '⏳ Pending'}{v.verificationNote && <span className="text-red-500 ml-1">— {v.verificationNote}</span>}</p>
-                          </div>
-                          <div className="flex gap-1">
-                            {v.rcDocument && <button onClick={() => setPreviewImage({ url: v.rcDocument, label: `RC - ${v.vehicleNumber}` })} className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100">View RC</button>}
-                            {!v.isVerified && v.verificationStatus !== 'REJECTED' && <button onClick={() => handleAction(selectedPartner.id, 'approve_vehicle', null, null, v.id)} className="px-2 py-1 text-xs bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100">Approve</button>}
+                    {selectedPartner.vehicles.map((v, i) => {
+                      const rcDocCheck = selectedPartner.documentChecks?.find(d => d.documentType === 'rcDocument');
+                      const vehicleDocStatus = rcDocCheck?.status || (v.isVerified ? 'APPROVED' : v.verificationStatus === 'REJECTED' ? 'REJECTED' : v.rcDocument ? 'PENDING' : 'MISSING');
+                      return (
+                        <div key={v.id} className={`p-3 rounded-xl border ${selectedPartner.activeVehicleId === v.id ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}`}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold">{selectedPartner.activeVehicleId === v.id && '✅ '}{v.vehicleType} — {v.vehicleNumber || 'No number'}</p>
+                              <p className="text-xs text-gray-500">
+                                {vehicleDocStatus === 'APPROVED' ? '✓ Verified' : vehicleDocStatus === 'REJECTED' ? '✕ Rejected' : vehicleDocStatus === 'PENDING' ? '⏳ Pending' : 'No RC'}
+                                {(v.verificationNote || rcDocCheck?.rejectionReason) && <span className="text-red-500 ml-1">— {v.verificationNote || rcDocCheck?.rejectionReason}</span>}
+                              </p>
+                            </div>
+                            <div className="flex gap-1">
+                              {v.rcDocument && <button onClick={() => setPreviewImage({ url: v.rcDocument, label: `RC - ${v.vehicleNumber}` })} className="px-2 py-1 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100">View RC</button>}
+                              {vehicleDocStatus !== 'APPROVED' && vehicleDocStatus !== 'REJECTED' && (
+                                <button onClick={() => handleAction(selectedPartner.id, 'approve_vehicle', null, null, v.id)} className="px-2 py-1 text-xs bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100">Approve</button>
+                              )}
+                              {vehicleDocStatus !== 'REJECTED' && (
+                                <button onClick={() => { setSelectedPartner({...selectedPartner, _rejectVehicle: v.id}); setShowRejectModal(true); }} className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100">Reject</button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -385,7 +397,9 @@ export default function AdminDeliveryPartnersPage() {
       {showRejectModal && selectedPartner && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => { setShowRejectModal(false); setRejectReason(''); }}>
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-900 mb-1">{selectedPartner._rejectDoc ? 'Reject Document' : 'Reject Partner'}</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">
+              {selectedPartner._revoke ? 'Revoke Document' : selectedPartner._rejectDoc ? 'Reject Document' : selectedPartner._rejectVehicle ? 'Reject Vehicle' : 'Reject Partner'}
+            </h3>
             <p className="text-sm text-gray-500 mb-4">Select a reason — this will be shown to {selectedPartner.user?.name || 'the partner'}</p>
             <div className="space-y-2 max-h-[260px] overflow-y-auto mb-4 pr-1">
               {REJECT_REASONS.map((reason, i) => (
@@ -394,7 +408,18 @@ export default function AdminDeliveryPartnersPage() {
             </div>
             <textarea className="w-full border-2 border-gray-200 rounded-xl p-3 text-sm mb-4 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none resize-none" rows={2} placeholder="Or type a custom reason..." value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
             <div className="flex gap-3">
-              <button onClick={() => { const docKey = selectedPartner._rejectDoc; if (docKey) { handleAction(selectedPartner.id, 'reject_doc', rejectReason || 'Document needs attention', docKey); } else { handleAction(selectedPartner.id, 'reject', rejectReason || 'Documents need attention'); } }} disabled={!rejectReason.trim()} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-semibold hover:bg-red-700 disabled:opacity-40 flex items-center justify-center gap-2"><XCircle className="h-4 w-4" /> {selectedPartner._rejectDoc ? 'Reject Document' : 'Reject Partner'}</button>
+              <button onClick={() => {
+                const docKey = selectedPartner._rejectDoc;
+                const vehId = selectedPartner._rejectVehicle;
+                const isRevoke = selectedPartner._revoke;
+                if (docKey) {
+                  handleAction(selectedPartner.id, 'reject_doc', rejectReason || (isRevoke ? 'Document revoked - Please re-upload' : 'Document needs attention'), docKey);
+                } else if (vehId) {
+                  handleAction(selectedPartner.id, 'reject_vehicle', rejectReason || 'Vehicle rejected', null, vehId);
+                } else {
+                  handleAction(selectedPartner.id, 'reject', rejectReason || 'Documents need attention');
+                }
+              }} disabled={!rejectReason.trim()} className={`flex-1 text-white py-3 rounded-xl font-semibold disabled:opacity-40 flex items-center justify-center gap-2 ${selectedPartner._revoke ? 'bg-amber-600 hover:bg-amber-700' : 'bg-red-600 hover:bg-red-700'}`}><XCircle className="h-4 w-4" /> {selectedPartner._revoke ? 'Revoke Document' : selectedPartner._rejectDoc ? 'Reject Document' : selectedPartner._rejectVehicle ? 'Reject Vehicle' : 'Reject Partner'}</button>
               <button onClick={() => { setShowRejectModal(false); setRejectReason(''); }} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200">Cancel</button>
             </div>
           </div>

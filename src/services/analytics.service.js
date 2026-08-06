@@ -1,17 +1,54 @@
 import prisma from '@/lib/prisma';
 
+// Helper to convert BigInt to Number for JSON serialization
+const toNumber = (val) => {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'bigint') return Number(val);
+  return val;
+};
+
 export class AnalyticsService {
   /**
    * Get supplier analytics overview
    */
   static async getSupplierAnalytics(supplierId, { period = 'MONTHLY', startDate, endDate } = {}) {
     const dateFilter = {};
+    
     if (startDate && endDate) {
       dateFilter.createdAt = {
         gte: new Date(startDate),
         lte: new Date(endDate)
       };
+    } else {
+      // Auto-calculate date range based on period
+      const now = new Date();
+      let rangeStart;
+      
+      switch (period) {
+        case 'DAILY':
+          rangeStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'WEEKLY':
+          rangeStart = new Date(now);
+          rangeStart.setDate(now.getDate() - 7);
+          break;
+        case 'MONTHLY':
+          rangeStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case 'YEARLY':
+          rangeStart = new Date(now.getFullYear(), 0, 1);
+          break;
+        default:
+          rangeStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+      
+      dateFilter.createdAt = { gte: rangeStart };
     }
+
+    // For raw SQL, use the date filter or default to 30 days
+    const sqlStartDate = dateFilter.createdAt?.gte 
+      ? dateFilter.createdAt.gte.toISOString().split('T')[0]
+      : new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0];
 
     const [
       orderStats,
@@ -37,18 +74,18 @@ export class AnalyticsService {
         where: { supplierId },
         _count: true
       }),
-      // Revenue by day (last 30 days)
-      prisma.$queryRaw`
+      // Revenue by day (respects period)
+      prisma.$queryRawUnsafe(`
         SELECT 
           DATE(createdAt) as date,
           COUNT(*) as orders,
           SUM(totalAmount) as revenue
         FROM \`Order\`
-        WHERE productId IN (SELECT id FROM Product WHERE supplierId = ${supplierId})
-          AND createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+        WHERE productId IN (SELECT id FROM Product WHERE supplierId = ?)
+          AND createdAt >= ?
         GROUP BY DATE(createdAt)
         ORDER BY date ASC
-      `,
+      `, supplierId, sqlStartDate),
       // Top 10 products by orders
       prisma.product.findMany({
         where: { supplierId },
@@ -98,12 +135,41 @@ export class AnalyticsService {
       })
     ]);
 
+    // Convert raw query results
+    const revenueData = (revenueByDay || []).map(d => ({
+      date: d.date,
+      orders: toNumber(d.orders),
+      revenue: toNumber(d.revenue),
+    }));
+
     // Calculate KPIs
-    const totalOrders = orderStats.reduce((sum, s) => sum + s._count, 0);
-    const totalRevenue = orderStats.reduce((sum, s) => sum + (s._sum.totalAmount || 0), 0);
-    const completedOrders = orderStats.find(s => s.status === 'DELIVERED')?._count || 0;
+    const totalOrders = orderStats.reduce((sum, s) => sum + toNumber(s._count), 0);
+    const totalRevenue = orderStats.reduce((sum, s) => sum + toNumber(s._sum?.totalAmount), 0);
+    const completedOrders = toNumber(orderStats.find(s => s.status === 'DELIVERED')?._count);
     const completionRate = totalOrders > 0 ? (completedOrders / totalOrders * 100).toFixed(1) : 0;
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    // Convert orderStats for JSON
+    const safeOrderStats = orderStats.map(s => ({
+      status: s.status,
+      _count: toNumber(s._count),
+      _sum: { totalAmount: toNumber(s._sum?.totalAmount) }
+    }));
+
+    // Convert topProducts
+    const safeTopProducts = topProducts.map(p => ({
+      id: p.id,
+      name: p.name,
+      _count: { orders: toNumber(p._count?.orders) },
+      pricing: p.pricing
+    }));
+
+    // Convert customerStats
+    const safeCustomerStats = customerStats.map(c => ({
+      buyerId: c.buyerId,
+      _count: toNumber(c._count),
+      _sum: { totalAmount: toNumber(c._sum?.totalAmount) }
+    }));
 
     return {
       kpis: {
@@ -112,18 +178,18 @@ export class AnalyticsService {
         completedOrders,
         completionRate: `${completionRate}%`,
         avgOrderValue,
-        totalProducts: productStats._count,
-        rfqResponses: rfqStats
+        totalProducts: toNumber(productStats._count),
+        rfqResponses: toNumber(rfqStats)
       },
-      orderStats,
-      revenueByDay,
-      topProducts,
+      orderStats: safeOrderStats,
+      revenueByDay: revenueData,
+      topProducts: safeTopProducts,
       inventoryStatus: {
         lowStock: inventoryStatus.filter(i => i.availableQty <= i.minStockLevel),
         outOfStock: inventoryStatus.filter(i => i.availableQty === 0),
         all: inventoryStatus
       },
-      customerStats
+      customerStats: safeCustomerStats
     };
   }
 
@@ -155,27 +221,67 @@ export class AnalyticsService {
       prisma.returnRequest.groupBy({ by: ['status'], _count: true })
     ]);
 
-    const totalRevenue = (orderStats || []).reduce((sum, s) => sum + (s._sum?.totalAmount || 0), 0);
-    const totalOrders = (orderStats || []).reduce((sum, s) => sum + (s._count || 0), 0);
-    const totalDeliveries = (deliveryStats || []).reduce((sum, s) => sum + (s._count || 0), 0);
-    const totalReturns = (returnStats || []).reduce((sum, s) => sum + (s._count || 0), 0);
+    // Convert raw query results
+    const revenueData = (revenueByDay || []).map(d => ({
+      date: d.date,
+      orders: toNumber(d.orders),
+      revenue: toNumber(d.revenue),
+    }));
+
+    const totalRevenue = (orderStats || []).reduce((sum, s) => sum + toNumber(s._sum?.totalAmount), 0);
+    const totalOrders = (orderStats || []).reduce((sum, s) => sum + toNumber(s._count), 0);
+    const totalDeliveries = (deliveryStats || []).reduce((sum, s) => sum + toNumber(s._count), 0);
+    const totalReturns = (returnStats || []).reduce((sum, s) => sum + toNumber(s._count), 0);
+
+    // Convert for JSON
+    const safeOrderStats = orderStats.map(s => ({
+      status: s.status,
+      _count: toNumber(s._count),
+      _sum: { totalAmount: toNumber(s._sum?.totalAmount) }
+    }));
+
+    const safeSupplierVerification = supplierVerification.map(s => ({
+      isVerified: s.isVerified,
+      _count: toNumber(s._count)
+    }));
+
+    const safeProductApprovals = productApprovals.map(p => ({
+      isApproved: p.isApproved,
+      _count: toNumber(p._count)
+    }));
+
+    const safeDeliveryStats = deliveryStats.map(d => ({
+      status: d.status,
+      _count: toNumber(d._count)
+    }));
+
+    const safeReturnStats = returnStats.map(r => ({
+      status: r.status,
+      _count: toNumber(r._count)
+    }));
+
+    const safeUserGrowth = userGrowth.map(u => ({
+      createdAt: u.createdAt,
+      _count: toNumber(u._count)
+    }));
 
     return {
       kpis: {
-        totalUsers: userStats._count,
-        totalSuppliers: supplierStats._count,
-        totalProducts: productStats._count,
+        totalUsers: toNumber(userStats._count),
+        totalSuppliers: toNumber(supplierStats._count),
+        totalProducts: toNumber(productStats._count),
         totalOrders,
         totalRevenue,
         totalDeliveries,
         totalReturns
       },
-      supplierVerification,
-      orderStats,
-      revenueByDay,
-      productApprovals,
-      deliveryStats,
-      returnStats
+      supplierVerification: safeSupplierVerification,
+      orderStats: safeOrderStats,
+      revenueByDay: revenueData,
+      productApprovals: safeProductApprovals,
+      deliveryStats: safeDeliveryStats,
+      returnStats: safeReturnStats,
+      userGrowth: safeUserGrowth
     };
   }
 
@@ -232,7 +338,10 @@ export class AnalyticsService {
       _count: true
     });
 
-    return summary;
+    return summary.map(s => ({
+      eventName: s.eventName,
+      _count: toNumber(s._count)
+    }));
   }
 
   /**
@@ -260,7 +369,7 @@ export class AnalyticsService {
     const metrics = [
       {
         metricName: 'DAILY_REVENUE',
-        metricValue: dailyRevenue._sum.totalAmount || 0,
+        metricValue: toNumber(dailyRevenue._sum.totalAmount),
         metricType: 'REVENUE',
         period: 'DAILY',
         periodStart: today,
@@ -268,7 +377,7 @@ export class AnalyticsService {
       },
       {
         metricName: 'MONTHLY_REVENUE',
-        metricValue: monthlyRevenue._sum.totalAmount || 0,
+        metricValue: toNumber(monthlyRevenue._sum.totalAmount),
         metricType: 'REVENUE',
         period: 'MONTHLY',
         periodStart: thisMonth,
