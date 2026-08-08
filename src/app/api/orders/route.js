@@ -38,6 +38,31 @@ async function deductWallet(userId, amount, referenceId, description) {
   }
 }
 
+// Create SLA 0 (Response SLA) for new orders
+async function createResponseSLA(orderId, supplierId) {
+  try {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { id: true, responseSlaHours: true, autoCancelEnabled: true },
+    });
+    if (supplier?.responseSlaHours > 0 && supplier?.autoCancelEnabled) {
+      const deadline = new Date(Date.now() + supplier.responseSlaHours * 60 * 60 * 1000);
+      await prisma.orderSLA.create({
+        data: {
+          orderId,
+          supplierId: supplier.id,
+          slaType: 'RESPONSE',
+          status: 'ACTIVE',
+          deadline,
+        },
+      });
+      console.log(`⏱️ SLA 0 (Response) created: Order ${orderId.slice(0,8)} must be accepted by ${deadline.toISOString()}`);
+    }
+  } catch (err) {
+    console.error('SLA 0 creation error:', err.message);
+  }
+}
+
 // Auto-update referral status on first purchase
 async function handleReferralOnPurchase(buyerId) {
   try {
@@ -107,6 +132,7 @@ export async function GET(request) {
         include: {
           product: { select: { name: true } },
           buyer: { select: { name: true } },
+          orderSLA: { select: { id: true, slaType: true, status: true, deadline: true } },
         },
         skip: (page - 1) * limit,
         take: limit,
@@ -151,7 +177,6 @@ export async function POST(request) {
       const productMap = {};
       products.forEach(p => { productMap[p.id] = p; });
 
-      // Split fees across items proportionally
       const totalItems = items.length;
       const perItemDelivery = Math.round(deliveryFee / totalItems);
       const perItemPlatform = Math.round(platformFee / totalItems);
@@ -159,7 +184,6 @@ export async function POST(request) {
       const perItemCoupon = Math.round(couponDiscount / totalItems);
       const perItemWallet = Math.round(walletDeduction / totalItems);
 
-      // Deduct wallet FIRST before creating orders
       if (walletDeduction > 0) {
         await deductWallet(session.userId, walletDeduction, 'multi-order-pending', 
           `Payment for ${totalItems} items on PROCURE`);
@@ -198,7 +222,8 @@ export async function POST(request) {
           },
         });
 
-        // Notify supplier
+        createResponseSLA(order.id, product.supplierId).catch(() => {});
+
         const supplierStaff = await prisma.supplierStaff.findFirst({
           where: { supplierId: product.supplierId },
           select: { userId: true },
@@ -216,7 +241,6 @@ export async function POST(request) {
         createdOrders.push(order);
       }
 
-      // Update wallet transaction with actual order IDs
       if (walletDeduction > 0 && createdOrders.length > 0) {
         const firstOrderId = createdOrders[0].id;
         const orderRefs = createdOrders.map(o => `#${o.id.slice(0, 8)}`).join(', ');
@@ -233,7 +257,6 @@ export async function POST(request) {
         });
       }
 
-      // Notify buyer
       NotificationService.send({
         userId: session.userId,
         type: 'IN_APP',
@@ -241,7 +264,6 @@ export async function POST(request) {
         message: `${createdOrders.length} order(s) placed. Track them in My Orders.`,
       }).catch(() => {});
 
-      // Send email (non-blocking - won't break order creation)
       if (buyer?.email) {
         try {
           const emailTemplate = getOrderConfirmationEmail({
@@ -266,7 +288,6 @@ export async function POST(request) {
         }
       }
 
-      // Clear cart
       try {
         const buyerProfile = await prisma.buyerProfile.findUnique({ where: { userId: session.userId } });
         if (buyerProfile?.cart) {
@@ -321,7 +342,8 @@ export async function POST(request) {
       },
     });
 
-    // Deduct wallet with correct order ID
+    createResponseSLA(order.id, product.supplierId).catch(() => {});
+
     if (walletDeduction > 0) {
       await deductWallet(
         session.userId, 
@@ -336,7 +358,6 @@ export async function POST(request) {
       select: { id: true, name: true, email: true },
     });
 
-    // Notify supplier
     const supplierStaff = await prisma.supplierStaff.findFirst({
       where: { supplierId: product.supplierId },
       select: { userId: true },
@@ -351,7 +372,6 @@ export async function POST(request) {
       }).catch(() => {});
     }
 
-    // Notify buyer
     NotificationService.send({
       userId: session.userId,
       type: 'IN_APP',
@@ -359,7 +379,6 @@ export async function POST(request) {
       message: `Your order #${order.id.slice(0, 8)} has been placed. Track in My Orders.`,
     }).catch(() => {});
 
-    // Send email (non-blocking)
     if (buyer?.email) {
       try {
         const emailTemplate = getOrderConfirmationEmail({

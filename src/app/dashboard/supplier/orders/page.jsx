@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
-import { Search, X, Eye } from "lucide-react";
+import { Search, X, Eye, Clock } from "lucide-react";
+
+const formatOrderId = (id) => {
+  if (!id) return '#N/A';
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = parseInt(hex, 16) % 100000;
+  return `#${num.toString().padStart(5, '0')}`;
+};
 
 const DECLINE_REASONS = [
   "Out of Stock",
@@ -96,15 +103,31 @@ export default function SupplierOrdersPage() {
   };
 
   const getDeclineReason = (order) => {
-    if (order.status !== 'DECLINED' && order.status !== 'CANCELLED') return null;
-    const historyNote = order.statusHistory?.find(h => h.notes?.includes('Declined:') || h.notes?.includes('Cancelled:'));
+    if (order.status !== 'DECLINED' && order.status !== 'CANCELLED' && order.status !== 'EXPIRED') return null;
+    const historyNote = order.statusHistory?.find(h => 
+      h.notes?.includes('Declined:') || h.notes?.includes('Cancelled:') || h.notes?.includes('Auto-expired:') || h.notes?.includes('Auto-cancelled:')
+    );
     if (historyNote) {
       return historyNote.notes
         .replace('Declined: ', '')
         .replace('Cancelled: ', '')
+        .replace('Auto-expired: ', '')
+        .replace('Auto-cancelled: ', '')
         .replace('Other: ', '');
     }
     return null;
+  };
+
+  const getSLARemaining = (order) => {
+    if (!order.orderSLA || order.orderSLA.status !== 'ACTIVE') return null;
+    const deadline = new Date(order.orderSLA.deadline);
+    const now = new Date();
+    const diffMs = deadline - now;
+    if (diffMs <= 0) return { expired: true, text: 'Breached' };
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) return { expired: false, text: `${hours}h ${mins}m left`, urgent: hours < 1 };
+    return { expired: false, text: `${mins}m left`, urgent: true };
   };
 
   const statusColors = {
@@ -116,6 +139,7 @@ export default function SupplierOrdersPage() {
     DELIVERED: "bg-green-100 text-green-800",
     DECLINED: "bg-gray-100 text-gray-800",
     CANCELLED: "bg-red-100 text-red-800",
+    EXPIRED: "bg-red-100 text-red-800",
   };
 
   const supplierActions = {
@@ -133,7 +157,7 @@ export default function SupplierOrdersPage() {
     READY_FOR_PICKUP: "Mark order as packed and ready for pickup?",
   };
 
-  const statuses = ["PENDING", "ACCEPTED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "DECLINED", "CANCELLED"];
+  const statuses = ["PENDING", "ACCEPTED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "DECLINED", "CANCELLED", "EXPIRED"];
 
   const filteredOrders = searchTerm
     ? orders.filter((o) => o.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || o.buyer?.name?.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -183,32 +207,49 @@ export default function SupplierOrdersPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Buyer</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">SLA</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Reason</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {loading ? (
-                <tr><td colSpan={7} className="p-8 text-center text-gray-400">Loading...</td></tr>
+                <tr><td colSpan={8} className="p-8 text-center text-gray-400">Loading...</td></tr>
               ) : filteredOrders.length === 0 ? (
-                <tr><td colSpan={7} className="p-8 text-center text-gray-400">No orders found</td></tr>
+                <tr><td colSpan={8} className="p-8 text-center text-gray-400">No orders found</td></tr>
               ) : (
                 filteredOrders.map(order => {
                   const actions = supplierActions[order.status] || [];
                   const declineReasonText = getDeclineReason(order);
+                  const slaRemaining = getSLARemaining(order);
                   return (
                     <tr key={order.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <p className="text-sm font-mono font-medium text-gray-900">#{order.id?.substring(0, 8)?.toUpperCase()}</p>
+                        <p className="text-sm font-mono font-medium text-gray-900">{formatOrderId(order.id)}</p>
                         <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString('en-IN')}</p>
                       </td>
                       <td className="px-4 py-3"><p className="text-sm font-medium text-gray-900">{order.product?.name || 'Product'}</p><p className="text-xs text-gray-500">Qty: {order.quantity}</p></td>
                       <td className="px-4 py-3"><p className="text-sm text-gray-900">{order.buyer?.name || 'Buyer'}</p></td>
-                      <td className="px-4 py-3 text-right"><p className="text-sm font-bold">₹{order.totalAmount?.toLocaleString('en-IN')}</p></td>
+                      <td className="px-4 py-3 text-right">
+                        <p className="text-sm font-bold">₹{(order.netAmount ?? order.totalAmount)?.toLocaleString('en-IN')}</p>
+                        {order.netAmount !== undefined && order.netAmount !== order.totalAmount && (
+                          <p className="text-xs text-gray-400">₹{order.totalAmount?.toLocaleString('en-IN')} - {Math.round((1 - order.netAmount / order.totalAmount) * 100)}% fee</p>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${statusColors[order.status] || 'bg-gray-100'}`}>
                           {order.status.replace('_', ' ')}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {slaRemaining ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${slaRemaining.expired ? 'bg-red-100 text-red-700' : slaRemaining.urgent ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
+                            <Clock className="h-3 w-3" />
+                            {slaRemaining.text}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {declineReasonText ? (
@@ -231,7 +272,7 @@ export default function SupplierOrdersPage() {
                               {action.label}
                             </button>
                           ))}
-                          {!actions.length && order.status !== 'DELIVERED' && order.status !== 'DECLINED' && order.status !== 'CANCELLED' && (
+                          {!actions.length && order.status !== 'DELIVERED' && order.status !== 'DECLINED' && order.status !== 'CANCELLED' && order.status !== 'EXPIRED' && (
                             <span className="text-xs text-gray-400">
                               {order.status === 'ACCEPTED' ? 'Auto-processing...' : order.status === 'READY_FOR_PICKUP' ? 'Awaiting pickup' : order.status === 'SHIPPED' ? 'In transit' : 'Auto-processing...'}
                             </span>
@@ -264,7 +305,7 @@ export default function SupplierOrdersPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Decline / Cancel Reason</h3>
+              <h3 className="text-lg font-bold text-gray-900">Decline / Cancel / Expiry Reason</h3>
               <button onClick={() => setViewNotes(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
             </div>
             <div className="bg-gray-50 rounded-xl p-4">
@@ -286,10 +327,10 @@ export default function SupplierOrdersPage() {
               <button onClick={() => setDeclineModal(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
             </div>
             <div className="bg-gray-50 rounded-xl p-4 mb-4">
-              <p className="text-sm"><strong>Order:</strong> #{declineModal.id?.substring(0, 8)?.toUpperCase()}</p>
+              <p className="text-sm"><strong>Order:</strong> {formatOrderId(declineModal.id)}</p>
               <p className="text-sm mt-1"><strong>Product:</strong> {declineModal.product?.name}</p>
               <p className="text-sm mt-1"><strong>Buyer:</strong> {declineModal.buyer?.name}</p>
-              <p className="text-sm mt-1"><strong>Amount:</strong> ₹{declineModal.totalAmount?.toLocaleString('en-IN')}</p>
+              <p className="text-sm mt-1"><strong>Amount:</strong> ₹{(declineModal.netAmount ?? declineModal.totalAmount)?.toLocaleString('en-IN')}</p>
             </div>
             <div className="space-y-3">
               <label className="text-sm font-medium text-gray-700">Reason for declining</label>

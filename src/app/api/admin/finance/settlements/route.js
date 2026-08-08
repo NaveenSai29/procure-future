@@ -57,11 +57,19 @@ export async function PATCH(request) {
     const { settlementId, action } = body;
 
     if (action === 'process') {
+      const settlement = await prisma.settlement.findUnique({ where: { id: settlementId } });
+      if (!settlement) return errorResponse('Settlement not found', 404);
+      if (settlement.status !== 'PENDING') return errorResponse('Settlement already processed', 400);
+
+      const { FinanceService } = await import('@/services/finance.service');
+      const result = await FinanceService.processSettlement(settlementId);
+      
       await prisma.settlement.update({
         where: { id: settlementId },
-        data: { status: 'COMPLETED', processedAt: new Date(), processedBy: session.userId },
+        data: { processedBy: session.userId },
       });
-      return successResponse({ message: 'Settlement processed successfully' });
+
+      return successResponse({ message: 'Settlement processed successfully', result });
     }
 
     return errorResponse('Invalid action', 400);

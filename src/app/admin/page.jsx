@@ -5,8 +5,15 @@ import Link from 'next/link';
 import {
   Users, Store, Package, ShoppingCart, TrendingUp, DollarSign,
   Clock, AlertCircle, FileText, RotateCcw, CheckCircle, XCircle,
-  ArrowUp, ArrowDown, Activity, UserPlus, Building, Eye
+  ArrowUp, ArrowDown, Activity, UserPlus, Building, Eye, Banknote, Timer
 } from 'lucide-react';
+
+const formatOrderId = (id) => {
+  if (!id) return '#N/A';
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = parseInt(hex, 16) % 100000;
+  return `#${num.toString().padStart(5, '0')}`;
+};
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -120,6 +127,46 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* COD & SLA Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl border p-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-50 p-2.5 rounded-xl"><Banknote className="h-5 w-5 text-amber-600" /></div>
+            <div>
+              <p className="text-xs text-gray-500">COD Orders (Active)</p>
+              <p className="text-xl font-bold text-gray-900">{stats?.codActiveOrders || 0}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border p-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-red-50 p-2.5 rounded-xl"><Timer className="h-5 w-5 text-red-600" /></div>
+            <div>
+              <p className="text-xs text-gray-500">Expired Orders</p>
+              <p className="text-xl font-bold text-gray-900">{stats?.expiredOrders || 0}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border p-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-50 p-2.5 rounded-xl"><Store className="h-5 w-5 text-blue-600" /></div>
+            <div>
+              <p className="text-xs text-gray-500">COD-Enabled Shops</p>
+              <p className="text-xl font-bold text-gray-900">{stats?.codEnabledSuppliers || 0}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border p-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-purple-50 p-2.5 rounded-xl"><Users className="h-5 w-5 text-purple-600" /></div>
+            <div>
+              <p className="text-xs text-gray-500">Dedicated Agents</p>
+              <p className="text-xl font-bold text-gray-900">{stats?.totalDedicatedAgents || 0}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Recent Activity & Quick Lists */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Orders */}
@@ -132,7 +179,7 @@ export default function AdminDashboard() {
             {stats?.recentOrders?.map(order => (
               <div key={order.id} className="p-3 flex items-center justify-between hover:bg-gray-50">
                 <div>
-                  <p className="text-sm font-medium">#{order.id.slice(0, 8)}</p>
+                  <p className="text-sm font-medium">{formatOrderId(order.id)}</p>
                   <p className="text-xs text-gray-500">{order.buyer?.name} • {order.product?.name?.slice(0, 30)}</p>
                 </div>
                 <div className="text-right">
@@ -140,6 +187,8 @@ export default function AdminDashboard() {
                   <span className={`text-xs px-2 py-0.5 rounded-full ${
                     order.status === 'DELIVERED' ? 'bg-green-100 text-green-700' :
                     order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                    order.status === 'EXPIRED' ? 'bg-red-100 text-red-700' :
+                    order.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
                     'bg-gray-100 text-gray-600'
                   }`}>{order.status}</span>
                 </div>
@@ -207,6 +256,26 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Quick Links */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Link href="/admin/orders" className="bg-white rounded-xl border p-4 hover:shadow-md transition flex items-center gap-3">
+          <ShoppingCart className="h-5 w-5 text-orange-500" />
+          <span className="text-sm font-medium">Manage Orders</span>
+        </Link>
+        <Link href="/admin/deliveries" className="bg-white rounded-xl border p-4 hover:shadow-md transition flex items-center gap-3">
+          <Truck className="h-5 w-5 text-blue-500" />
+          <span className="text-sm font-medium">Deliveries</span>
+        </Link>
+        <Link href="/admin/suppliers" className="bg-white rounded-xl border p-4 hover:shadow-md transition flex items-center gap-3">
+          <Store className="h-5 w-5 text-purple-500" />
+          <span className="text-sm font-medium">COD & SLA Settings</span>
+        </Link>
+        <Link href="/admin/delivery-partners" className="bg-white rounded-xl border p-4 hover:shadow-md transition flex items-center gap-3">
+          <Users className="h-5 w-5 text-green-500" />
+          <span className="text-sm font-medium">Delivery Partners</span>
+        </Link>
       </div>
     </div>
   );

@@ -215,17 +215,21 @@ export async function PATCH(request, { params }) {
 
         const deliveryFee = delivery.order.deliveryFee || 0;
 
-        // Update or create partner wallet — track earnings + COD
+        // Calculate net earning after delivery commission
+        const { CommissionService } = await import('@/services/commission.service');
+        const { netEarning } = await CommissionService.calculateDeliveryNetEarning(deliveryFee);
+
+        // Update or create partner wallet — track net earnings + COD
         await tx.partnerWallet.upsert({
           where: { partnerId: user.deliveryPartner.id },
           create: {
             partnerId: user.deliveryPartner.id,
-            totalEarned: deliveryFee,
+            totalEarned: netEarning,
             codCollected: delivery.order.paymentMethod === 'COD' ? (delivery.order.totalAmount || 0) : 0,
             codPending: delivery.order.paymentMethod === 'COD' ? (delivery.order.totalAmount || 0) : 0,
           },
           update: {
-            totalEarned: { increment: deliveryFee },
+            totalEarned: { increment: netEarning },
             ...(delivery.order.paymentMethod === 'COD' ? {
               codCollected: { increment: delivery.order.totalAmount || 0 },
               codPending: { increment: delivery.order.totalAmount || 0 },
@@ -246,7 +250,10 @@ export async function PATCH(request, { params }) {
                 amount: codAmountToSettle,
                 status: 'PENDING',
                 settlementType: 'COD_COLLECTION',
+                settlementFor: 'DELIVERY_PARTNER',
                 referenceId: delivery.orderId,
+                periodStart: new Date(new Date().setDate(1)),
+                periodEnd: new Date(),
                 notes: `COD ₹${orderAmount} collected. Fee: ₹${deliveryFee}. Net: ₹${codAmountToSettle}`,
               },
             });

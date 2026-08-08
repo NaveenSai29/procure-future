@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Store, Search, CheckCircle, Ban, Package, Warehouse, Mail, Phone, Shield, RefreshCw, BadgeCheck, Clock, Loader2 } from 'lucide-react';
+import { Store, Search, CheckCircle, Ban, Package, Warehouse, Mail, Phone, Shield, RefreshCw, BadgeCheck, Clock, Loader2, DollarSign, Users, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminSuppliersPage() {
@@ -64,6 +64,7 @@ export default function AdminSuppliersPage() {
     if (statusFilter === 'VERIFIED') return matchSearch && s.isVerified;
     if (statusFilter === 'PENDING') return matchSearch && !s.isVerified;
     if (statusFilter === 'INACTIVE') return matchSearch && !s.isActive;
+    if (statusFilter === 'COD_ENABLED') return matchSearch && s.codEnabled;
     return matchSearch;
   });
 
@@ -71,6 +72,7 @@ export default function AdminSuppliersPage() {
     { value: 'ALL', label: 'All', count: suppliers.length },
     { value: 'PENDING', label: 'Pending KYC', count: suppliers.filter(s => !s.isVerified).length },
     { value: 'VERIFIED', label: 'Verified', count: suppliers.filter(s => s.isVerified).length },
+    { value: 'COD_ENABLED', label: 'COD Enabled', count: suppliers.filter(s => s.codEnabled).length },
     { value: 'INACTIVE', label: 'Inactive', count: suppliers.filter(s => !s.isActive).length },
   ];
 
@@ -110,7 +112,7 @@ export default function AdminSuppliersPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4 w-fit">
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4 w-fit flex-wrap">
         {tabs.map(tab => (
           <button
             key={tab.value}
@@ -178,7 +180,11 @@ export default function AdminSuppliersPage() {
                         Inactive
                       </span>
                     )}
-                    {/* GST Verification Status Badge */}
+                    {supplier.codEnabled && (
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium flex items-center gap-1">
+                        <DollarSign className="h-3 w-3" /> COD
+                      </span>
+                    )}
                     {supplier.gstVerified ? (
                       <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full font-medium flex items-center gap-1">
                         <BadgeCheck className="h-3 w-3" /> GST Verified
@@ -237,15 +243,18 @@ export default function AdminSuppliersPage() {
                         </span>
                       )}
                     </span>
+                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{supplier._count?.dedicatedAgents || 0} agents</span>
                     <span>{supplier.staff?.length || 0} staff</span>
                     <span>Joined: {new Date(supplier.createdAt).toLocaleDateString()}</span>
+                    {supplier.codEnabled && supplier.codThreshold > 0 && (
+                      <span className="text-blue-500 font-medium">COD Threshold: ₹{supplier.codThreshold?.toLocaleString('en-IN')}</span>
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Actions */}
               <div className="flex items-center gap-2 flex-shrink-0">
-                {/* GST Verify Button - only show if unverified */}
                 {!supplier.gstVerified && (
                   <button
                     onClick={() => handleGstVerify(supplier.id)}
@@ -260,7 +269,6 @@ export default function AdminSuppliersPage() {
                     Verify GST
                   </button>
                 )}
-                {/* Re-verify button for already verified */}
                 {supplier.gstVerified && (
                   <button
                     onClick={() => handleGstVerify(supplier.id)}
@@ -276,6 +284,13 @@ export default function AdminSuppliersPage() {
                     Re-verify
                   </button>
                 )}
+                <Link
+                  href={`/admin/suppliers/${supplier.id}`}
+                  className="px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-xs font-medium flex items-center gap-1 transition border border-blue-200"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                  COD & SLA
+                </Link>
                 {!supplier.isVerified && (
                   <Link
                     href={`/admin/kyc?supplierId=${supplier.id}`}

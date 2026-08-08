@@ -27,6 +27,10 @@ export default function AdminSettingsPage() {
     defaultRate: 5, commissionOnDelivery: false,
   });
 
+  const [deliveryCommissionForm, setDeliveryCommissionForm] = useState({
+    defaultRate: 10,
+  });
+
   const [deliveryForm, setDeliveryForm] = useState({
     vehicles: [], freeWeightUpTo: 5, weightChargePerKg: 3, maxWeight: 40000,
     freeDeliveryAbove: 4999, maxDistance: 200, platformFee: 5, gstPercent: 5,
@@ -71,6 +75,7 @@ export default function AdminSettingsPage() {
       setPlatformData(data);
       if (data.settings?.GENERAL) setGeneralForm(prev => ({ ...prev, ...data.settings.GENERAL }));
       if (data.settings?.COMMISSION) setCommissionForm(prev => ({ ...prev, ...data.settings.COMMISSION }));
+      if (data.settings?.DELIVERY_COMMISSION) setDeliveryCommissionForm(prev => ({ ...prev, ...data.settings.DELIVERY_COMMISSION }));
       if (data.settings?.PAYMENT) setPaymentForm(prev => ({ ...prev, ...data.settings.PAYMENT }));
       if (data.settings?.NOTIFICATION) setNotifForm(prev => ({ ...prev, ...data.settings.NOTIFICATION }));
       if (data.settings?.FEATURES) setFeatureForm(prev => ({ ...prev, ...data.settings.FEATURES }));
@@ -116,8 +121,9 @@ export default function AdminSettingsPage() {
 
   const tabs = [
     { id: 'GENERAL', label: 'General', icon: Building2 },
-    { id: 'COMMISSION', label: 'Commission', icon: Percent },
-    { id: 'DELIVERY', label: 'Delivery', icon: Truck },
+    { id: 'COMMISSION', label: 'Supplier Commission', icon: Percent },
+    { id: 'DELIVERY_COMMISSION', label: 'Delivery Commission', icon: Truck },
+    { id: 'DELIVERY', label: 'Delivery', icon: MapPin },
     { id: 'PAYMENT', label: 'Payments', icon: CreditCard },
     { id: 'NOTIFICATION', label: 'Notifications', icon: Bell },
     { id: 'FEATURES', label: 'Features', icon: Zap },
@@ -201,15 +207,26 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      {/* COMMISSION TAB */}
+      {/* SUPPLIER COMMISSION TAB */}
       {activeTab === 'COMMISSION' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-green-100 rounded-lg"><Percent className="h-5 w-5 text-green-600" /></div><div><h3 className="font-semibold text-gray-900">Platform Commission</h3></div></div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"><p className="text-sm text-blue-800 font-medium">How it works</p><p className="text-xs text-blue-700 mt-1">Commission auto-deducted from supplier wallet on completed orders.</p></div>
-            <div className="max-w-md"><label className="text-sm font-medium text-gray-700">Commission Rate (%)</label><div className="relative mt-1.5"><input type="number" step="0.1" value={commissionForm.defaultRate || 5} onChange={(e) => setCommissionForm(prev => ({ ...prev, defaultRate: parseFloat(e.target.value) }))} className="w-full px-4 py-3 border rounded-lg text-lg font-bold" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">%</span></div></div>
-            <div className="mt-4 flex gap-4"><label className="flex items-center gap-2"><input type="checkbox" checked={commissionForm.commissionOnDelivery|| false} onChange={(e) => setCommissionForm(prev => ({ ...prev, commissionOnDelivery: e.target.checked }))} /><span className="text-sm">Also charge commission on delivery charges</span></label></div>
-            <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('COMMISSION', commissionForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Commission Settings'}</button></div>
+            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-green-100 rounded-lg"><Percent className="h-5 w-5 text-green-600" /></div><div><h3 className="font-semibold text-gray-900">Supplier Commission</h3><p className="text-xs text-gray-500">Deducted from supplier wallet on completed orders</p></div></div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"><p className="text-sm text-blue-800 font-medium">How it works</p><p className="text-xs text-blue-700 mt-1">Commission auto-deducted from supplier wallet. Supplier sees net amount after deduction.</p></div>
+            <div className="max-w-md"><label className="text-sm font-medium text-gray-700">Commission Rate (%)</label><div className="relative mt-1.5"><input type="number" step="0.1" value={commissionForm.defaultRate || 5} onChange={(e) => setCommissionForm(prev => ({ ...prev, defaultRate: parseFloat(e.target.value) }))} className="w-full px-4 py-3 border rounded-lg text-lg font-bold" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">%</span></div><p className="text-xs text-gray-400 mt-2">Example: On a ₹1,000 order at 5%, supplier earns ₹950</p></div>
+            <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('COMMISSION', commissionForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Supplier Commission'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* DELIVERY COMMISSION TAB */}
+      {activeTab === 'DELIVERY_COMMISSION' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl border shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-orange-100 rounded-lg"><Truck className="h-5 w-5 text-orange-600" /></div><div><h3 className="font-semibold text-gray-900">Delivery Partner Commission</h3><p className="text-xs text-gray-500">Deducted from delivery partner earnings on completed deliveries</p></div></div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"><p className="text-sm text-blue-800 font-medium">How it works</p><p className="text-xs text-blue-700 mt-1">Commission auto-deducted from delivery partner's delivery fee. Partner sees only net earnings after deduction.</p></div>
+            <div className="max-w-md"><label className="text-sm font-medium text-gray-700">Commission Rate (%)</label><div className="relative mt-1.5"><input type="number" step="0.1" value={deliveryCommissionForm.defaultRate || 10} onChange={(e) => setDeliveryCommissionForm(prev => ({ ...prev, defaultRate: parseFloat(e.target.value) }))} className="w-full px-4 py-3 border rounded-lg text-lg font-bold" /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">%</span></div><p className="text-xs text-gray-400 mt-2">Example: If delivery fee is ₹40 and rate is 10%, partner earns ₹36</p></div>
+            <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('DELIVERY_COMMISSION', deliveryCommissionForm)} disabled={saving} className="px-6 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Delivery Commission'}</button></div>
           </div>
         </div>
       )}

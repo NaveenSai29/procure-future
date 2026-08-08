@@ -22,11 +22,10 @@ export class CommissionService {
       catch { settings[s.key] = s.value; }
     });
 
-    const commissionRate = settings.defaultRate || 5; // Default 5%
+    const commissionRate = settings.defaultRate || 5;
     const minCommission = settings.minCommission || 0;
     const maxCommission = settings.maxCommission || 0;
 
-    // Calculate commission
     let commissionAmount = (order.totalAmount * commissionRate) / 100;
     
     if (minCommission > 0 && commissionAmount < minCommission) {
@@ -36,7 +35,6 @@ export class CommissionService {
       commissionAmount = maxCommission;
     }
 
-    // Add order revenue to supplier wallet, then deduct commission
     const supplierId = order.product.supplierId;
     let wallet = await prisma.supplierWallet.findUnique({ where: { supplierId } });
     
@@ -46,15 +44,11 @@ export class CommissionService {
       });
     }
 
-    // First credit the order amount
     const balanceAfterOrder = wallet.balance + order.totalAmount;
     const totalEarnedAfter = (wallet.totalEarned || 0) + order.totalAmount;
-
-    // Then deduct commission
     const balanceAfterCommission = balanceAfterOrder - commissionAmount;
 
     await prisma.$transaction([
-      // Update wallet with order revenue + commission deduction
       prisma.supplierWallet.update({
         where: { id: wallet.id },
         data: { 
@@ -62,7 +56,6 @@ export class CommissionService {
           totalEarned: totalEarnedAfter
         }
       }),
-      // Record order revenue credit
       prisma.walletTransaction.create({
         data: {
           walletId: wallet.id,
@@ -75,7 +68,6 @@ export class CommissionService {
           balanceAfter: balanceAfterOrder
         }
       }),
-      // Record commission deduction
       prisma.walletTransaction.create({
         data: {
           walletId: wallet.id,
@@ -96,6 +88,51 @@ export class CommissionService {
       commissionAmount,
       supplierId,
       walletBalance: balanceAfterCommission
+    };
+  }
+
+  /**
+   * Get supplier commission rate
+   */
+  static async getSupplierCommissionRate() {
+    const dbSettings = await prisma.systemSetting.findMany({
+      where: { category: 'COMMISSION' }
+    });
+    const settings = {};
+    dbSettings.forEach(s => {
+      try { settings[s.key] = JSON.parse(s.value); }
+      catch { settings[s.key] = s.value; }
+    });
+    return settings.defaultRate || 5;
+  }
+
+  /**
+   * Get delivery partner commission rate
+   */
+  static async getDeliveryCommissionRate() {
+    const dbSettings = await prisma.systemSetting.findMany({
+      where: { category: 'DELIVERY_COMMISSION' }
+    });
+    const settings = {};
+    dbSettings.forEach(s => {
+      try { settings[s.key] = JSON.parse(s.value); }
+      catch { settings[s.key] = s.value; }
+    });
+    return settings.defaultRate || 0;
+  }
+
+  /**
+   * Calculate net delivery earning after commission
+   */
+  static async calculateDeliveryNetEarning(deliveryFee) {
+    const commissionRate = await this.getDeliveryCommissionRate();
+    const commissionAmount = (deliveryFee * commissionRate) / 100;
+    const netEarning = deliveryFee - commissionAmount;
+    return {
+      grossFee: deliveryFee,
+      commissionRate,
+      commissionAmount: Math.round(commissionAmount * 100) / 100,
+      netEarning: Math.round(netEarning * 100) / 100,
     };
   }
 

@@ -45,7 +45,7 @@ const menuGroups = [
       { title: "Wallet", href: "/admin/wallet", icon: Wallet },
       { title: "Bank Accounts", href: "/admin/finance/bank-accounts", icon: Landmark },
       { title: "Finance Overview", href: "/admin/finance", icon: TrendingUp },
-      { title: "Settlements", href: "/admin/finance/settlements", icon: Banknote },
+      { title: "Delivery Settlements", href: "/admin/finance/settlements", icon: Banknote },
     ],
   },
   {

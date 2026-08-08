@@ -55,8 +55,8 @@ export default function SettlementsPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Settlements</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage partner payouts and settlements</p>
+          <h1 className="text-2xl font-bold text-gray-900">Delivery Partner Settlements</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage delivery partner COD settlements and payouts</p>
         </div>
         <button onClick={fetchSettlements} className="px-4 py-2 bg-white border rounded-lg text-sm font-medium hover:bg-gray-50">
           ↻ Refresh

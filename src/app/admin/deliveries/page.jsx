@@ -8,6 +8,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const formatOrderId = (id) => {
+  if (!id) return '#N/A';
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = parseInt(hex, 16) % 100000;
+  return `#${num.toString().padStart(5, '0')}`;
+};
+
 const STATUS_TABS = [
   { key: '', label: 'All', color: '#6B7280' },
   { key: 'ASSIGNED', label: 'Assigned', color: '#8B5CF6' },
@@ -258,6 +265,40 @@ export default function AdminDeliveriesPage() {
           {/* COD Settings */}
           <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 mb-4">
             <p className="text-sm font-bold text-amber-800 mb-2">💰 COD Controls</p>
+            <p className="text-xs text-amber-600 mb-3">Global COD master switch + per-partner limits</p>
+            
+            {/* Global COD Master Switch */}
+            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-amber-200 mb-4">
+              <div>
+                <p className="text-sm font-bold text-gray-900">🌐 Global COD</p>
+                <p className="text-xs text-gray-500">Master switch — when OFF, no shop can accept COD orders</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const currentVal = deliverySettings?.codGlobalEnabled;
+                  const newVal = currentVal === 'false' ? 'true' : 'false';
+                  try {
+                    const res = await fetch('/api/admin/settings', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        category: 'DELIVERY',
+                        settings: { codGlobalEnabled: newVal },
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      setDeliverySettings(prev => ({ ...prev, codGlobalEnabled: newVal }));
+                      toast.success(`Global COD ${newVal !== 'false' ? 'Enabled' : 'Disabled'}`);
+                    } else { toast.error('Failed to save'); }
+                  } catch { toast.error('Failed to save'); }
+                }}
+                className={`relative w-12 h-7 rounded-full transition-colors ${deliverySettings?.codGlobalEnabled !== 'false' ? 'bg-amber-600' : 'bg-gray-300'}`}
+              >
+                <div className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${deliverySettings?.codGlobalEnabled !== 'false' ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
             <p className="text-xs text-amber-600 mb-3">Limit how much COD cash a partner can hold before depositing</p>
             <div className="space-y-4">
               <div>
@@ -379,7 +420,7 @@ export default function AdminDeliveriesPage() {
               ) : (
                 deliveries.map(d => (
                   <tr key={d.id} className="hover:bg-orange-50/30">
-                    <td className="px-4 py-3"><p className="text-sm font-mono font-semibold">#{d.order?.id?.slice(-8)}</p><p className="text-xs text-gray-400">Fee: ₹{d.order?.deliveryFee}</p></td>
+                    <td className="px-4 py-3"><p className="text-sm font-mono font-semibold">{formatOrderId(d.order?.id)}</p><p className="text-xs text-gray-400">Fee: ₹{d.order?.deliveryFee}</p></td>
                     <td className="px-4 py-3"><p className="text-sm font-medium">{d.order?.buyer?.name || 'N/A'}</p><p className="text-xs text-gray-400"><Phone className="h-3 w-3 inline" /> {d.order?.buyer?.mobile}</p></td>
                     <td className="px-4 py-3">
                       {d.partner ? (
@@ -426,7 +467,7 @@ export default function AdminDeliveriesPage() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setSelectedDelivery(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl flex items-center justify-between">
-              <h3 className="text-lg font-bold">Delivery #{selectedDelivery.order?.id?.slice(-8)}</h3>
+              <h3 className="text-lg font-bold">Delivery {formatOrderId(selectedDelivery.order?.id)}</h3>
               <button onClick={() => setSelectedDelivery(null)} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
             </div>
             <div className="p-6 space-y-4">
@@ -456,7 +497,7 @@ export default function AdminDeliveriesPage() {
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-2xl">
               <h3 className="text-lg font-bold">Assign Partner</h3>
-              <p className="text-sm text-gray-500">Order #{selectedDelivery.order?.id?.slice(-8)} • ₹{selectedDelivery.order?.totalAmount}</p>
+              <p className="text-sm text-gray-500">Order {formatOrderId(selectedDelivery.order?.id)} • ₹{selectedDelivery.order?.totalAmount}</p>
             </div>
             <div className="p-4 space-y-2">
               {availablePartners.length === 0 ? (

@@ -2,11 +2,18 @@
 import { useState, useEffect } from "react";
 import {
   Search, Download, CheckCircle, XCircle, Truck, Store,
-  ChevronDown, IndianRupee, Package, User, Clock, Loader2, AlertTriangle,
+  ChevronDown, IndianRupee, Package, User, Clock, Loader2, AlertTriangle, X,
 } from "lucide-react";
 import { toast } from "sonner";
 
-const STATUS_OPTIONS = ["", "PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "DECLINED", "RETURNED"];
+const formatOrderId = (id) => {
+  if (!id) return '#N/A';
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = parseInt(hex, 16) % 100000;
+  return `#${num.toString().padStart(5, '0')}`;
+};
+
+const STATUS_OPTIONS = ["", "PENDING", "CONFIRMED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "DECLINED", "RETURNED", "EXPIRED"];
 const STATUS_COLORS = {
   PENDING: "bg-yellow-100 text-yellow-700",
   CONFIRMED: "bg-blue-100 text-blue-700",
@@ -16,6 +23,7 @@ const STATUS_COLORS = {
   CANCELLED: "bg-red-100 text-red-700",
   DECLINED: "bg-gray-100 text-gray-700",
   RETURNED: "bg-orange-100 text-orange-700",
+  EXPIRED: "bg-red-100 text-red-700",
 };
 
 const BULK_ACTIONS = [
@@ -34,6 +42,7 @@ export default function AdminOrdersPage() {
   const [selectedOrders, setSelectedOrders] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showDetail, setShowDetail] = useState(null);
+  const [cancellingId, setCancellingId] = useState(null);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -50,6 +59,26 @@ export default function AdminOrdersPage() {
   };
 
   useEffect(() => { fetchOrders(); }, [page, statusFilter]);
+
+  const handleSingleCancel = async (orderId) => {
+    if (!confirm("Cancel this order? Refund will be processed automatically.")) return;
+    setCancellingId(orderId);
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, action: "cancel" }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Order cancelled & refunded");
+        fetchOrders();
+      } else {
+        toast.error(json.message || "Failed to cancel");
+      }
+    } catch { toast.error("Failed"); }
+    finally { setCancellingId(null); }
+  };
 
   const handleBulkStatus = async (newStatus) => {
     if (selectedOrders.length === 0) return toast.error("Select orders first");
@@ -84,7 +113,7 @@ export default function AdminOrdersPage() {
     const orders = data?.orders || [];
     const headers = ["Order ID", "Buyer", "Email", "Product", "Supplier", "Qty", "Amount", "Status", "Decline Reason", "Date"];
     const rows = orders.map((o) => [
-      o.id?.slice(0, 8),
+      formatOrderId(o.id),
       o.buyer?.name || "N/A",
       o.buyer?.email || "N/A",
       o.product?.name || "N/A",
@@ -108,6 +137,8 @@ export default function AdminOrdersPage() {
   const formatCurrency = (v) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0 }).format(v || 0);
 
+  const canCancel = (status) => !['DELIVERED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(status);
+
   const stats = data?.stats || {};
   const orders = data?.orders || [];
   const pagination = data?.pagination || {};
@@ -117,7 +148,7 @@ export default function AdminOrdersPage() {
     { label: "Processing", value: (stats.confirmed || 0) + (stats.processing || 0), color: "text-purple-600 bg-purple-50" },
     { label: "Shipped", value: stats.shipped || 0, color: "text-indigo-600 bg-indigo-50" },
     { label: "Delivered", value: stats.delivered || 0, color: "text-green-600 bg-green-50" },
-    { label: "Cancelled", value: stats.cancelled || 0, color: "text-red-600 bg-red-50" },
+    { label: "Cancelled", value: (stats.cancelled || 0) + (stats.expired || 0), color: "text-red-600 bg-red-50" },
     { label: "Declined", value: stats.declined || 0, color: "text-gray-600 bg-gray-50" },
   ];
 
@@ -223,6 +254,7 @@ export default function AdminOrdersPage() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                  <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -232,11 +264,17 @@ export default function AdminOrdersPage() {
                       <input type="checkbox" checked={selectedOrders.includes(o.id)} onChange={() => toggleSelect(o.id)} className="rounded" />
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-blue-600">
-                      <div>#{o.id?.slice(0, 8)}</div>
+                      <div>{formatOrderId(o.id)}</div>
                       {o.status === "DECLINED" && o.statusHistory?.[0]?.notes && (
                         <div className="text-red-500 text-xs mt-1 flex items-center gap-1">
                           <AlertTriangle className="h-3 w-3" />
                           {o.statusHistory[0].notes.replace("Declined: ", "")}
+                        </div>
+                      )}
+                      {o.status === "EXPIRED" && o.statusHistory?.[0]?.notes && (
+                        <div className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {o.statusHistory[0].notes.replace("Auto-expired: ", "").replace("Auto-cancelled: ", "").substring(0, 60)}...
                         </div>
                       )}
                     </td>
@@ -264,11 +302,29 @@ export default function AdminOrdersPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">{new Date(o.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-center">
+                      {canCancel(o.status) && (
+                        <button
+                          onClick={() => handleSingleCancel(o.id)}
+                          disabled={cancellingId === o.id}
+                          className="px-2 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium border border-red-200 disabled:opacity-50"
+                        >
+                          {cancellingId === o.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin inline" />
+                          ) : (
+                            <><X className="h-3 w-3 inline" /> Cancel</>
+                          )}
+                        </button>
+                      )}
+                      {!canCancel(o.status) && (
+                        <span className="text-xs text-gray-300">-</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {orders.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
+                    <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
                       <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
                       No orders found
                     </td>

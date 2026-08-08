@@ -173,10 +173,36 @@ export class FinanceService {
   /**
    * Create settlement
    */
-  static async createSettlement(supplierId, { amount, settlementType = 'AUTO', referenceId = null, notes = null }) {
+  static async createSettlement(supplierId, { amount, settlementType = 'AUTO', settlementFor = 'SUPPLIER', referenceId = null, notes = null, partnerId = null, periodStart = null, periodEnd = null }) {
     return prisma.settlement.create({
-      data: { supplierId, amount, settlementType, referenceId, notes }
+      data: { supplierId, amount, settlementType, settlementFor, referenceId, notes, partnerId, periodStart, periodEnd }
     });
+  }
+
+  static async hasExistingSettlement(supplierId, periodStart, periodEnd, settlementFor = 'SUPPLIER') {
+    const existing = await prisma.settlement.findFirst({
+      where: {
+        supplierId,
+        settlementFor,
+        periodStart: { gte: periodStart },
+        periodEnd: { lte: periodEnd },
+        status: { in: ['PENDING', 'PROCESSED'] },
+      },
+    });
+    return !!existing;
+  }
+
+  static async hasExistingPartnerSettlement(partnerId, periodStart, periodEnd) {
+    const existing = await prisma.settlement.findFirst({
+      where: {
+        partnerId,
+        settlementFor: 'DELIVERY_PARTNER',
+        periodStart: { gte: periodStart },
+        periodEnd: { lte: periodEnd },
+        status: { in: ['PENDING', 'PROCESSED'] },
+      },
+    });
+    return !!existing;
   }
 
   /**
@@ -375,6 +401,57 @@ export class FinanceService {
       invoiceStats,
       monthlyRevenue
     };
+  }
+
+    static async processAutoSettlements() {
+    const results = { supplier: { processed: 0, skipped: 0, errors: 0 }, partner: { processed: 0, skipped: 0, errors: 0 } };
+
+    const dbSettings = await prisma.systemSetting.findMany({ where: { category: 'PAYMENT' } });
+    const settings = {};
+    dbSettings.forEach(s => { try { settings[s.key] = JSON.parse(s.value); } catch { settings[s.key] = s.value; } });
+
+    const settlementCycle = settings.settlementCycle || 'WEEKLY';
+    const minSettlement = settings.minSettlement || 1000;
+    const holdPeriod = settings.holdPeriod || 7;
+
+    const now = new Date();
+    let periodStart, periodEnd;
+    if (settlementCycle === 'WEEKLY') { periodStart = new Date(now); periodStart.setDate(periodStart.getDate() - 7); periodEnd = now; }
+    else if (settlementCycle === 'MONTHLY') { periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1); periodEnd = new Date(now.getFullYear(), now.getMonth(), 0); }
+    else { periodStart = new Date(now); periodStart.setDate(periodStart.getDate() - 1); periodEnd = now; }
+
+    // Supplier settlements
+    try {
+      const wallets = await prisma.supplierWallet.findMany({ where: { balance: { gte: minSettlement } }, include: { supplier: { select: { id: true } } } });
+      for (const w of wallets) {
+        try {
+          const already = await FinanceService.hasExistingSettlement(w.supplierId, periodStart, periodEnd, 'SUPPLIER');
+          if (already) { results.supplier.skipped++; continue; }
+          const settlement = await FinanceService.createSettlement(w.supplierId, { amount: w.balance, settlementType: 'AUTO', settlementFor: 'SUPPLIER', notes: `Auto ${settlementCycle.toLowerCase()} settlement`, periodStart, periodEnd });
+          await FinanceService.processSettlement(settlement.id);
+          results.supplier.processed++;
+        } catch { results.supplier.errors++; }
+      }
+    } catch { }
+
+    // Partner settlements
+    try {
+      const pwallets = await prisma.partnerWallet.findMany({ where: { codPending: { gte: minSettlement } }, include: { partner: { select: { id: true } } } });
+      const systemSupplier = await prisma.supplier.findFirst({ where: { businessName: 'PROCURE' } });
+      for (const w of pwallets) {
+        try {
+          const already = await FinanceService.hasExistingPartnerSettlement(w.partnerId, periodStart, periodEnd);
+          if (already) { results.partner.skipped++; continue; }
+          if (systemSupplier && w.codPending > 0) {
+            const settlement = await FinanceService.createSettlement(systemSupplier.id, { amount: w.codPending, settlementType: 'AUTO', settlementFor: 'DELIVERY_PARTNER', partnerId: w.partnerId, notes: `Auto ${settlementCycle.toLowerCase()} COD settlement`, periodStart, periodEnd });
+            await FinanceService.processSettlement(settlement.id);
+            results.partner.processed++;
+          }
+        } catch { results.partner.errors++; }
+      }
+    } catch { }
+
+    return { results, period: { start: periodStart, end: periodEnd }, cycle: settlementCycle };
   }
 
   /**

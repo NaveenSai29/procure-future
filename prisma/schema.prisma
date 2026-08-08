@@ -318,6 +318,12 @@ model Supplier {
   isVerified     Boolean             @default(false)
   isActive       Boolean             @default(true)
   subscriptionId String?
+  codEnabled        Boolean              @default(false)
+  codThreshold      Float                @default(2000)
+  responseSlaHours   Int                 @default(24)
+  processingSlaHours Int                 @default(4)
+  pickupSlaHours    Int                  @default(2)
+  autoCancelEnabled Boolean              @default(true)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   deletedAt      DateTime?
@@ -345,6 +351,8 @@ model Supplier {
   subscription    Subscription?
   supportTickets  SupportTicket[]
   customerMessages CustomerMessage[]
+  dedicatedAgents   SupplierAgent[]
+  orderSLAs         OrderSLA[]
 }
 
 model SupplierBranch {
@@ -684,6 +692,7 @@ model Order {
     delivery      Delivery?
     statusHistory OrderStatusHistory[]
     returnRequest ReturnRequest?
+    orderSLA         OrderSLA?
 
     @@index([buyerId])
     @@index([productId])
@@ -736,6 +745,7 @@ model DeliveryPartner {
   settlements      Settlement[]
   wallet           PartnerWallet?
   codDeposits      CODDeposit[]
+  supplierAgents   SupplierAgent[]
 }
 
 model PartnerVehicle {
@@ -1181,9 +1191,13 @@ model Settlement {
     amount          Float
     status          String   @default("PENDING")
     settlementType  String   @default("AUTO")
+    settlementFor   String   @default("SUPPLIER")
     referenceId     String?
     notes           String?  @db.Text
+    processedBy     String?
     processedAt     DateTime?
+    periodStart     DateTime?
+    periodEnd       DateTime?
     createdAt       DateTime @default(now())
     updatedAt       DateTime @updatedAt
 
@@ -1193,6 +1207,7 @@ model Settlement {
     @@index([supplierId])
     @@index([partnerId])
     @@index([status])
+    @@index([settlementFor])
 }
 
 model SupplierWallet {
@@ -1849,4 +1864,33 @@ model ApiRequestLog {
   @@index([statusCode])
   @@index([createdAt])
   @@index([apiKeyId])
+}
+
+model SupplierAgent {
+  id          String   @id @default(uuid())
+  supplierId  String
+  partnerId   String
+  createdAt   DateTime @default(now())
+  
+  supplier    Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  partner     DeliveryPartner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  
+  @@unique([supplierId, partnerId])
+}
+
+model OrderSLA {
+  id            String    @id @default(uuid())
+  orderId       String    @unique
+  supplierId    String
+  slaType       String
+  status        String    @default("ACTIVE")
+  deadline      DateTime
+  breachedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supplier      Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  
+  @@index([status])
+  @@index([supplierId])
 }

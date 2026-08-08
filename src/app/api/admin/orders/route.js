@@ -52,6 +52,7 @@ export async function GET(req) {
         prisma.order.count({ where: { status: "CANCELLED" } }),
         prisma.order.count({ where: { status: "DECLINED" } }),
         prisma.order.count({ where: { status: "RETURNED" } }),
+        prisma.order.count({ where: { status: "EXPIRED" } }),
       ]),
     ]);
 
@@ -66,6 +67,7 @@ export async function GET(req) {
         cancelled: stats[5],
         declined: stats[6],
         returned: stats[7],
+        expired: stats[8],
         total,
       },
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
@@ -76,15 +78,67 @@ export async function GET(req) {
   }
 }
 
-// PATCH - Bulk status update
 export async function PATCH(req) {
   try {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
 
     const body = await req.json();
-    const { orderIds, status } = body;
+    const { orderIds, status, orderId, action } = body;
 
+    // ─── Single Order Cancel (Manual Admin Cancel) ───
+    if (action === 'cancel' && orderId) {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { id: true, status: true, buyerId: true, totalAmount: true, paymentMethod: true, razorpayPaymentId: true, walletDeduction: true },
+      });
+      if (!order) return errorResponse("Order not found", 404);
+      if (['DELIVERED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(order.status)) {
+        return errorResponse(`Cannot cancel order in ${order.status} status`, 422);
+      }
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'CANCELLED' },
+      });
+
+      await prisma.orderStatusHistory.create({
+        data: {
+          orderId,
+          fromStatus: order.status,
+          toStatus: 'CANCELLED',
+          changedBy: session.userId,
+          notes: 'Cancelled by admin',
+        },
+      });
+
+      // Auto-refund for online payments
+      if (order.paymentMethod === 'ONLINE' && order.razorpayPaymentId) {
+        try {
+          const { RazorpayService } = await import('@/services/razorpay.service');
+          await RazorpayService.createRefund({ paymentId: order.razorpayPaymentId });
+          await prisma.refundTransaction.create({
+            data: { orderId, userId: order.buyerId, amount: order.totalAmount, paymentMethod: 'RAZORPAY', transactionId: order.razorpayPaymentId, status: 'PROCESSED', processedAt: new Date() },
+          });
+        } catch (err) { console.error('Refund error:', err.message); }
+      }
+      if (order.walletDeduction > 0) {
+        const wallet = await prisma.buyerWallet.findUnique({ where: { userId: order.buyerId } });
+        if (wallet) {
+          await prisma.buyerWallet.update({ where: { id: wallet.id }, data: { balance: wallet.balance + order.walletDeduction } });
+        }
+      }
+
+      // Resolve any active SLA
+      await prisma.orderSLA.updateMany({
+        where: { orderId, status: 'ACTIVE' },
+        data: { status: 'RESOLVED' },
+      });
+
+      return successResponse({ message: 'Order cancelled & refunded' });
+    }
+
+    // ─── Bulk Status Update ───
     if (!orderIds || !Array.isArray(orderIds) || !status) {
       return errorResponse("orderIds array and status are required", 400);
     }
@@ -94,26 +148,16 @@ export async function PATCH(req) {
       data: { status },
     });
 
-    // Create status history entries
-    for (const orderId of orderIds) {
+    for (const oid of orderIds) {
       await prisma.orderStatusHistory.create({
         data: {
-          orderId,
+          orderId: oid,
           fromStatus: "PENDING",
           toStatus: status,
           changedBy: session.userId,
         },
       });
     }
-
-    await prisma.auditLog.create({
-      data: {
-        userId: session.userId,
-        action: "ORDER_BULK_STATUS",
-        entity: "Order",
-        newValue: { count: orderIds.length, status },
-      },
-    });
 
     return successResponse({ message: `${orderIds.length} orders updated to ${status}` });
   } catch (error) {

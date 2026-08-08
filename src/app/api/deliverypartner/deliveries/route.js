@@ -24,7 +24,7 @@ export async function GET(request) {
 
     const partnerId = user.deliveryPartner.id;
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status'); // Optional filter: ASSIGNED, PICKED_UP, IN_TRANSIT, DELIVERED
+    const status = searchParams.get('status');
     const limit = parseInt(searchParams.get('limit') || '20');
     const page = parseInt(searchParams.get('page') || '1');
 
@@ -65,8 +65,22 @@ export async function GET(request) {
       prisma.delivery.count({ where }),
     ]);
 
+    // Calculate net delivery fee after commission for each delivery
+    const { CommissionService } = await import('@/services/commission.service');
+    const deliveriesWithNet = await Promise.all(deliveries.map(async (d) => {
+      const deliveryFee = d.order?.deliveryFee || 0;
+      const { netEarning } = await CommissionService.calculateDeliveryNetEarning(deliveryFee);
+      return {
+        ...d,
+        order: {
+          ...d.order,
+          netDeliveryFee: netEarning,
+        },
+      };
+    }));
+
     return successResponse({
-      deliveries,
+      deliveries: deliveriesWithNet,
       pagination: {
         page,
         limit,

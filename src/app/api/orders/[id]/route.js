@@ -11,6 +11,7 @@ const forwardTransitions = {
   DELIVERED: [],
   CANCELLED: [],
   DECLINED: [],
+  EXPIRED: [],
 };
 
 async function autoAdvanceOrder(orderId, fromStatus, toStatus) {
@@ -145,7 +146,7 @@ export async function GET(request, { params }) {
     if (!order) return errorResponse("Order not found", 404);
 
     let refund = null;
-    if (['CANCELLED', 'DECLINED'].includes(order.status)) {
+    if (['CANCELLED', 'DECLINED', 'EXPIRED'].includes(order.status)) {
       refund = await prisma.refundTransaction.findFirst({
         where: { orderId: id },
         orderBy: { createdAt: 'desc' },
@@ -174,7 +175,7 @@ export async function PATCH(request, { params }) {
     if (paymentMethod && !status) {
       if (order.buyerId !== session.userId) return errorResponse("Only the buyer can update payment method", 403);
       if ((order.paymentMethod || '').toUpperCase() !== 'COD' || (paymentMethod || '').toUpperCase() !== 'ONLINE') return errorResponse("Can only switch from COD to Online payment", 422);
-      if (['DELIVERED', 'CANCELLED', 'DECLINED'].includes(order.status)) return errorResponse(`Cannot change payment for ${order.status} order`, 422);
+      if (['DELIVERED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(order.status)) return errorResponse(`Cannot change payment for ${order.status} order`, 422);
       const updated = await prisma.order.update({ where: { id }, data: { paymentMethod: 'ONLINE', razorpayPaymentId: razorpayPaymentId || null } });
       await prisma.auditLog.create({ data: { userId: session.userId, action: 'ORDER_PAYMENT_SWITCH', entity: 'Order', entityId: id, newValue: { paymentMethod: 'ONLINE', razorpayPaymentId }, oldValue: { paymentMethod: 'COD' } } }).catch(() => {});
       NotificationService.send({ userId: order.buyerId, type: 'IN_APP', title: '💳 Payment Switched', message: `Order #${order.id.slice(0, 8).toUpperCase()} is now paid online.` }).catch(() => {});
@@ -205,7 +206,7 @@ export async function PATCH(request, { params }) {
     const staff = await prisma.supplierStaff.findFirst({ where: { userId: session.userId } });
     if (!staff) return errorResponse("Only suppliers can update status", 403);
     if (order.product.supplierId !== staff.supplierId) return errorResponse("You don't own this order", 403);
-    if (order.status === "DELIVERED" || order.status === "DECLINED" || order.status === "CANCELLED") return errorResponse(`Order is ${order.status}. Cannot change.`, 422);
+    if (order.status === "DELIVERED" || order.status === "DECLINED" || order.status === "CANCELLED" || order.status === "EXPIRED") return errorResponse(`Order is ${order.status}. Cannot change.`, 422);
     const allowedForward = forwardTransitions[order.status] || [];
     if (!allowedForward.includes(status)) return errorResponse(`Cannot change from ${order.status} to ${status}. Allowed: ${allowedForward.join(", ")}`, 422);
 
@@ -220,6 +221,36 @@ export async function PATCH(request, { params }) {
     const updated = await prisma.order.update({ where: { id }, data: { status } });
     const historyData = { orderId: order.id, fromStatus: order.status, toStatus: status, changedBy: session.userId };
     if (status === "DECLINED") historyData.notes = `Declined: ${declineReason}`;
+
+    // ─── SLA 1: Create Processing SLA when supplier ACCEPTS ───
+    if (status === "ACCEPTED") {
+      try {
+        const supplier = await prisma.supplier.findUnique({
+          where: { id: order.product.supplierId },
+          select: { id: true, processingSlaHours: true, autoCancelEnabled: true },
+        });
+        if (supplier?.processingSlaHours > 0 && supplier?.autoCancelEnabled) {
+          const deadline = new Date(Date.now() + supplier.processingSlaHours * 60 * 60 * 1000);
+          await prisma.orderSLA.upsert({
+            where: { orderId: order.id },
+            create: {
+              orderId: order.id,
+              supplierId: supplier.id,
+              slaType: 'PROCESSING',
+              status: 'ACTIVE',
+              deadline,
+            },
+            update: {
+              slaType: 'PROCESSING',
+              status: 'ACTIVE',
+              deadline,
+              breachedAt: null,
+            },
+          });
+          console.log(`⏱️ SLA 1 created: Order ${order.id.slice(0,8)} must be ready by ${deadline.toISOString()}`);
+        }
+      } catch (slaErr) { console.error('SLA 1 creation error:', slaErr.message); }
+    }
     
     if (status === "READY_FOR_PICKUP") {
       historyData.notes = "Order packed and ready for pickup";
@@ -244,6 +275,14 @@ export async function PATCH(request, { params }) {
         console.error('❌ Auto-assign error:', e.message);
         historyData.notes += ' | Auto-assign error: ' + e.message;
       }
+
+      // ─── Resolve SLA 1 (Processing) if exists ───
+      try {
+        await prisma.orderSLA.updateMany({
+          where: { orderId: order.id, slaType: 'PROCESSING', status: 'ACTIVE' },
+          data: { status: 'RESOLVED' },
+        });
+      } catch (slaErr) { console.error('SLA resolve error:', slaErr.message); }
     }
     
     await prisma.orderStatusHistory.create({ data: historyData });
