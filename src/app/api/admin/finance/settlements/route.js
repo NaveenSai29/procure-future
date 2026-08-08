@@ -16,6 +16,7 @@ export async function GET(request) {
       prisma.settlement.findMany({
         where,
         include: {
+          supplier: { select: { id: true, businessName: true } },
           partner: {
             select: {
               id: true,
@@ -54,12 +55,12 @@ export async function PATCH(request) {
     if (!session?.userId) return errorResponse('Unauthorized', 401);
 
     const body = await request.json();
-    const { settlementId, action } = body;
+    const { settlementId, action, force } = body;
 
     if (action === 'process') {
       const settlement = await prisma.settlement.findUnique({ where: { id: settlementId } });
       if (!settlement) return errorResponse('Settlement not found', 404);
-      if (settlement.status !== 'PENDING') return errorResponse('Settlement already processed', 400);
+      if (settlement.status !== 'PENDING' && !force) return errorResponse('Settlement already processed. Use force to override.', 409);
 
       const { FinanceService } = await import('@/services/finance.service');
       const result = await FinanceService.processSettlement(settlementId);

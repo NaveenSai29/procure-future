@@ -47,23 +47,57 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
 
-    const { action, settlementId, supplierId, amount } = await request.json();
+    const { action, settlementId, supplierId, amount, force } = await request.json();
 
     if (action === 'processSettlement') {
       // If settlementId provided, process existing settlement
       if (settlementId) {
+        const existing = await prisma.settlement.findUnique({ where: { id: settlementId } });
+        if (!existing) return NextResponse.json({ error: 'Settlement not found' }, { status: 404 });
+        if (existing.status !== 'PENDING' && !force) return NextResponse.json({ error: 'Settlement already processed. Use force to override.', alreadyProcessed: true }, { status: 409 });
+
         const result = await FinanceService.processSettlement(settlementId);
+        await prisma.settlement.update({
+          where: { id: settlementId },
+          data: { processedBy: user.id },
+        });
         return NextResponse.json({ success: true, result });
       }
       
       // If supplierId and amount provided, create + process new settlement
       if (supplierId && amount) {
+        // Check for duplicate settlement this period
+        const now = new Date();
+        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        
+        const existing = await prisma.settlement.findFirst({
+          where: {
+            supplierId,
+            settlementFor: 'SUPPLIER',
+            periodStart: { gte: periodStart },
+            periodEnd: { lte: periodEnd },
+            status: { in: ['PENDING', 'PROCESSED'] },
+          },
+        });
+        
+        if (existing && !force) {
+          return NextResponse.json({ error: 'Supplier already has a settlement for this period. Use force to override.', existingSettlementId: existing.id }, { status: 409 });
+        }
+        
         const settlement = await FinanceService.createSettlement(supplierId, { 
           amount: parseFloat(amount), 
-          settlementType: 'MANUAL',
-          notes: 'Manual settlement by admin'
+          settlementType: force ? 'MANUAL_OVERRIDE' : 'MANUAL',
+          settlementFor: 'SUPPLIER',
+          notes: force ? 'Manual override settlement by admin' : 'Manual settlement by admin',
+          periodStart,
+          periodEnd,
         });
         const result = await FinanceService.processSettlement(settlement.id);
+        await prisma.settlement.update({
+          where: { id: settlement.id },
+          data: { processedBy: user.id },
+        });
         return NextResponse.json({ success: true, result });
       }
       

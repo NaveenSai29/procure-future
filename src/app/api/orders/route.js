@@ -141,6 +141,17 @@ export async function GET(request) {
       prisma.order.count({ where }),
     ]);
 
+    // If supplier staff, calculate net amount after commission
+    if (staff) {
+      const { CommissionService } = await import('@/services/commission.service');
+      const commissionRate = await CommissionService.getSupplierCommissionRate();
+      const ordersWithNet = orders.map(order => ({
+        ...order,
+        netAmount: Math.round((order.totalAmount - (order.totalAmount * commissionRate / 100)) * 100) / 100,
+      }));
+      return successResponse({ orders: ordersWithNet, total, page, limit });
+    }
+
     return successResponse({ orders, total, page, limit });
   } catch (error) {
     console.error("Orders error:", error);

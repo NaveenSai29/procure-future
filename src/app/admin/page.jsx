@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   Users, Store, Package, ShoppingCart, TrendingUp, DollarSign,
   Clock, AlertCircle, FileText, RotateCcw, CheckCircle, XCircle,
-  ArrowUp, ArrowDown, Activity, UserPlus, Building, Eye, Banknote, Timer
+  ArrowUp, ArrowDown, Activity, UserPlus, Building, Eye, Banknote, Timer, Truck
 } from 'lucide-react';
 
 const formatOrderId = (id) => {

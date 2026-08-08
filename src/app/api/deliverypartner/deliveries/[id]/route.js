@@ -237,6 +237,13 @@ export async function PATCH(request, { params }) {
           },
         });
 
+        // Process supplier commission on delivery
+        try {
+          await CommissionService.processOrderCommission(delivery.orderId);
+        } catch (err) {
+          console.error('Commission processing error:', err.message);
+        }
+
         // COD Settlement: Create settlement entry for tracking
         if (delivery.order.paymentMethod === 'COD') {
           const orderAmount = delivery.order.totalAmount || 0;

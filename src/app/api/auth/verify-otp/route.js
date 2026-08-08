@@ -65,6 +65,13 @@ export async function POST(request) {
       });
     }
 
+    // Auto-create DeliveryPartner profile if doesn't exist (for OTP users)
+    if (!user.deliveryPartner) {
+      await prisma.deliveryPartner.create({
+        data: { userId: user.id },
+      });
+    }
+
     const roles = user.roles.map((ur) => ur.role.name);
 
     // Generate tokens

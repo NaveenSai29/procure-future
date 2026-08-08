@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import {
   Users, Store, Package, ShoppingCart, DollarSign,
   Truck, RotateCcw, TrendingUp, TrendingDown,
-  BarChart3, PieChart, Activity, RefreshCw, Download
+  BarChart3, PieChart, Activity, RefreshCw, Download, Banknote, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -82,15 +82,20 @@ export default function AdminAnalyticsPage() {
 
   if (!analytics) return null;
 
-  const kpiCards = [
+    const kpiCards = [
     { label: 'Total Users', value: formatNumber(analytics.kpis.totalUsers), icon: Users, color: 'bg-blue-100 text-blue-600' },
     { label: 'Suppliers', value: formatNumber(analytics.kpis.totalSuppliers), icon: Store, color: 'bg-purple-100 text-purple-600' },
     { label: 'Products', value: formatNumber(analytics.kpis.totalProducts), icon: Package, color: 'bg-orange-100 text-orange-600' },
     { label: 'Total Orders', value: formatNumber(analytics.kpis.totalOrders), icon: ShoppingCart, color: 'bg-green-100 text-green-600' },
     { label: 'Total Revenue', value: formatCurrency(analytics.kpis.totalRevenue), icon: DollarSign, color: 'bg-emerald-100 text-emerald-600' },
+    { label: 'Commission Collected', value: formatCurrency(analytics.kpis.totalCommission), icon: Banknote, color: 'bg-cyan-100 text-cyan-600' },
+    { label: 'COD Orders', value: `${formatNumber(analytics.kpis.codOrders)} (${formatCurrency(analytics.kpis.codAmount)})`, icon: Truck, color: 'bg-amber-100 text-amber-600' },
+    { label: 'Pending Settlements', value: `${formatNumber(analytics.kpis.pendingSettlementCount)} (${formatCurrency(analytics.kpis.pendingSettlements)})`, icon: Activity, color: 'bg-yellow-100 text-yellow-600' },
     { label: 'Deliveries', value: formatNumber(analytics.kpis.totalDeliveries), icon: Truck, color: 'bg-indigo-100 text-indigo-600' },
-    { label: 'Returns', value: formatNumber(analytics.kpis.totalReturns), icon: RotateCcw, color: 'bg-red-100 text-red-600' },
-    { label: 'Platform Health', value: 'Active', icon: Activity, color: 'bg-teal-100 text-teal-600' },
+    { label: 'Active Partners', value: formatNumber(analytics.kpis.activePartners), icon: Users, color: 'bg-teal-100 text-teal-600' },
+    { label: 'SLA Breaches', value: formatNumber(analytics.kpis.slaBreaches), icon: AlertTriangle, color: 'bg-red-100 text-red-600' },
+    { label: 'Expired Orders', value: formatNumber(analytics.kpis.expiredOrders), icon: AlertTriangle, color: 'bg-red-100 text-red-600' },
+    { label: 'Returns', value: formatNumber(analytics.kpis.totalReturns), icon: RotateCcw, color: 'bg-pink-100 text-pink-600' },
   ];
 
   return (
@@ -117,7 +122,7 @@ export default function AdminAnalyticsPage() {
       </div>
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
         {kpiCards.map((card, index) => (
           <div key={index} className="bg-white p-5 rounded-xl border shadow-sm">
             <div className="flex items-center justify-between mb-3">

@@ -45,7 +45,7 @@ export default function AdminFinancePage() {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(amount || 0);
   };
 
-  const processSettlement = async (supplierId, amount, walletBalance) => {
+  const processSettlement = async (supplierId, amount, walletBalance, force = false) => {
     if (!amount || amount <= 0) {
       toast.error('Enter a valid amount');
       return;
@@ -59,13 +59,17 @@ export default function AdminFinancePage() {
       const res = await fetch('/api/admin/finance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'processSettlement', supplierId, amount: parseFloat(amount) }),
+        body: JSON.stringify({ action: 'processSettlement', supplierId, amount: parseFloat(amount), force }),
       });
       
       if (res.ok) {
         toast.success('Settlement processed successfully');
         fetchData();
         setSettleAmount(prev => ({ ...prev, [supplierId]: '' }));
+      } else if (res.status === 409) {
+        if (confirm('This supplier already has a settlement for this period. Process anyway?')) {
+          processSettlement(supplierId, amount, walletBalance, true);
+        }
       } else {
         const data = await res.json();
         toast.error(data.error || 'Failed to process settlement');
@@ -180,7 +184,7 @@ export default function AdminFinancePage() {
         <>
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
             <p className="text-sm text-yellow-800 font-medium">⚡ Settlement Rules</p>
-            <p className="text-xs text-yellow-700 mt-1">You can only settle up to the supplier's wallet balance. Commission is auto-deducted on every order.</p>
+            <p className="text-xs text-yellow-700 mt-1">You can only settle up to the supplier's wallet balance. Commission is auto-deducted on every order. Duplicate settlements in the same period will prompt for confirmation.</p>
           </div>
 
           <div className="relative mb-4">

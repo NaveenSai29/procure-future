@@ -34,7 +34,7 @@ export default function AdminSettingsPage() {
   const [deliveryForm, setDeliveryForm] = useState({
     vehicles: [], freeWeightUpTo: 5, weightChargePerKg: 3, maxWeight: 40000,
     freeDeliveryAbove: 4999, maxDistance: 200, platformFee: 5, gstPercent: 5,
-    codCharge: 30, expressMultiplier: 1.8, sameDayMultiplier: 2.0, minDeliveryFee: 20,
+    codCharge: 30, minDeliveryFee: 20,
     riderIconUrl: '',
     surgeEnabled: false, rainSurgeMultiplier: 1.5, autoWeatherEnabled: true, peakHours: [],
   });
@@ -92,8 +92,6 @@ export default function AdminSettingsPage() {
           platformFee: d.platformFee ?? prev.platformFee,
           gstPercent: d.gstPercent ?? prev.gstPercent,
           codCharge: d.codCharge ?? prev.codCharge,
-          expressMultiplier: d.expressMultiplier ?? prev.expressMultiplier,
-          sameDayMultiplier: d.sameDayMultiplier ?? prev.sameDayMultiplier,
           minDeliveryFee: d.minDeliveryFee ?? prev.minDeliveryFee,
           riderIconUrl: d.riderIconUrl ?? prev.riderIconUrl,
           surgeEnabled: d.surgeEnabled ?? prev.surgeEnabled,
@@ -257,8 +255,8 @@ export default function AdminSettingsPage() {
                 </div>
 
                 <div className="mb-4">
-                  <label className="text-xs font-medium text-gray-500">Max Weight (kg)</label>
-                  <input type="number" value={vehicle.maxWeight} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].maxWeight = parseInt(e.target.value) || 0; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="w-28 px-3 py-2 border rounded-lg mt-1 font-medium" />
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Max Weight (kg)</label>
+                  <input type="number" value={vehicle.maxWeight} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].maxWeight = parseInt(e.target.value) || 0; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="w-28 px-3 py-2 border rounded-lg font-medium" />
                 </div>
 
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -299,7 +297,7 @@ export default function AdminSettingsPage() {
               <div className="space-y-4">
                 <div><label className="text-sm font-medium">Free Weight (kg)</label><input type="number" value={deliveryForm.freeWeightUpTo} onChange={e => setDeliveryForm(prev => ({ ...prev, freeWeightUpTo: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
                 <div><label className="text-sm font-medium">Per Extra Kg (Rs)</label><input type="number" value={deliveryForm.weightChargePerKg} onChange={e => setDeliveryForm(prev => ({ ...prev, weightChargePerKg: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
-                <div><label className="text-sm font-medium">Max Weight (kg)</label><input type="number" value={deliveryForm.maxWeight} onChange={e => setDeliveryForm(prev => ({ ...prev, maxWeight: parseInt(e.target.value) || 40000 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                <div><label className="text-sm font-medium mb-1 block">Max Weight (kg)</label><input type="number" value={deliveryForm.maxWeight} onChange={e => setDeliveryForm(prev => ({ ...prev, maxWeight: parseInt(e.target.value) || 40000 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
               </div>
             </div>
             <div className="bg-white rounded-xl border shadow-sm p-6">
@@ -310,11 +308,6 @@ export default function AdminSettingsPage() {
                 <div><label className="text-sm font-medium">COD Charge (Rs)</label><input type="number" value={deliveryForm.codCharge} onChange={e => setDeliveryForm(prev => ({ ...prev, codCharge: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
               </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl border shadow-sm p-6"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-yellow-100 rounded-lg"><Clock className="h-5 w-5 text-yellow-600" /></div><h3 className="font-semibold text-gray-900">Express Delivery</h3></div><div><label className="text-sm font-medium">Multiplier</label><input type="number" step="0.1" value={deliveryForm.expressMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev,expressMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div></div>
-            <div className="bg-white rounded-xl border shadow-sm p-6"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-red-100 rounded-lg"><Clock className="h-5 w-5 text-red-600" /></div><h3 className="font-semibold text-gray-900">Same Day Delivery</h3></div><div><label className="text-sm font-medium">Multiplier</label><input type="number" step="0.1" value={deliveryForm.sameDayMultiplier} onChange={e => setDeliveryForm(prev => ({ ...prev, sameDayMultiplier: parseFloat(e.target.value) || 1 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div></div>
           </div>
 
           <div className="bg-white rounded-xl border shadow-sm p-6">
@@ -375,7 +368,7 @@ export default function AdminSettingsPage() {
               vehicles: deliveryForm.vehicles, freeWeightUpTo: deliveryForm.freeWeightUpTo, weightChargePerKg: deliveryForm.weightChargePerKg,
               maxWeight: deliveryForm.maxWeight, freeDeliveryAbove: deliveryForm.freeDeliveryAbove, maxDistance: deliveryForm.maxDistance,
               platformFee: deliveryForm.platformFee, gstPercent: deliveryForm.gstPercent, codCharge: deliveryForm.codCharge,
-              expressMultiplier: deliveryForm.expressMultiplier, sameDayMultiplier: deliveryForm.sameDayMultiplier, minDeliveryFee: deliveryForm.minDeliveryFee,
+              minDeliveryFee: deliveryForm.minDeliveryFee,
               surgeEnabled: deliveryForm.surgeEnabled, rainSurgeMultiplier: deliveryForm.rainSurgeMultiplier,
               autoWeatherEnabled: deliveryForm.autoWeatherEnabled, peakHours: deliveryForm.peakHours,
               riderIconUrl: deliveryForm.riderIconUrl,

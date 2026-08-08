@@ -464,4 +464,41 @@ export class DeliveryService {
       isRaining,
     };
   }
+
+  static async getMapETA({ originLat, originLng, destLat, destLng }) {
+    try {
+      const trafficInfo = await getTrafficMultiplier(originLat, originLng, destLat, destLng);
+      
+      if (trafficInfo) {
+        const durationMin = Math.round(trafficInfo.actualDurationSeconds / 60);
+        const distanceKm = trafficInfo.actualDistanceKm;
+        
+        let trafficLabel = '';
+        if (trafficInfo.isSevereTraffic) trafficLabel = 'Severe traffic';
+        else if (trafficInfo.isHeavyTraffic) trafficLabel = 'Heavy traffic';
+        
+        return {
+          distanceKm: distanceKm.toFixed(1),
+          durationMin,
+          isReal: true,
+          trafficLabel,
+          displayText: trafficLabel ? `${durationMin} min · ${trafficLabel}` : `${durationMin} min`,
+        };
+      }
+    } catch (e) {
+      console.log('Map ETA error:', e.message);
+    }
+    
+    const straightKm = haversineDistance(originLat, originLng, destLat, destLng);
+    if (!straightKm) return null;
+    const roadKm = straightKm * 1.4;
+    const mins = Math.max(2, Math.round(roadKm * 3));
+    return {
+      distanceKm: roadKm.toFixed(1),
+      durationMin: mins,
+      isReal: false,
+      trafficLabel: null,
+      displayText: `${mins} min`,
+    };
+  }
 }

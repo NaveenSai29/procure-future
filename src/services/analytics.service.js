@@ -207,7 +207,13 @@ export class AnalyticsService {
       productStats,
       productApprovals,
       deliveryStats,
-      returnStats
+      returnStats,
+      commissionStats,
+      pendingSettlements,
+      codOrders,
+      activePartners,
+      slaBreaches,
+      expiredOrders
     ] = await Promise.all([
       prisma.user.aggregate({ where: { isActive: true }, _count: true }),
       prisma.user.groupBy({ by: ['createdAt'], _count: true, orderBy: { createdAt: 'desc' }, take: 30 }),
@@ -218,7 +224,13 @@ export class AnalyticsService {
       prisma.product.aggregate({ _count: true }),
       prisma.product.groupBy({ by: ['isApproved'], _count: true }),
       prisma.delivery.groupBy({ by: ['status'], _count: true }),
-      prisma.returnRequest.groupBy({ by: ['status'], _count: true })
+      prisma.returnRequest.groupBy({ by: ['status'], _count: true }),
+      prisma.walletTransaction.aggregate({ where: { referenceType: 'COMMISSION', type: 'DEBIT' }, _sum: { amount: true } }),
+      prisma.settlement.aggregate({ where: { status: 'PENDING' }, _sum: { amount: true }, _count: true }),
+      prisma.order.aggregate({ where: { paymentMethod: 'COD' }, _sum: { totalAmount: true }, _count: true }),
+      prisma.deliveryPartner.count({ where: { isVerified: true } }),
+      prisma.orderSLA.count({ where: { status: 'BREACHED' } }),
+      prisma.order.count({ where: { status: 'EXPIRED' } }),
     ]);
 
     // Convert raw query results
@@ -265,6 +277,9 @@ export class AnalyticsService {
       _count: toNumber(u._count)
     }));
 
+    const totalCommission = toNumber(commissionStats._sum?.amount || 0);
+    const pendingSettlementAmount = toNumber(pendingSettlements._sum?.amount || 0);
+
     return {
       kpis: {
         totalUsers: toNumber(userStats._count),
@@ -273,7 +288,15 @@ export class AnalyticsService {
         totalOrders,
         totalRevenue,
         totalDeliveries,
-        totalReturns
+        totalReturns,
+        totalCommission,
+        pendingSettlements: pendingSettlementAmount,
+        pendingSettlementCount: toNumber(pendingSettlements._count || 0),
+        codOrders: toNumber(codOrders._count || 0),
+        codAmount: toNumber(codOrders._sum?.totalAmount || 0),
+        activePartners: activePartners,
+        slaBreaches,
+        expiredOrders,
       },
       supplierVerification: safeSupplierVerification,
       orderStats: safeOrderStats,

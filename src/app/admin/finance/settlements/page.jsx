@@ -29,17 +29,29 @@ export default function SettlementsPage() {
     }
   };
 
-  const handleProcess = async (settlementId) => {
+  const handleProcess = async (settlementId, force = false) => {
     try {
+      const settlement = settlements.find(s => s.id === settlementId);
+      if (settlement && settlement.status !== 'PENDING' && !force) {
+        if (confirm('This settlement is already processed. Process anyway?')) {
+          return handleProcess(settlementId, true);
+        }
+        return;
+      }
+
       const res = await fetch('/api/admin/finance/settlements', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settlementId, action: 'process' }),
+        body: JSON.stringify({ settlementId, action: 'process', force }),
       });
       const data = await res.json();
       if (data.success) {
         toast.success('Settlement processed!');
         fetchSettlements();
+      } else if (res.status === 409) {
+        if (confirm('This settlement is already processed. Process anyway?')) {
+          handleProcess(settlementId, true);
+        }
       } else {
         toast.error(data.message);
       }
@@ -49,7 +61,12 @@ export default function SettlementsPage() {
   };
 
   const formatCurrency = (amount) => `₹${(amount || 0).toLocaleString('en-IN')}`;
-  const formatDate = (date) => new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const formatDate = (date) => {
+    if (!date) return '-';
+    const d = new Date(date);
+    if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '-';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -98,6 +115,7 @@ export default function SettlementsPage() {
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 border-b">
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Supplier</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Partner</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Period</th>
@@ -108,9 +126,9 @@ export default function SettlementsPage() {
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400">Loading...</td></tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">Loading...</td></tr>
             ) : settlements.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">
                 <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
                 <p>No settlements found</p>
               </td></tr>
@@ -118,11 +136,16 @@ export default function SettlementsPage() {
               settlements.map(s => (
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <p className="text-sm font-semibold">{s.partner?.user?.name || s.partner?.vehicleType || 'Partner'}</p>
-                    <p className="text-xs text-gray-400">{s.partner?.user?.mobile}</p>
+                    <p className="text-sm font-semibold">{s.supplier?.businessName || 'Supplier'}</p>
+                    <p className="text-xs text-gray-400">{s.settlementFor?.replace('_', ' ') || 'SUPPLIER'}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-sm font-semibold">{s.partner?.user?.name || s.partner?.activeVehicle?.vehicleType || 'N/A'}</p>
+                    <p className="text-xs text-gray-400">{s.partner?.user?.mobile || ''}</p>
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-bold text-gray-900">{formatCurrency(s.amount)}</p>
+                    <p className="text-xs text-gray-400">{s.settlementType}</p>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {formatDate(s.periodStart)} - {formatDate(s.periodEnd)}
@@ -139,6 +162,11 @@ export default function SettlementsPage() {
                         className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700">
                         Process Payout
                       </button>
+                    )}
+                    {s.status === 'COMPLETED' && (
+                      <span className="text-xs text-gray-400">
+                        {s.processedBy ? 'Manual' : 'Auto'} • {s.processedAt ? formatDate(s.processedAt) : ''}
+                      </span>
                     )}
                   </td>
                 </tr>
