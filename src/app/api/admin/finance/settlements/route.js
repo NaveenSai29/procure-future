@@ -31,7 +31,6 @@ export async function GET(request) {
               user: { select: { id: true, name: true, mobile: true } },
             },
           },
-          processedByUser: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -41,8 +40,23 @@ export async function GET(request) {
       prisma.settlement.aggregate({ where: { status: 'PENDING' }, _sum: { amount: true } }),
     ]);
 
+    // Fetch processedBy user details separately
+    const processedByIds = [...new Set(settlements.map(s => s.processedBy).filter(Boolean))];
+    let userMap = {};
+    if (processedByIds.length > 0) {
+      const users = await prisma.user.findMany({
+        where: { id: { in: processedByIds } },
+        select: { id: true, name: true, email: true },
+      });
+      users.forEach(u => { userMap[u.id] = u; });
+    }
+
     return successResponse({
-      settlements: settlements.map(s => ({ ...s, amount: Number(s.amount) })),
+      settlements: settlements.map(s => ({ 
+        ...s, 
+        amount: Number(s.amount),
+        processedByUser: s.processedBy ? (userMap[s.processedBy] || null) : null,
+      })),
       stats: {
         pending: pendingCount,
         completed: completedCount,

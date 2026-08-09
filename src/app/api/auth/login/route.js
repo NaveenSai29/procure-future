@@ -1,10 +1,17 @@
 import prisma from "@/lib/prisma";
 import { loginSchema } from "@/lib/validators";
-import { comparePassword, generateAccessToken, generateRefreshToken, successResponse, errorResponse } from "@/lib/auth";
+import { comparePassword, generateAccessToken, generateRefreshToken, successResponse, errorResponse, checkBruteForce, recordFailedLogin } from "@/lib/auth";
+import { applyRateLimit } from "@/lib/rateLimiter";
 import { cookies } from "next/headers";
 
 export async function POST(request) {
   try {
+    // Rate limiting: 10 login attempts per minute per IP
+    const rateLimitResult = await applyRateLimit(request, 'login', 10, 60);
+    if (!rateLimitResult.allowed) {
+      return errorResponse("Too many login attempts. Please try again later.", 429);
+    }
+
     const body = await request.json();
     const parsed = loginSchema.safeParse(body);
 
@@ -35,13 +42,23 @@ export async function POST(request) {
       return errorResponse("Account is deactivated", 403);
     }
 
+    // Brute force check: is user locked out?
+    const bruteForceCheck = await checkBruteForce(user.id);
+    if (bruteForceCheck.locked) {
+      return errorResponse(
+        `Account temporarily locked. Please try again in ${bruteForceCheck.remainingMinutes} minutes.`,
+        429
+      );
+    }
+
     // Verify password
     const valid = await comparePassword(password, user.password);
     if (!valid) {
-      await prisma.loginHistory.create({
-        data: { userId: user.id, action: "FAILED" },
-      });
-      return errorResponse("Invalid credentials", 401);
+      const lockoutStatus = await recordFailedLogin(user.id);
+      const message = lockoutStatus.locked 
+        ? `Account locked. Try again in ${lockoutStatus.remainingMinutes} minutes.`
+        : `Invalid credentials. ${lockoutStatus.remainingAttempts} attempts remaining.`;
+      return errorResponse(message, 401);
     }
 
     // Update login info

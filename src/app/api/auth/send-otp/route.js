@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import { successResponse, errorResponse } from '@/lib/auth';
+import { applyRateLimit } from '@/lib/rateLimiter';
 import { z } from 'zod';
 
 const sendOtpSchema = z.object({
@@ -8,6 +9,12 @@ const sendOtpSchema = z.object({
 
 export async function POST(request) {
   try {
+    // Rate limiting: 3 OTP requests per 10 minutes per IP
+    const rateLimitResult = await applyRateLimit(request, 'send-otp', 3, 600);
+    if (!rateLimitResult.allowed) {
+      return errorResponse('Too many OTP requests. Please try again later.', 429);
+    }
+
     const body = await request.json();
     const validation = sendOtpSchema.safeParse(body);
     

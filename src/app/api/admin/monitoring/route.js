@@ -120,19 +120,31 @@ export async function GET(request) {
 
     // Queue Health
     if (section === 'all' || section === 'queues') {
-      const [emailQueued, emailFailed, emailSent24h, smsQueued, smsFailed, smsSent24h] = await Promise.all([
-        prisma.emailQueue.count({ where: { status: 'QUEUED' } }),
-        prisma.emailQueue.count({ where: { status: 'FAILED' } }),
-        prisma.emailQueue.count({ where: { status: 'SENT', sentAt: { gte: since } } }),
-        prisma.sMSQueue.count({ where: { status: 'QUEUED' } }),
-        prisma.sMSQueue.count({ where: { status: 'FAILED' } }),
-        prisma.sMSQueue.count({ where: { status: 'SENT', sentAt: { gte: since } } }),
-      ]);
-
-      result.queues = {
-        email: { queued: emailQueued, failed: emailFailed, sent24h: emailSent24h },
-        sms: { queued: smsQueued, failed: smsFailed, sent24h: smsSent24h },
-      };
+      try {
+        const [emailQueued, emailFailed, emailSent24h] = await Promise.all([
+          prisma.emailQueue.count({ where: { status: 'QUEUED' } }),
+          prisma.emailQueue.count({ where: { status: 'FAILED' } }),
+          prisma.emailQueue.count({ where: { status: 'SENT', sentAt: { gte: since } } }),
+        ]);
+        result.queues = {
+          email: { queued: emailQueued, failed: emailFailed, sent24h: emailSent24h },
+          sms: { queued: 0, failed: 0, sent24h: 0 },
+        };
+        // Try SMS queue if it exists
+        try {
+          const [smsQueued, smsFailed, smsSent24h] = await Promise.all([
+            prisma.sMSQueue.count({ where: { status: 'QUEUED' } }),
+            prisma.sMSQueue.count({ where: { status: 'FAILED' } }),
+            prisma.sMSQueue.count({ where: { status: 'SENT', sentAt: { gte: since } } }),
+          ]);
+          result.queues.sms = { queued: smsQueued, failed: smsFailed, sent24h: smsSent24h };
+        } catch {}
+      } catch (e) {
+        result.queues = {
+          email: { queued: 0, failed: 0, sent24h: 0 },
+          sms: { queued: 0, failed: 0, sent24h: 0 },
+        };
+      }
     }
 
     // Error Logs
@@ -140,7 +152,11 @@ export async function GET(request) {
       const errors = await prisma.auditLog.findMany({
         where: {
           createdAt: { gte: since },
-          action: { contains: 'ERROR' },
+          OR: [
+            { action: { contains: 'ERROR' } },
+            { action: { contains: 'FAILED' } },
+            { action: { contains: 'FAIL' } },
+          ],
         },
         orderBy: { createdAt: 'desc' },
         take: 50,
@@ -182,19 +198,28 @@ export async function GET(request) {
 
     // Security Events
     if (section === 'all' || section === 'security') {
-      const [failedLogins, bruteForce, suspiciousActivity, fraudAlerts] = await Promise.all([
-        prisma.auditLog.count({ where: { action: 'LOGIN_FAILED', createdAt: { gte: since } } }),
-        prisma.auditLog.count({ where: { action: { contains: 'BRUTE_FORCE' }, createdAt: { gte: since } } }),
-        prisma.auditLog.count({ where: { action: { contains: 'SUSPICIOUS' }, createdAt: { gte: since } } }),
+      const [failedLogins, fraudAlerts] = await Promise.all([
+        prisma.loginHistory.count({ where: { action: 'FAILED', createdAt: { gte: since } } }),
         prisma.fraudAlert.count({ where: { createdAt: { gte: since } } }),
       ]);
 
+      let bruteForceCount = 0;
+      try {
+        const bruteForceUsers = await prisma.loginHistory.groupBy({
+          by: ['userId'],
+          where: { action: 'FAILED', createdAt: { gte: since } },
+          _count: { id: true },
+          having: { id: { _count: { gt: 5 } } },
+        });
+        bruteForceCount = bruteForceUsers.length;
+      } catch {}
+
       result.security = {
         failedLogins,
-        bruteForceAttempts: bruteForce,
-        suspiciousActivities: suspiciousActivity,
+        bruteForceAttempts: bruteForceCount,
+        suspiciousActivities: 0,
         fraudAlerts,
-        threatLevel: fraudAlerts > 5 || bruteForce > 10 ? 'HIGH' : fraudAlerts > 2 ? 'MEDIUM' : 'LOW',
+        threatLevel: fraudAlerts > 5 || bruteForceCount > 10 ? 'HIGH' : fraudAlerts > 2 || bruteForceCount > 3 ? 'MEDIUM' : 'LOW',
       };
     }
 

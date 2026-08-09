@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
-import { generateAccessToken, generateRefreshToken, successResponse, errorResponse } from '@/lib/auth';
+import { generateAccessToken, generateRefreshToken, successResponse, errorResponse, checkBruteForce, recordFailedLogin } from '@/lib/auth';
+import { applyRateLimit } from '@/lib/rateLimiter';
 import { z } from 'zod';
 
 const verifyOtpSchema = z.object({
@@ -9,6 +10,12 @@ const verifyOtpSchema = z.object({
 
 export async function POST(request) {
   try {
+    // Rate limiting: 5 OTP attempts per 5 minutes per IP
+    const rateLimitResult = await applyRateLimit(request, 'otp-verify', 5, 300);
+    if (!rateLimitResult.allowed) {
+      return errorResponse('Too many OTP attempts. Please try again later.', 429);
+    }
+
     const body = await request.json();
     const validation = verifyOtpSchema.safeParse(body);
 
@@ -31,6 +38,15 @@ export async function POST(request) {
       return errorResponse('User not found', 404);
     }
 
+    // Brute force check: is user locked out?
+    const bruteForceCheck = await checkBruteForce(user.id);
+    if (bruteForceCheck.locked) {
+      return errorResponse(
+        `Account temporarily locked. Please try again in ${bruteForceCheck.remainingMinutes} minutes.`,
+        429
+      );
+    }
+
     // Find valid OTP
     const validOtp = await prisma.otp.findFirst({
       where: {
@@ -43,7 +59,11 @@ export async function POST(request) {
     });
 
     if (!validOtp) {
-      return errorResponse('Invalid or expired OTP', 401);
+      const lockoutStatus = await recordFailedLogin(user.id);
+      const message = lockoutStatus.locked 
+        ? `Account locked. Try again in ${lockoutStatus.remainingMinutes} minutes.`
+        : `Invalid or expired OTP. ${lockoutStatus.remainingAttempts} attempts remaining.`;
+      return errorResponse(message, 401);
     }
 
     // Mark OTP as used

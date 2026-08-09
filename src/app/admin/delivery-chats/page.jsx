@@ -13,14 +13,21 @@ export default function DeliveryChatsPage() {
   const chatEndRef = useRef(null);
   const pollRef = useRef(null);
 
-  useEffect(() => { fetchConversations(); return () => clearInterval(pollRef.current); }, []);
+  // Initial load + poll conversations every 10 seconds
+  useEffect(() => {
+    fetchConversations();
+    const convPoll = setInterval(() => fetchConversations(true), 10000);
+    return () => clearInterval(convPoll);
+  }, []);
 
-  // Poll messages every 5 seconds when chat is open
+  // Poll messages every 3 seconds when chat is open
   useEffect(() => {
     if (selectedPartner) {
       pollRef.current = setInterval(() => {
         fetchMessages(selectedPartner.id, true);
-      }, 5000);
+        // Also refresh conversation list to update unread counts
+        fetchConversations(true);
+      }, 3000);
     } else {
       clearInterval(pollRef.current);
     }
@@ -29,28 +36,40 @@ export default function DeliveryChatsPage() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (silent = false) => {
     try {
       const res = await fetch('/api/admin/delivery-chats');
       const data = await res.json();
       if (data.success) setConversations(data.data || []);
-    } catch (e) { toast.error('Failed to load chats'); }
-    finally { setLoading(false); }
+    } catch (e) { if (!silent) toast.error('Failed to load chats'); }
+    finally { if (!silent) setLoading(false); }
   };
 
   const fetchMessages = async (partnerId, silent = false) => {
-    if (!silent) setLoading(true);
     try {
       const res = await fetch(`/api/admin/delivery-chats?partnerId=${partnerId}`);
       const data = await res.json();
       if (data.success) setMessages(data.data || []);
     } catch (e) { if (!silent) toast.error('Failed to load messages'); }
-    finally { if (!silent) setLoading(false); }
   };
 
   const openChat = async (partner) => {
     setSelectedPartner(partner);
     await fetchMessages(partner.id);
+    // Mark messages as read
+    markAsRead(partner.id);
+    // Update local unread count immediately
+    setConversations(prev => prev.map(c => c.id === partner.id ? { ...c, unreadCount: 0 } : c));
+  };
+
+  const markAsRead = async (partnerId) => {
+    try {
+      await fetch('/api/admin/delivery-chats', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerId }),
+      });
+    } catch {}
   };
 
   const sendMessage = async () => {
@@ -68,11 +87,12 @@ export default function DeliveryChatsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partnerId: selectedPartner.id, message: text }),
       });
-      // Refresh to get server message
       setTimeout(() => fetchMessages(selectedPartner.id, true), 300);
     } catch (e) { toast.error('Failed to send'); }
     finally { setSending(false); }
   };
+
+  const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
 
   return (
     <div className="flex h-[calc(100vh-64px)]">
@@ -81,9 +101,16 @@ export default function DeliveryChatsPage() {
         <div className="p-4 border-b flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold text-gray-900">Partner Chats</h2>
-            <p className="text-xs text-gray-500">{conversations.length} conversations</p>
+            <p className="text-xs text-gray-500">
+              {conversations.length} conversations
+              {totalUnread > 0 && (
+                <span className="ml-2 bg-orange-500 text-white text-xs rounded-full px-2 py-0.5 font-medium">
+                  {totalUnread} unread
+                </span>
+              )}
+            </p>
           </div>
-          <button onClick={fetchConversations} className="p-2 hover:bg-gray-100 rounded-lg" title="Refresh">
+          <button onClick={() => fetchConversations()} className="p-2 hover:bg-gray-100 rounded-lg" title="Refresh">
             <RefreshCw className="h-4 w-4 text-gray-400" />
           </button>
         </div>
@@ -99,29 +126,42 @@ export default function DeliveryChatsPage() {
           ) : (
             conversations.map(c => (
               <button key={c.id} onClick={() => openChat(c)}
-                className={`w-full text-left p-4 border-b hover:bg-gray-50 transition-colors ${selectedPartner?.id === c.id ? 'bg-orange-50 border-l-2 border-l-orange-500' : ''}`}>
+                className={`w-full text-left p-4 border-b hover:bg-gray-50 transition-colors ${selectedPartner?.id === c.id ? 'bg-orange-50 border-l-2 border-l-orange-500' : c.unreadCount > 0 ? 'bg-blue-50' : ''}`}>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center font-bold text-orange-600 text-sm">
-                    {c.user?.name?.charAt(0)?.toUpperCase() || 'P'}
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center font-bold text-orange-600 text-sm">
+                      {c.user?.name?.charAt(0)?.toUpperCase() || 'P'}
+                    </div>
+                    {c.unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">
+                        {c.unreadCount}
+                      </span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{c.user?.name || 'Partner'}</p>
+                    <div className="flex items-center justify-between">
+                      <p className={`text-sm font-semibold truncate ${c.unreadCount > 0 ? 'text-gray-900' : 'text-gray-700'}`}>
+                        {c.user?.name || 'Partner'}
+                      </p>
+                      {c.lastMessage && (
+                        <span className="text-[10px] text-gray-400">
+                          {new Date(c.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-400 truncate">
                       <Bike className="h-3 w-3 inline mr-1" />
                       {c.vehicleType || 'N/A'}
                       {c.vehicleNumber ? ` • ${c.vehicleNumber}` : ''}
                     </p>
                     {c.lastMessage && (
-                      <p className="text-xs text-gray-400 truncate mt-0.5 italic">
-                        {c.lastMessage.message?.slice(0, 40)}...
+                      <p className={`text-xs truncate mt-0.5 ${c.unreadCount > 0 ? 'text-gray-800 font-medium' : 'text-gray-400 italic'}`}>
+                        {c.lastMessage.senderType === 'ADMIN' ? 'You: ' : ''}
+                        {c.lastMessage.message?.slice(0, 40)}
+                        {c.lastMessage.message?.length > 40 ? '...' : ''}
                       </p>
                     )}
                   </div>
-                  {c._count?.chats > 0 && (
-                    <span className="bg-orange-500 text-white text-xs rounded-full px-2 py-0.5 font-medium">
-                      {c._count.chats}
-                    </span>
-                  )}
                 </div>
               </button>
             ))

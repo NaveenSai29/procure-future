@@ -5,21 +5,22 @@ import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, Store, Package, ShoppingCart, Settings,
-  Shield, ChevronLeft, Bell, DollarSign, BarChart3, Truck,
-  RotateCcw, FileText, Activity, Database, FolderTree,
-  Building2, Megaphone, Building, CreditCard, Image,
-  HelpCircle, Globe, ShieldCheck, MessageSquare, FolderOpen, Hash, Receipt, Map,
+  Shield, ChevronLeft, Bell, BarChart3, Truck,
+  RotateCcw, Activity, Database,
+  Megaphone, CreditCard, Image,
+  Globe, ShieldCheck, MessageSquare, FolderOpen, Hash, Receipt, Map,
   BadgeCheck, Zap, AlertTriangle, Lock, ClipboardList, HeartHandshake,
   ScrollText, Tag, Layers, Landmark, Banknote, TrendingUp,
-  PieChart, Radio, ListTodo, Wrench, Cpu, Server, Key, LogOut, UserPlus, Wallet,
+  PieChart, Radio, ListTodo, Wrench, Server, Key, LogOut, UserPlus, Wallet,
+  Bike, Building2, IndianRupee, Users2, FileText,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const menuGroups = [
   {
-    group: "Overview",
+    group: "Dashboard",
     items: [
       { title: "Dashboard", href: "/admin", icon: LayoutDashboard, exact: true },
       { title: "Analytics", href: "/admin/analytics", icon: PieChart },
@@ -27,57 +28,67 @@ const menuGroups = [
     ],
   },
   {
-    group: "Management",
+    group: "Buyers",
     items: [
-      { title: "Users", href: "/admin/users", icon: Users },
+      { title: "Users / Buyers", href: "/admin/users", icon: Users },
+      { title: "RFQ Management", href: "/admin/rfq", icon: ClipboardList },
+      { title: "Messages", href: "/admin/messages", icon: MessageSquare },
+      { title: "Referrals", href: "/admin/referrals", icon: UserPlus },
+      { title: "Wallet", href: "/admin/wallet", icon: Wallet },
+    ],
+  },
+  {
+    group: "Suppliers",
+    items: [
       { title: "Suppliers", href: "/admin/suppliers", icon: Store },
       { title: "KYC Verification", href: "/admin/kyc", icon: ShieldCheck },
       { title: "Products", href: "/admin/products", icon: Package },
       { title: "Categories", href: "/admin/categories", icon: Layers },
       { title: "Brands", href: "/admin/brands", icon: Tag },
+      { title: "GST Verification", href: "/admin/gst", icon: BadgeCheck },
+      { title: "HSN Codes", href: "/admin/hsn", icon: Hash },
+      { title: "Supplier Settlements", href: "/admin/finance", icon: IndianRupee },
+    ],
+  },
+  {
+    group: "Orders & Delivery",
+    items: [
       { title: "Orders", href: "/admin/orders", icon: ShoppingCart },
+      { title: "Deliveries", href: "/admin/deliveries", icon: Truck },
+      { title: "Delivery Partners", href: "/admin/delivery-partners", icon: Bike },
+      { title: "Delivery Chats", href: "/admin/delivery-chats", icon: MessageSquare },
+      { title: "Delivery Settlements", href: "/admin/finance/settlements", icon: Banknote },
+      { title: "Live Map", href: "/admin/map", icon: Map },
+      { title: "Returns & Refunds", href: "/admin/returns", icon: RotateCcw },
     ],
   },
   {
     group: "Finance",
     items: [
-      { title: "Payments", href: "/admin/finance/payments", icon: Banknote },
-      { title: "Wallet", href: "/admin/wallet", icon: Wallet },
+      { title: "Payments", href: "/admin/finance/payments", icon: CreditCard },
       { title: "Bank Accounts", href: "/admin/finance/bank-accounts", icon: Landmark },
-      { title: "Finance Overview", href: "/admin/finance", icon: TrendingUp },
-      { title: "Delivery Settlements", href: "/admin/finance/settlements", icon: Banknote },
+      { title: "Tax Reports", href: "/admin/reports/tax", icon: Receipt },
     ],
   },
   {
-    group: "Operations",
+    group: "Marketing",
     items: [
-      { title: "RFQ Management", href: "/admin/rfq", icon: ClipboardList },
-      { title: "Messages", href: "/admin/messages", icon: MessageSquare },
-      { title: "Deliveries", href: "/admin/deliveries", icon: Truck },
-      { title: "Delivery Partners", href: "/admin/delivery-partners", icon: Users },
-      { title: "Delivery Chats", href: "/admin/delivery-chats", icon: MessageSquare },
-      { title: "Live Map", href: "/admin/map", icon: Map },
-      { title: "Returns & Refunds", href: "/admin/returns", icon: RotateCcw },
-      { title: "Support Tickets", href: "/admin/support", icon: HeartHandshake },
-      { title: "Referrals", href: "/admin/referrals", icon: UserPlus },
       { title: "Marketing", href: "/admin/marketing", icon: Radio },
+      { title: "Banners", href: "/admin/cms/banners", icon: Image },
+      { title: "Announcements", href: "/admin/cms/announcements", icon: Megaphone },
     ],
   },
   {
     group: "Content",
     items: [
-      { title: "CMS", href: "/admin/cms", icon: ScrollText },
-      { title: "Banners", href: "/admin/cms/banners", icon: Image },
-      { title: "Announcements", href: "/admin/cms/announcements", icon: Megaphone },
+      { title: "CMS Pages", href: "/admin/cms", icon: ScrollText },
       { title: "Media Library", href: "/admin/media", icon: FolderOpen },
     ],
   },
   {
-    group: "Compliance",
+    group: "Support",
     items: [
-      { title: "GST Verification", href: "/admin/gst", icon: BadgeCheck },
-      { title: "HSN Codes", href: "/admin/hsn", icon: Hash },
-      { title: "Tax Reports", href: "/admin/reports/tax", icon: Receipt },
+      { title: "Support Tickets", href: "/admin/support", icon: HeartHandshake },
     ],
   },
   {
@@ -85,11 +96,11 @@ const menuGroups = [
     items: [
       { title: "Settings", href: "/admin/settings", icon: Wrench },
       { title: "API Management", href: "/admin/api-management", icon: Key },
-      { title: "Monitoring", href: "/admin/monitoring", icon: BarChart3 },
+      { title: "Monitoring", href: "/admin/monitoring", icon: Activity },
+      { title: "System Health", href: "/admin/health", icon: Server },
       { title: "Fraud Detection", href: "/admin/fraud", icon: AlertTriangle },
       { title: "Security", href: "/admin/security", icon: Lock },
       { title: "Audit Logs", href: "/admin/audit-logs", icon: ListTodo },
-      { title: "System Health", href: "/admin/health", icon: Server },
     ],
   },
 ];
@@ -98,6 +109,7 @@ export default function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [unreadChats, setUnreadChats] = useState(0);
 
   // Build a Set of all menu hrefs for quick lookup
   const allMenuHrefs = useMemo(() => {
@@ -106,6 +118,20 @@ export default function AdminSidebar() {
       group.items.forEach(item => hrefs.add(item.href));
     });
     return hrefs;
+  }, []);
+
+  // Poll unread delivery chat count
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/admin/delivery-chats?unreadOnly=true');
+        const data = await res.json();
+        if (data.success) setUnreadChats(data.data?.unreadCount || 0);
+      } catch {}
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogout = async () => {
@@ -126,19 +152,14 @@ export default function AdminSidebar() {
     }
 
     // Check if this href is a PARENT of another menu item
-    // Example: /admin/finance is parent of /admin/finance/settlements
     const isParentRoute = Array.from(allMenuHrefs).some(
       otherHref => otherHref !== href && otherHref.startsWith(href + '/')
     );
 
     if (isParentRoute) {
-      // If this is a parent route, ONLY highlight on exact match
-      // Prevents /admin/finance from highlighting when on /admin/finance/settlements
       return pathname === href;
     }
 
-    // For leaf routes (no children), use prefix matching
-    // Example: /admin/analytics has no children, so highlight for /admin/analytics/anything
     return pathname === href || pathname.startsWith(href + '/');
   };
 
@@ -173,20 +194,35 @@ export default function AdminSidebar() {
             <div className="space-y-1">
               {group.items.map(({ title, href, icon: Icon, exact }) => {
                 const active = isActive(href, exact);
+                const isChats = href === '/admin/delivery-chats';
                 return (
                   <Link
                     key={href}
                     href={href}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
                       active
                         ? "bg-red-50 text-red-700"
                         : "text-muted-foreground hover:bg-accent hover:text-foreground"
                     )}
                     title={collapsed ? title : undefined}
                   >
-                    <Icon className="h-5 w-5 shrink-0" />
-                    {!collapsed && <span>{title}</span>}
+                    <div className="relative shrink-0">
+                      <Icon className="h-5 w-5" />
+                      {isChats && unreadChats > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[10px] rounded-full min-w-[16px] h-4 flex items-center justify-center px-1 font-bold leading-none">
+                          {unreadChats > 99 ? '99+' : unreadChats}
+                        </span>
+                      )}
+                    </div>
+                    {!collapsed && (
+                      <span className="flex-1">{title}</span>
+                    )}
+                    {isChats && unreadChats > 0 && !collapsed && (
+                      <span className="bg-orange-500 text-white text-xs rounded-full px-1.5 py-0.5 font-bold min-w-[18px] text-center">
+                        {unreadChats > 99 ? '99+' : unreadChats}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

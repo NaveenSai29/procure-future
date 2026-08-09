@@ -61,7 +61,7 @@ export async function GET() {
       totalUsers, activeUsers, totalSuppliers, totalProducts, totalOrders,
       todayOrders, todayRevenue, failedLogins,
       pendingKyc, openTickets, pendingReturns, pendingSettlements,
-      dbConnections, slowQueries, auditLogSize, mediaCount,
+      dbConnections, auditLogSize, mediaCount,
       lastHourOrders, lastHourUsers,
     ] = await Promise.all([
       prisma.user.count(),
@@ -71,8 +71,8 @@ export async function GET() {
       prisma.order.count(),
       prisma.order.count({ where: { createdAt: { gte: today } } }),
       prisma.order.aggregate({ where: { createdAt: { gte: today } }, _sum: { totalAmount: true } }),
-      prisma.auditLog.count({ where: { action: 'LOGIN_FAILED', createdAt: { gte: yesterday } } }),
-      prisma.kYCDocument.count({ where: { status: 'PENDING' } }),
+      prisma.loginHistory.count({ where: { action: 'FAILED', createdAt: { gte: yesterday } } }),
+      prisma.kYCDocument ? prisma.kYCDocument.count({ where: { status: 'PENDING' } }) : 0,
       prisma.supportTicket.count({ where: { status: 'OPEN' } }),
       prisma.returnRequest.count({ where: { status: 'PENDING' } }),
       prisma.settlement.count({ where: { status: 'PENDING' } }),
@@ -88,7 +88,10 @@ export async function GET() {
     const errorLogs = await prisma.auditLog.count({
       where: {
         createdAt: { gte: last24h },
-        action: { contains: 'ERROR' },
+        OR: [
+          { action: { contains: 'ERROR' } },
+          { action: { contains: 'FAILED' } },
+        ],
       },
     });
     const totalRequests24h = await prisma.auditLog.count({
@@ -96,14 +99,19 @@ export async function GET() {
     });
 
     // Queue health
-    const emailQueue = await prisma.emailQueue.count({ where: { status: 'QUEUED' } });
-    const emailFailed = await prisma.emailQueue.count({ where: { status: 'FAILED' } });
-    const smsQueue = await prisma.sMSQueue.count({ where: { status: 'QUEUED' } });
+    let emailQueue = 0, emailFailed = 0, smsQueue = 0;
+    try {
+      emailQueue = await prisma.emailQueue.count({ where: { status: 'QUEUED' } });
+      emailFailed = await prisma.emailQueue.count({ where: { status: 'FAILED' } });
+    } catch {}
+    try {
+      smsQueue = await prisma.sMSQueue.count({ where: { status: 'QUEUED' } });
+    } catch {}
 
     // Disk space (uploads)
     let uploadSize = "0 MB";
     try {
-      const result = execSync('du -sh src/uploads 2>/dev/null || echo "0"').toString().trim();
+      const result = execSync('du -sh public/uploads 2>/dev/null || echo "0"').toString().trim();
       uploadSize = result || "0 MB";
     } catch {
       uploadSize = "N/A";
