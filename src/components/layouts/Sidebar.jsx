@@ -33,7 +33,6 @@ const menuItems = [
     group: "Operations",
     items: [
       { title: "Branches", href: "/dashboard/supplier/branches", icon: Building2 },
-      { title: "Delivery", href: "/dashboard/supplier/delivery", icon: Truck },
       { title: "Messages", href: "/dashboard/supplier/messages", icon: MessageSquare },
       { title: "Customers", href: "/dashboard/supplier/customers", icon: Users },
       { title: "RFQ Marketplace", href: "/dashboard/supplier/rfq", icon: FileText },

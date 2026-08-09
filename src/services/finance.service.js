@@ -358,8 +358,8 @@ export class FinanceService {
   /**
    * Get admin finance overview
    */
-  static async getAdminFinanceOverview() {
-    const [totalRevenue, pendingSettlements, totalRefunds, invoiceStats, monthlyRevenue] = await Promise.all([
+    static async getAdminFinanceOverview() {
+    const [totalRevenue, pendingSettlements, totalRefunds, invoiceStats, monthlyRevenueRaw, totalOrders, avgOrderValue] = await Promise.all([
       prisma.order.aggregate({
         where: { status: { in: ['DELIVERED', 'COMPLETED'] } },
         _sum: { totalAmount: true }
@@ -381,29 +381,101 @@ export class FinanceService {
       prisma.$queryRaw`
         SELECT 
           DATE_FORMAT(createdAt, '%Y-%m') as month,
-          SUM(totalAmount) as revenue,
-          COUNT(*) as orders
+          CAST(SUM(totalAmount) AS DECIMAL(15,2)) as revenue,
+          CAST(COUNT(*) AS UNSIGNED) as orders
         FROM \`Order\`
         WHERE status IN ('DELIVERED', 'COMPLETED')
           AND createdAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
         GROUP BY DATE_FORMAT(createdAt, '%Y-%m')
         ORDER BY month ASC
-      `
+      `,
+      prisma.order.count({
+        where: { status: { in: ['DELIVERED', 'COMPLETED'] } }
+      }),
+      prisma.order.aggregate({
+        where: { status: { in: ['DELIVERED', 'COMPLETED'] } },
+        _avg: { totalAmount: true }
+      })
     ]);
 
+    // Convert BigInt/Decimal to plain numbers for JSON serialization
+    const monthlyRevenue = (monthlyRevenueRaw || []).map(row => ({
+      month: String(row.month),
+      revenue: Number(row.revenue || 0),
+      orders: Number(row.orders || 0)
+    }));
+
+    // Calculate trend
+    const last6Months = monthlyRevenue.slice(-6);
+    const trend = last6Months.length >= 2 
+      ? ((last6Months[last6Months.length - 1].revenue - last6Months[0].revenue) / Math.max(last6Months[0].revenue, 1) * 100).toFixed(1)
+      : 0;
+
     return {
-      totalRevenue: totalRevenue._sum.totalAmount || 0,
+      totalRevenue: Number(totalRevenue._sum.totalAmount || 0),
+      totalOrders: totalOrders,
+      averageOrderValue: Number(avgOrderValue._avg.totalAmount || 0),
       pendingSettlements: {
-        amount: pendingSettlements._sum.amount || 0,
+        amount: Number(pendingSettlements._sum.amount || 0),
         count: pendingSettlements._count
       },
-      totalRefunds: totalRefunds._sum.amount || 0,
-      invoiceStats,
-      monthlyRevenue
+      totalRefunds: Number(totalRefunds._sum.amount || 0),
+      invoiceStats: (invoiceStats || []).map(stat => ({
+        status: stat.status,
+        count: stat._count,
+        totalAmount: Number(stat._sum.totalAmount || 0)
+      })),
+      monthlyRevenue,
+      trend: Number(trend),
+      bestMonth: monthlyRevenue.length > 0 
+        ? monthlyRevenue.reduce((best, m) => m.revenue > best.revenue ? m : best, monthlyRevenue[0])
+        : null
     };
   }
 
-    static async processAutoSettlements() {
+  /**
+   * Get admin settlement history - all settlements with full details
+   */
+  static async getAdminSettlementHistory({ page = 1, limit = 50, status = null, settlementFor = null, supplierId = null } = {}) {
+    const where = {};
+    if (status) where.status = status;
+    if (settlementFor) where.settlementFor = settlementFor;
+    if (supplierId) where.supplierId = supplierId;
+
+    const [settlements, total] = await Promise.all([
+      prisma.settlement.findMany({
+        where,
+        include: {
+          supplier: { select: { id: true, businessName: true, email: true, mobile: true } },
+          partner: {
+            select: {
+              id: true,
+              activeVehicle: { select: { vehicleType: true, vehicleNumber: true } },
+              user: { select: { id: true, name: true, mobile: true } },
+            },
+          },
+          processedByUser: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.settlement.count({ where }),
+    ]);
+
+    // Convert BigInt amounts to Number
+    const serializedSettlements = settlements.map(s => ({
+      ...s,
+      amount: Number(s.amount),
+    }));
+
+    return {
+      settlements: serializedSettlements,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  static async processAutoSettlements() {
     const results = { supplier: { processed: 0, skipped: 0, errors: 0 }, partner: { processed: 0, skipped: 0, errors: 0 } };
 
     const dbSettings = await prisma.systemSetting.findMany({ where: { category: 'PAYMENT' } });

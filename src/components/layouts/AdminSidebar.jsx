@@ -13,7 +13,7 @@ import {
   ScrollText, Tag, Layers, Landmark, Banknote, TrendingUp,
   PieChart, Radio, ListTodo, Wrench, Cpu, Server, Key, LogOut, UserPlus, Wallet,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
@@ -99,6 +99,15 @@ export default function AdminSidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
 
+  // Build a Set of all menu hrefs for quick lookup
+  const allMenuHrefs = useMemo(() => {
+    const hrefs = new Set();
+    menuGroups.forEach(group => {
+      group.items.forEach(item => hrefs.add(item.href));
+    });
+    return hrefs;
+  }, []);
+
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     toast.success("Logged out");
@@ -106,12 +115,30 @@ export default function AdminSidebar() {
   };
 
   const isActive = (href, exact = false) => {
+    // Exact match requested
     if (exact) {
       return pathname === href;
     }
+
+    // Dashboard special case
     if (href === '/admin') {
       return pathname === '/admin';
     }
+
+    // Check if this href is a PARENT of another menu item
+    // Example: /admin/finance is parent of /admin/finance/settlements
+    const isParentRoute = Array.from(allMenuHrefs).some(
+      otherHref => otherHref !== href && otherHref.startsWith(href + '/')
+    );
+
+    if (isParentRoute) {
+      // If this is a parent route, ONLY highlight on exact match
+      // Prevents /admin/finance from highlighting when on /admin/finance/settlements
+      return pathname === href;
+    }
+
+    // For leaf routes (no children), use prefix matching
+    // Example: /admin/analytics has no children, so highlight for /admin/analytics/anything
     return pathname === href || pathname.startsWith(href + '/');
   };
 

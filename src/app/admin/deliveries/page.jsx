@@ -50,6 +50,7 @@ export default function AdminDeliveriesPage() {
   const [codMaxPending, setCodMaxPending] = useState(5000);
   const [codSecurityDeposit, setCodSecurityDeposit] = useState(1000);
   const [otpThreshold, setOtpThreshold] = useState(0);
+  const [deliveryCommissionRate, setDeliveryCommissionRate] = useState(10);
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => { fetchDeliveries(); fetchSettings(); }, [statusFilter, page]);
@@ -94,6 +95,9 @@ export default function AdminDeliveriesPage() {
         if (deliverySettingsData.codMaxPending) setCodMaxPending(parseFloat(deliverySettingsData.codMaxPending));
         if (deliverySettingsData.codSecurityDeposit) setCodSecurityDeposit(parseFloat(deliverySettingsData.codSecurityDeposit));
         if (deliverySettingsData.otpThreshold) setOtpThreshold(parseFloat(deliverySettingsData.otpThreshold));
+        if (data.settings?.DELIVERY_COMMISSION?.defaultRate) {
+          setDeliveryCommissionRate(parseFloat(data.settings.DELIVERY_COMMISSION.defaultRate));
+        }
       }
     } catch (e) { console.log('Settings load failed:', e); }
   };
@@ -474,9 +478,10 @@ export default function AdminDeliveriesPage() {
               <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
                 <p className="text-sm font-bold mb-2"><Wallet className="h-4 w-4 inline" /> Earnings</p>
                 <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-gray-600">Delivery Fee</span><span className="font-semibold">₹{selectedDelivery.order?.deliveryFee || 0}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Delivery Fee</span><span className="font-semibold">₹{(selectedDelivery.order?.deliveryFee || 0).toLocaleString('en-IN')}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Commission ({selectedDelivery.commissionRate || deliveryCommissionRate}%)</span><span className="text-red-500">-₹{Math.round((selectedDelivery.order?.deliveryFee || 0) * (selectedDelivery.commissionRate || deliveryCommissionRate) / 100).toLocaleString('en-IN')}</span></div>
                   <hr className="border-orange-200" />
-                  <div className="flex justify-between"><span className="font-bold">Partner Earns</span><span className="font-bold text-orange-700">₹{selectedDelivery.order?.deliveryFee || 0}</span></div>
+                  <div className="flex justify-between"><span className="font-bold">Partner Earns</span><span className="font-bold text-orange-700">₹{Math.round((selectedDelivery.order?.deliveryFee || 0) * (1 - (selectedDelivery.commissionRate || deliveryCommissionRate) / 100)).toLocaleString('en-IN')}</span></div>
                 </div>
               </div>
               {selectedDelivery.order?.paymentMethod === 'COD' && (

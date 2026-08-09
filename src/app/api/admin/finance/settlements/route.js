@@ -8,39 +8,45 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
+    const type = searchParams.get('type');
+    const supplierId = searchParams.get('supplierId');
+    const partnerId = searchParams.get('partnerId');
+    const limit = parseInt(searchParams.get('limit') || '50');
 
     const where = {};
     if (status) where.status = status;
+    if (type && type !== 'ALL') where.settlementFor = type;
+    if (supplierId && supplierId !== 'ALL') where.supplierId = supplierId;
+    if (partnerId && partnerId !== 'ALL') where.partnerId = partnerId;
 
     const [settlements, pendingCount, completedCount, totalAmount] = await Promise.all([
       prisma.settlement.findMany({
         where,
         include: {
-          supplier: { select: { id: true, businessName: true } },
+          supplier: { select: { id: true, businessName: true, email: true } },
           partner: {
             select: {
               id: true,
-              activeVehicle: {
-                select: { vehicleType: true },
-              },
+              activeVehicle: { select: { vehicleType: true, vehicleNumber: true } },
               user: { select: { id: true, name: true, mobile: true } },
             },
           },
+          processedByUser: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: 'desc' },
-        take: 50,
+        take: limit,
       }),
       prisma.settlement.count({ where: { status: 'PENDING' } }),
-      prisma.settlement.count({ where: { status: 'COMPLETED' } }),
+      prisma.settlement.count({ where: { status: 'PROCESSED' } }),
       prisma.settlement.aggregate({ where: { status: 'PENDING' }, _sum: { amount: true } }),
     ]);
 
     return successResponse({
-      settlements,
+      settlements: settlements.map(s => ({ ...s, amount: Number(s.amount) })),
       stats: {
         pending: pendingCount,
         completed: completedCount,
-        totalAmount: totalAmount._sum.amount || 0,
+        totalAmount: Number(totalAmount._sum.amount || 0),
       },
     });
   } catch (error) {
@@ -75,6 +81,7 @@ export async function PATCH(request) {
 
     return errorResponse('Invalid action', 400);
   } catch (error) {
-    return errorResponse('Failed to process settlement', 500);
+    console.error('Process settlement error:', error);
+    return errorResponse(error.message || 'Failed to process settlement', 500);
   }
 }

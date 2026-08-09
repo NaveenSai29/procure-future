@@ -6,7 +6,7 @@ import {
   Download, Filter, Calendar, IndianRupee,
   CheckCircle2, Clock, XCircle, RefreshCw,
   ArrowDownToLine, ArrowUpFromLine, Store, Send,
-  Loader2, Search,
+  Loader2, Search, History, ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -18,8 +18,18 @@ export default function AdminFinancePage() {
   const [settlingId, setSettlingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [settleAmount, setSettleAmount] = useState({});
+  const [selectedSupplierId, setSelectedSupplierId] = useState('ALL');
+  const [settlementHistory, setSettlementHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('');
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (activeTab === 'OVERVIEW') {
+      fetchSettlementHistory();
+    }
+  }, [selectedSupplierId, historyStatusFilter, activeTab]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -41,8 +51,32 @@ export default function AdminFinancePage() {
     } finally { setLoading(false); }
   };
 
+  const fetchSettlementHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      let url = '/api/admin/finance/settlements?limit=200';
+      if (historyStatusFilter) url += `&status=${historyStatusFilter}`;
+      if (selectedSupplierId !== 'ALL') url += `&supplierId=${selectedSupplierId}`;
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success) {
+        setSettlementHistory(data.data.settlements || []);
+      }
+    } catch (error) {
+      console.error('History fetch error:', error);
+    } finally { setHistoryLoading(false); }
+  };
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(amount || 0);
+  };
+
+  const formatDate = (date) => {
+    if (!date) return '-';
+    const d = new Date(date);
+    if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '-';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   const processSettlement = async (supplierId, amount, walletBalance, force = false) => {
@@ -65,6 +99,7 @@ export default function AdminFinancePage() {
       if (res.ok) {
         toast.success('Settlement processed successfully');
         fetchData();
+        fetchSettlementHistory();
         setSettleAmount(prev => ({ ...prev, [supplierId]: '' }));
       } else if (res.status === 409) {
         if (confirm('This supplier already has a settlement for this period. Process anyway?')) {
@@ -107,7 +142,7 @@ export default function AdminFinancePage() {
           <p className="text-gray-500 mt-1">Platform revenue, supplier settlements, and financial oversight</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={fetchData} className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 text-sm">
+          <button onClick={() => { fetchData(); if (activeTab === 'OVERVIEW') fetchSettlementHistory(); }} className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 text-sm">
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
         </div>
@@ -129,53 +164,122 @@ export default function AdminFinancePage() {
       {/* OVERVIEW TAB */}
       {activeTab === 'OVERVIEW' && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white p-5 rounded-xl border shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-lg"><IndianRupee className="h-5 w-5 text-green-600" /></div>
-                <div><p className="text-sm text-gray-500">Total Revenue</p><p className="text-xl font-bold">{formatCurrency(overview?.totalRevenue)}</p></div>
+          {/* Supplier Selector & Filters */}
+          <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex-1 min-w-[250px]">
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-2">Select Supplier</label>
+                <div className="relative">
+                  <select
+                    value={selectedSupplierId}
+                    onChange={(e) => setSelectedSupplierId(e.target.value)}
+                    className="w-full pl-4 pr-10 py-2.5 border rounded-lg text-sm appearance-none bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="ALL">All Suppliers</option>
+                    {suppliers.map(supplier => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.businessName} ({supplier.email})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
               </div>
-            </div>
-            <div className="bg-white p-5 rounded-xl border shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-lg"><Clock className="h-5 w-5 text-yellow-600" /></div>
-                <div><p className="text-sm text-gray-500">Pending Settlements</p><p className="text-xl font-bold">{formatCurrency(overview?.pendingSettlements?.amount)}</p></div>
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-xl border shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-lg"><ArrowUpFromLine className="h-5 w-5 text-red-600" /></div>
-                <div><p className="text-sm text-gray-500">Total Refunds</p><p className="text-xl font-bold">{formatCurrency(overview?.totalRefunds)}</p></div>
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-xl border shadow-sm">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg"><Store className="h-5 w-5 text-blue-600" /></div>
-                <div><p className="text-sm text-gray-500">Total Suppliers</p><p className="text-xl font-bold">{suppliers.length}</p></div>
+              <div className="flex items-end gap-2">
+                {['', 'PENDING', 'PROCESSED'].map(f => (
+                  <button key={f || 'ALL'}
+                    onClick={() => setHistoryStatusFilter(f)}
+                    className={`px-4 py-2.5 rounded-lg text-xs font-semibold border transition ${
+                      historyStatusFilter === f 
+                        ? 'bg-orange-500 text-white border-orange-500' 
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}>
+                    {f || 'All Status'}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
-          {overview?.monthlyRevenue && overview.monthlyRevenue.length > 0 && (
-            <div className="bg-white rounded-xl border shadow-sm p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">Monthly Revenue (12 Months)</h3>
-              <div className="space-y-2">
-                <div className="flex items-end gap-1 h-48">
-                  {overview.monthlyRevenue.map((month, index) => {
-                    const maxRevenue = Math.max(...overview.monthlyRevenue.map(m => m.revenue));
-                    const height = maxRevenue > 0 ? (month.revenue / maxRevenue * 100) : 0;
-                    return (
-                      <div key={index} className="flex-1 flex flex-col items-center gap-1" title={`${month.month}: ${formatCurrency(month.revenue)}`}>
-                        <span className="text-[10px] text-gray-400">{month.orders}</span>
-                        <div className="w-full bg-blue-500 rounded-t hover:bg-blue-600 transition cursor-pointer min-h-[4px]" style={{ height: `${Math.max(height, 2)}%` }}></div>
-                        <span className="text-[10px] text-gray-400 -rotate-45 mt-1">{month.month}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+          {/* Settlement History Table */}
+          <div className="bg-white rounded-xl border shadow-sm">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">
+                  {selectedSupplierId === 'ALL' 
+                    ? 'All Supplier Settlements' 
+                    : `Settlements: ${suppliers.find(s => s.id === selectedSupplierId)?.businessName || 'Supplier'}`
+                  }
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {settlementHistory.length} settlement(s) found
+                </p>
               </div>
             </div>
-          )}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Supplier</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Type</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Period</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Created</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Processed</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {historyLoading ? (
+                    <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">
+                      <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin" />
+                      <p>Loading settlements...</p>
+                    </td></tr>
+                  ) : settlementHistory.length === 0 ? (
+                    <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">
+                      <History className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">No settlement history found</p>
+                    </td></tr>
+                  ) : (
+                    settlementHistory.map(s => (
+                      <tr key={s.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-semibold text-gray-900">{s.supplier?.businessName || 'PROCURE'}</p>
+                          <p className="text-xs text-gray-400">{s.supplier?.email || ''}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-bold text-gray-900">{formatCurrency(s.amount)}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-1 text-xs rounded-full font-semibold capitalize bg-blue-100 text-blue-700">
+                            {s.settlementType?.replace('_', ' ').toLowerCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {formatDate(s.periodStart)} - {formatDate(s.periodEnd)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-1 text-xs rounded-full font-semibold ${
+                            s.status === 'PROCESSED' || s.status === 'COMPLETED'
+                              ? 'bg-green-100 text-green-700'
+                              : s.status === 'PENDING'
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-red-100 text-red-700'
+                          }`}>
+                            {s.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">{formatDate(s.createdAt)}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {s.processedAt ? formatDate(s.processedAt) : '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
 

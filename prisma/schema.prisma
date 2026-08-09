@@ -682,6 +682,7 @@ model Order {
     paymentMethod String               @default("ONLINE")
     razorpayPaymentId String?
     paymentDetails  Json?
+    supplierCommissionRate Float                @default(0)
     status        String               @default("PENDING")
     notes         String?
     createdAt     DateTime             @default(now())
@@ -786,6 +787,7 @@ model Delivery {
   id             String          @id @default(uuid())
   orderId        String          @unique
   partnerId      String
+  commissionRate Float            @default(0)
   status         String          @default("ASSIGNED")
   pickupTime     DateTime?
   deliveryTime   DateTime?

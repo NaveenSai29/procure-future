@@ -39,15 +39,29 @@ export async function GET(request) {
       where.createdAt = { gte: startDate, lt: endDate };
     }
 
-    const [deliveries, total] = await Promise.all([
+      const [deliveries, total] = await Promise.all([
       prisma.delivery.findMany({
         where,
-        include: {
+        select: {
+          id: true,
+          orderId: true,
+          partnerId: true,
+          status: true,
+          pickupTime: true,
+          deliveryTime: true,
+          otp: true,
+          signatureImage: true,
+          proofImage: true,
+          notes: true,
+          commissionRate: true,
+          createdAt: true,
+          updatedAt: true,
           order: {
             select: {
               id: true,
               totalAmount: true,
               deliveryFee: true,
+              supplierCommissionRate: true,
               paymentMethod: true,
               status: true,
               buyer: {

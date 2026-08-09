@@ -111,7 +111,7 @@ export default function AdminOrdersPage() {
 
   const exportCSV = () => {
     const orders = data?.orders || [];
-    const headers = ["Order ID", "Buyer", "Email", "Product", "Supplier", "Qty", "Amount", "Status", "Decline Reason", "Date"];
+    const headers = ["Order ID", "Buyer", "Email", "Product", "Supplier", "Qty", "Amount", "Commission", "Status", "Decline Reason", "Date"];
     const rows = orders.map((o) => [
       formatOrderId(o.id),
       o.buyer?.name || "N/A",
@@ -120,6 +120,7 @@ export default function AdminOrdersPage() {
       o.product?.supplier?.businessName || "N/A",
       o.quantity,
       o.totalAmount,
+      o.supplierCommissionRate > 0 ? `-${(o.totalAmount * o.supplierCommissionRate) / 100} (${o.supplierCommissionRate}%)` : '-',
       o.status,
       o.status === "DECLINED" ? (o.statusHistory?.[0]?.notes || "N/A") : "",
       new Date(o.createdAt).toLocaleDateString(),
@@ -252,6 +253,7 @@ export default function AdminOrdersPage() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Supplier</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Qty</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Commission</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -296,6 +298,13 @@ export default function AdminOrdersPage() {
                     </td>
                     <td className="px-4 py-3 text-sm">{o.quantity}</td>
                     <td className="px-4 py-3 text-sm font-semibold">{formatCurrency(o.totalAmount)}</td>
+                    <td className="px-4 py-3 text-sm">
+                      {o.supplierCommissionRate > 0 ? (
+                        <span className="text-red-600">-{formatCurrency((o.totalAmount * o.supplierCommissionRate) / 100)} <span className="text-xs text-gray-400">({o.supplierCommissionRate}%)</span></span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 text-xs rounded-full font-medium ${STATUS_COLORS[o.status] || "bg-gray-100"}`}>
                         {o.status}
@@ -324,7 +333,7 @@ export default function AdminOrdersPage() {
                 ))}
                 {orders.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+                    <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
                       <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
                       No orders found
                     </td>

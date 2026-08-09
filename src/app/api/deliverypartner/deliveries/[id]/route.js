@@ -161,8 +161,9 @@ export async function PATCH(request, { params }) {
           notes: notes || delivery.notes,
           signatureImage: signatureImage || delivery.signatureImage,
           proofImage: proofImage || delivery.proofImage,
+          commissionRate: deliveryCommRate,
         };
-        orderUpdate = { status: 'DELIVERED' };
+        orderUpdate = { status: 'DELIVERED', supplierCommissionRate: supplierCommRate };
         responseMessage = 'Order delivered successfully';
         break;
 
@@ -217,7 +218,8 @@ export async function PATCH(request, { params }) {
 
         // Calculate net earning after delivery commission
         const { CommissionService } = await import('@/services/commission.service');
-        const { netEarning } = await CommissionService.calculateDeliveryNetEarning(deliveryFee);
+        const { netEarning, commissionRate: deliveryCommRate } = await CommissionService.calculateDeliveryNetEarning(deliveryFee);
+        const supplierCommRate = await CommissionService.getSupplierCommissionRate();
 
         // Update or create partner wallet — track net earnings + COD
         await tx.partnerWallet.upsert({

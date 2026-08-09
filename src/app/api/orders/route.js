@@ -144,11 +144,14 @@ export async function GET(request) {
     // If supplier staff, calculate net amount after commission
     if (staff) {
       const { CommissionService } = await import('@/services/commission.service');
-      const commissionRate = await CommissionService.getSupplierCommissionRate();
-      const ordersWithNet = orders.map(order => ({
-        ...order,
-        netAmount: Math.round((order.totalAmount - (order.totalAmount * commissionRate / 100)) * 100) / 100,
-      }));
+      const liveCommissionRate = await CommissionService.getSupplierCommissionRate();
+      const ordersWithNet = orders.map(order => {
+        const rate = order.supplierCommissionRate || liveCommissionRate;
+        return {
+          ...order,
+          netAmount: Math.round((order.totalAmount - (order.totalAmount * rate / 100)) * 100) / 100,
+        };
+      });
       return successResponse({ orders: ordersWithNet, total, page, limit });
     }
 
