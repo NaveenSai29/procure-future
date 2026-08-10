@@ -16,7 +16,7 @@ export async function GET(request) {
       totalRFQs,
       statusBreakdown,
       categoryBreakdown,
-      topSuppliers,
+      topSupplierIds,
       monthlyRFQs,
       avgQuotationsPerRFQ
     ] = await Promise.all([
@@ -55,6 +55,20 @@ export async function GET(request) {
       category: categories.find(cat => cat.id === c.categoryId)?.name || 'Uncategorized',
       count: c._count,
       totalBudget: c._sum?.budgetMax || 0
+    }));
+
+    // Get supplier names for top suppliers
+    const supplierIds = topSupplierIds.map(s => s.supplierId).filter(Boolean);
+    const suppliers = await prisma.supplier.findMany({
+      where: { id: { in: supplierIds } },
+      select: { id: true, businessName: true }
+    });
+
+    const topSuppliers = topSupplierIds.map(s => ({
+      supplierId: s.supplierId,
+      supplierName: suppliers.find(sup => sup.id === s.supplierId)?.businessName || 'Unknown',
+      quoteCount: s._count,
+      totalAmount: s._sum?.totalAmount || 0
     }));
 
     return NextResponse.json({

@@ -30,11 +30,15 @@ export default function ChatMessage({ message }) {
     );
   }
 
-  const isCurrentUser = false; // You can pass this as prop if needed
+  // Admin messages: right-aligned, avatar on right
+  // Supplier/User messages: left-aligned, avatar on left
+  const isCurrentUser = isSupplier;
+  const alignRight = isAdmin;
 
   return (
-    <div className={`flex gap-3 my-4 ${isAdmin ? "flex-row-reverse" : ""}`}>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+    <div className={`flex gap-3 my-3 ${alignRight ? "flex-row-reverse" : "flex-row"}`}>
+      {/* Avatar */}
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
         isAdmin ? "bg-red-100" : "bg-blue-100"
       }`}>
         {isAdmin ? (
@@ -43,19 +47,24 @@ export default function ChatMessage({ message }) {
           <User className="h-4 w-4 text-blue-600" />
         )}
       </div>
-      <div className={`flex-1 max-w-[70%] ${isAdmin ? "text-right" : ""}`}>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-medium text-gray-700">
+
+      {/* Message Content */}
+      <div className={`flex flex-col ${alignRight ? "items-end" : "items-start"} max-w-[75%]`}>
+        {/* Name + Time */}
+        <div className={`flex items-center gap-2 mb-0.5 ${alignRight ? "flex-row-reverse" : "flex-row"}`}>
+          <span className="text-[11px] font-semibold text-gray-600">
             {message.sender?.name || (isAdmin ? "Support Team" : "You")}
           </span>
-          <span className="text-xs text-gray-400">
+          <span className="text-[10px] text-gray-400">
             {new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
-        <div className={`inline-block px-4 py-2 rounded-2xl text-sm ${
+
+        {/* Bubble */}
+        <div className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
           isAdmin
-            ? "bg-red-50 text-gray-800 rounded-tr-sm"
-            : "bg-blue-50 text-gray-800 rounded-tl-sm"
+            ? "bg-red-50 text-gray-800 rounded-tr-md"
+            : "bg-blue-50 text-gray-800 rounded-tl-md"
         }`}>
           {message.message}
         </div>

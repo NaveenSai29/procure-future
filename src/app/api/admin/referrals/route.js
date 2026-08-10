@@ -12,6 +12,18 @@ async function checkAdmin(session) {
   return userRoles.includes('SUPER_ADMIN') || userRoles.includes('ADMIN');
 }
 
+// Helper to get threshold from settings
+async function getPurchaseThreshold() {
+  try {
+    const setting = await prisma.systemSetting.findFirst({
+      where: { category: 'REFERRAL', key: 'purchase_threshold' },
+    });
+    return setting ? parseFloat(setting.value) : 5000;
+  } catch {
+    return 5000;
+  }
+}
+
 // GET - List all referrals with purchase stats
 export async function GET(request) {
   try {
@@ -30,7 +42,7 @@ export async function GET(request) {
     if (status === "PAID") where.status = "PAID";
     if (status === "PENDING") where.status = "PENDING";
 
-    const [referrals, total] = await Promise.all([
+    const [referrals, total, purchaseThreshold] = await Promise.all([
       prisma.referral.findMany({
         where,
         include: {
@@ -59,6 +71,7 @@ export async function GET(request) {
         take: limit,
       }),
       prisma.referral.count({ where }),
+      getPurchaseThreshold(),
     ]);
 
     // Enrich with purchase stats
@@ -87,7 +100,7 @@ export async function GET(request) {
           totalOrders: orderCount,
           deliveredOrders: deliveredCount,
           totalPurchaseValue: totalDelivered,
-          meetsCriteria: totalDelivered >= 5000, // Example: ₹5,000 threshold
+          meetsCriteria: totalDelivered >= purchaseThreshold,
         },
       };
     });
@@ -111,6 +124,7 @@ export async function GET(request) {
         totalRewardsGiven: totalRewards._sum?.rewardAmount || 0,
         pendingPayouts: registeredCount + purchasedCount,
       },
+      purchaseThreshold,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {

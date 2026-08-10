@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { RazorpayService } from '@/services/razorpay.service';
 import { CommissionService } from '@/services/commission.service';
 import { NotificationService } from '@/services/notification.service';
+import { ReferralService } from '@/services/referral.service';
 
 export async function POST(request) {
   try {
@@ -65,6 +66,13 @@ export async function POST(request) {
         CommissionService.processOrderCommission(orderId).catch((err) => {
           console.error('Commission processing error:', err.message);
         });
+
+        // Auto-process referral reward for buyer's first purchase
+        if (order.buyerId) {
+          ReferralService.processReferralReward(order.buyerId).catch((err) => {
+            console.error('Referral reward processing error:', err.message);
+          });
+        }
       }
     }
 

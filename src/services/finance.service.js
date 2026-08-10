@@ -206,7 +206,8 @@ export class FinanceService {
   }
 
   /**
-   * Process settlement - DEDUCT from wallet and optionally send via Razorpay Payout
+   * Process SUPPLIER settlement - DEDUCT from wallet and send via Razorpay Payout
+   * BLOCKS if supplier has no bank account
    */
   static async processSettlement(settlementId) {
     const settlement = await prisma.settlement.findUnique({
@@ -224,6 +225,12 @@ export class FinanceService {
     if (!settlement) throw new Error('Settlement not found');
     if (settlement.status !== 'PENDING') throw new Error('Settlement already processed');
 
+    // BLOCK: Supplier must have a bank account
+    const bankAccount = settlement.supplier.bankAccounts[0];
+    if (!bankAccount) {
+      throw new Error('Supplier has no bank account. Please add a bank account before processing settlement.');
+    }
+
     const wallet = settlement.supplier.wallet;
     if (!wallet) throw new Error('Supplier wallet not found');
 
@@ -231,8 +238,6 @@ export class FinanceService {
     if (wallet.balance < settlement.amount) {
       throw new Error(`Insufficient wallet balance. Available: ₹${wallet.balance}, Requested: ₹${settlement.amount}`);
     }
-
-    const bankAccount = settlement.supplier.bankAccounts[0];
 
     // Try actual Razorpay payout (works in production with real keys)
     let payoutResult = null;
@@ -313,6 +318,111 @@ export class FinanceService {
       status: 'PROCESSED',
       payoutId: payoutResult?.id || null,
       isRealPayout: !!payoutResult
+    };
+  }
+
+  /**
+   * Process DELIVERY PARTNER settlement
+   * Uses partner's bank account for Razorpay payout
+   */
+  static async processPartnerSettlement(settlementId) {
+    const settlement = await prisma.settlement.findUnique({
+      where: { id: settlementId },
+      include: {
+        partner: {
+          include: {
+            bankAccounts: { where: { isDefault: true }, take: 1 },
+            wallet: true,
+          }
+        }
+      }
+    });
+
+    if (!settlement) throw new Error('Settlement not found');
+    if (settlement.status !== 'PENDING') throw new Error('Settlement already processed');
+    if (settlement.settlementFor !== 'DELIVERY_PARTNER') throw new Error('Not a delivery partner settlement');
+
+    // BLOCK: Partner must have a bank account
+    const bankAccount = settlement.partner?.bankAccounts?.[0];
+    if (!bankAccount) {
+      throw new Error('Delivery partner has no bank account. Please add a bank account before processing settlement.');
+    }
+
+    const wallet = settlement.partner?.wallet;
+    if (!wallet) throw new Error('Partner wallet not found');
+
+    // Try Razorpay payout to partner's bank
+    let payoutResult = null;
+    try {
+      const { RazorpayService } = await import('@/services/razorpay.service');
+      
+      let fundAccountId = bankAccount?.razorpayFundAccountId;
+      
+      if (!fundAccountId && bankAccount) {
+        const fundAccount = await RazorpayService.createFundAccount({
+          accountHolder: bankAccount.accountHolder,
+          accountNumber: bankAccount.accountNumber,
+          ifsc: bankAccount.ifscCode,
+          bankName: bankAccount.bankName,
+        });
+        fundAccountId = fundAccount.id;
+        
+        await prisma.partnerBankAccount.update({
+          where: { id: bankAccount.id },
+          data: { razorpayFundAccountId: fundAccountId }
+        }).catch(() => {});
+      }
+
+      if (fundAccountId) {
+        payoutResult = await RazorpayService.createPayout({
+          fundAccountId,
+          amount: settlement.amount,
+          reference: `partner_settlement_${settlementId}`,
+          narration: `PROCURE Partner Settlement #${settlementId.slice(0, 8)}`,
+        });
+      }
+    } catch (payoutError) {
+      console.log('Partner payout not available:', payoutError.message);
+    }
+
+    const result = await prisma.$transaction([
+      prisma.settlement.update({
+        where: { id: settlementId },
+        data: {
+          status: 'PROCESSED',
+          processedAt: new Date(),
+          notes: payoutResult
+            ? `Razorpay Payout ID: ${payoutResult.id} | Mode: NEFT`
+            : settlement.notes || 'Settlement processed'
+        }
+      }),
+      // If COD settlement, reduce codPending
+      ...(settlement.settlementType === 'COD_COLLECTION' ? [
+        prisma.partnerWallet.update({
+          where: { id: wallet.id },
+          data: {
+            codPending: { decrement: settlement.amount },
+            codCollected: { decrement: settlement.amount },
+          }
+        })
+      ] : []),
+      // If delivery fee settlement, reduce totalEarned
+      ...(settlement.settlementType === 'DELIVERY_FEE' || settlement.settlementType === 'AUTO' ? [
+        prisma.partnerWallet.update({
+          where: { id: wallet.id },
+          data: {
+            totalEarned: { decrement: settlement.amount },
+          }
+        })
+      ] : []),
+    ]);
+
+    return {
+      settlementId,
+      amount: settlement.amount,
+      status: 'PROCESSED',
+      payoutId: payoutResult?.id || null,
+      isRealPayout: !!payoutResult,
     };
   }
 
@@ -492,21 +602,39 @@ export class FinanceService {
     else if (settlementCycle === 'MONTHLY') { periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1); periodEnd = new Date(now.getFullYear(), now.getMonth(), 0); }
     else { periodStart = new Date(now); periodStart.setDate(periodStart.getDate() - 1); periodEnd = now; }
 
-    // Supplier settlements
+    // Supplier settlements — only process if they have bank account
     try {
-      const wallets = await prisma.supplierWallet.findMany({ where: { balance: { gte: minSettlement } }, include: { supplier: { select: { id: true } } } });
+      const wallets = await prisma.supplierWallet.findMany({ 
+        where: { balance: { gte: minSettlement } }, 
+        include: { 
+          supplier: { 
+            select: { 
+              id: true,
+              bankAccounts: { where: { isDefault: true }, take: 1 }
+            } 
+          } 
+        } 
+      });
       for (const w of wallets) {
         try {
+          // Skip if no bank account
+          if (!w.supplier.bankAccounts || w.supplier.bankAccounts.length === 0) {
+            results.supplier.skipped++;
+            continue;
+          }
           const already = await FinanceService.hasExistingSettlement(w.supplierId, periodStart, periodEnd, 'SUPPLIER');
           if (already) { results.supplier.skipped++; continue; }
           const settlement = await FinanceService.createSettlement(w.supplierId, { amount: w.balance, settlementType: 'AUTO', settlementFor: 'SUPPLIER', notes: `Auto ${settlementCycle.toLowerCase()} settlement`, periodStart, periodEnd });
           await FinanceService.processSettlement(settlement.id);
           results.supplier.processed++;
-        } catch { results.supplier.errors++; }
+        } catch (e) { 
+          console.error('Supplier auto-settlement error:', e.message);
+          results.supplier.errors++; 
+        }
       }
     } catch { }
 
-    // Partner settlements - FIX: Include both codPending AND totalEarned
+    // Partner settlements — only process if they have bank account
     try {
       const pwallets = await prisma.partnerWallet.findMany({ 
         where: { 
@@ -515,25 +643,37 @@ export class FinanceService {
             { totalEarned: { gte: minSettlement } }
           ]
         }, 
-        include: { partner: { select: { id: true } } } 
+        include: { 
+          partner: { 
+            select: { 
+              id: true,
+              bankAccounts: { where: { isDefault: true }, take: 1 }
+            } 
+          } 
+        } 
       });
       const systemSupplier = await prisma.supplier.findFirst({ where: { businessName: 'PROCURE' } });
       for (const w of pwallets) {
         try {
+          // Skip if no bank account
+          if (!w.partner.bankAccounts || w.partner.bankAccounts.length === 0) {
+            results.partner.skipped++;
+            continue;
+          }
           const already = await FinanceService.hasExistingPartnerSettlement(w.partnerId, periodStart, periodEnd);
           if (already) { results.partner.skipped++; continue; }
           
           // Settle COD pending if any
           if (systemSupplier && w.codPending > 0) {
             const settlement = await FinanceService.createSettlement(systemSupplier.id, { amount: w.codPending, settlementType: 'AUTO', settlementFor: 'DELIVERY_PARTNER', partnerId: w.partnerId, notes: `Auto ${settlementCycle.toLowerCase()} COD settlement`, periodStart, periodEnd });
-            await FinanceService.processSettlement(settlement.id);
+            await FinanceService.processPartnerSettlement(settlement.id);
             results.partner.processed++;
           }
           
           // Settle delivery earnings if no COD pending but has earnings
           if (systemSupplier && w.codPending === 0 && w.totalEarned > 0) {
             const settlement = await FinanceService.createSettlement(systemSupplier.id, { amount: w.totalEarned, settlementType: 'AUTO', settlementFor: 'DELIVERY_PARTNER', partnerId: w.partnerId, notes: `Auto ${settlementCycle.toLowerCase()} delivery earnings settlement`, periodStart, periodEnd });
-            await FinanceService.processSettlement(settlement.id);
+            await FinanceService.processPartnerSettlement(settlement.id);
             results.partner.processed++;
           }
         } catch (e) { 

@@ -39,6 +39,15 @@ export async function GET(request) {
                 status: true, rejectionReason: true,
               },
             },
+            bankAccounts: {
+              select: {
+                id: true, accountHolder: true, accountNumber: true,
+                ifscCode: true, bankName: true, branchName: true,
+                isDefault: true, createdAt: true,
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
           },
         },
       },
@@ -58,7 +67,7 @@ export async function PATCH(request) {
     if (!session?.userId) return errorResponse('Unauthorized', 401);
 
     const body = await request.json();
-    const { name, licenseNumber, profileImage, licenseDoc, profilePhoto, selfieWithVehicle, activeVehicleId, vehicleType, vehicleNumber } = body;
+    const { name, licenseNumber, profileImage, licenseDoc, profilePhoto, selfieWithVehicle, activeVehicleId, vehicleType, vehicleNumber, bankAccount } = body;
 
     const userUpdateData = {};
     if (name) userUpdateData.name = name;
@@ -136,6 +145,36 @@ export async function PATCH(request) {
       }
     }
 
+    // Handle bank account update
+    if (bankAccount && partnerId) {
+      const { accountHolder, accountNumber, ifscCode, bankName, branchName } = bankAccount;
+      
+      if (accountHolder && accountNumber && ifscCode && bankName) {
+        const existingBank = await prisma.partnerBankAccount.findFirst({
+          where: { partnerId, isDefault: true },
+        });
+
+        if (existingBank) {
+          await prisma.partnerBankAccount.update({
+            where: { id: existingBank.id },
+            data: { accountHolder, accountNumber, ifscCode, bankName, branchName: branchName || null },
+          });
+        } else {
+          await prisma.partnerBankAccount.create({
+            data: {
+              partnerId,
+              accountHolder,
+              accountNumber,
+              ifscCode,
+              bankName,
+              branchName: branchName || null,
+              isDefault: true,
+            },
+          });
+        }
+      }
+    }
+
     const [user] = await Promise.all([
       prisma.user.update({
         where: { id: session.userId },
@@ -156,6 +195,7 @@ export async function PATCH(request) {
               vehicles: { select: { id: true, vehicleType: true, vehicleNumber: true, rcDocument: true, isVerified: true, verificationStatus: true, verificationNote: true }, orderBy: { createdAt: 'desc' } },
               activeVehicle: { select: { id: true, vehicleType: true, vehicleNumber: true, rcDocument: true, isVerified: true } },
               documentChecks: { select: { documentType: true, documentUrl: true, status: true, rejectionReason: true } },
+              bankAccounts: { select: { id: true, accountHolder: true, accountNumber: true, ifscCode: true, bankName: true, branchName: true, isDefault: true }, orderBy: { createdAt: 'desc' }, take: 1 },
             },
           },
         },

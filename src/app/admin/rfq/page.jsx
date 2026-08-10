@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   FileText, Search, Filter, Eye, Award, XCircle, CheckCircle,
@@ -25,8 +25,19 @@ export default function AdminRFQPage() {
   const [activeTab, setActiveTab] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1 });
+  const searchTimeout = useRef(null);
 
   useEffect(() => { fetchRFQs(); fetchAnalytics(); }, [activeTab, pagination.page]);
+
+  // Debounced search
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      setPagination(prev => ({ ...prev, page: 1 }));
+      fetchRFQs();
+    }, 400);
+    return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
+  }, [searchTerm]);
 
   const fetchRFQs = async () => {
     try {
@@ -140,10 +151,13 @@ export default function AdminRFQPage() {
             <div className="space-y-2">
               {analytics.topSuppliers?.slice(0, 5).map((s, i) => (
                 <div key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 truncate">{s.supplierId}</span>
-                  <span className="font-medium">{s._count} quotes</span>
+                  <span className="text-gray-600 truncate">{s.supplierName}</span>
+                  <span className="font-medium">{s.quoteCount} quotes</span>
                 </div>
               ))}
+              {(!analytics.topSuppliers || analytics.topSuppliers.length === 0) && (
+                <p className="text-xs text-gray-400">No data yet</p>
+              )}
             </div>
           </div>
           <div className="bg-white rounded-xl border p-4">
@@ -198,7 +212,6 @@ export default function AdminRFQPage() {
           placeholder="Search RFQs by title or buyer..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && fetchRFQs()}
           className="w-full pl-10 pr-4 py-2.5 border rounded-lg text-sm"
         />
       </div>
@@ -228,7 +241,7 @@ export default function AdminRFQPage() {
                         <FileText className="h-4 w-4 text-blue-500" />
                         <div>
                           <p className="font-medium text-sm text-gray-900">{rfq.title}</p>
-                          <p className="text-xs text-gray-400">{rfq.quantity} {rfq.unit} • {new Date(rfq.createdAt).toLocaleDateString()}</p>
+                          <p className="text-xs text-gray-400">{rfq.quantity} {rfq.unit} · {new Date(rfq.createdAt).toLocaleDateString()}</p>
                         </div>
                       </div>
                     </td>

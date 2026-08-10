@@ -83,7 +83,14 @@ export async function PATCH(request) {
       if (settlement.status !== 'PENDING' && !force) return errorResponse('Settlement already processed. Use force to override.', 409);
 
       const { FinanceService } = await import('@/services/finance.service');
-      const result = await FinanceService.processSettlement(settlementId);
+      
+      // Use partner settlement processor for delivery partner settlements
+      let result;
+      if (settlement.settlementFor === 'DELIVERY_PARTNER') {
+        result = await FinanceService.processPartnerSettlement(settlementId);
+      } else {
+        result = await FinanceService.processSettlement(settlementId);
+      }
       
       await prisma.settlement.update({
         where: { id: settlementId },

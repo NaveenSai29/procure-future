@@ -747,6 +747,7 @@ model DeliveryPartner {
   wallet           PartnerWallet?
   codDeposits      CODDeposit[]
   supplierAgents   SupplierAgent[]
+  bankAccounts      PartnerBankAccount[]
 }
 
 model PartnerVehicle {
@@ -828,6 +829,24 @@ model PartnerWallet {
 
   partner           DeliveryPartner @relation(fields: [partnerId], references: [id])
   deposits          CODDeposit[]
+
+  @@index([partnerId])
+}
+
+model PartnerBankAccount {
+  id            String   @id @default(uuid())
+  partnerId     String
+  accountHolder String
+  accountNumber String
+  ifscCode      String
+  bankName      String
+  branchName    String?
+  isDefault     Boolean  @default(true)
+  razorpayFundAccountId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  partner       DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   @@index([partnerId])
 }

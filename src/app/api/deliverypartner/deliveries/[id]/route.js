@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import { getSessionUser, successResponse, errorResponse } from '@/lib/auth';
+import { ReferralService } from '@/services/referral.service';
 
 // Generate 4-digit OTP
 function generateOTP() {
@@ -331,6 +332,13 @@ export async function PATCH(request, { params }) {
 
       return updatedDelivery;
     });
+
+    // Auto-process referral reward after delivery (outside transaction, non-blocking)
+    if (action === 'DELIVER' && delivery.order?.buyer?.id) {
+      ReferralService.processReferralReward(delivery.order.buyer.id).catch((err) => {
+        console.error('Referral reward error:', err.message);
+      });
+    }
 
     // Return OTP on pickup so partner can see it
     const responseData = { message: responseMessage, delivery: result };

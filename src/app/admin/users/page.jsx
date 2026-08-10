@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Mail, Phone, Search, Shield, Ban, CheckCircle, XCircle, UserCheck, Building, ShoppingBag } from 'lucide-react';
+import { 
+  Search, RefreshCw, Ban, CheckCircle, UserCheck, 
+  XCircle, Loader2, Users, ShoppingBag, Building, Bike, Shield,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminUsersPage() {
@@ -13,11 +16,13 @@ export default function AdminUsersPage() {
   useEffect(() => { fetchUsers(); }, []);
 
   const fetchUsers = async () => {
+    setLoading(true);
     try {
       const res = await fetch('/api/admin/users');
       const data = await res.json();
       if (data.success) setUsers(data.data);
-    } catch {} finally { setLoading(false); }
+    } catch { toast.error('Failed to load users'); } 
+    finally { setLoading(false); }
   };
 
   const handleToggleActive = async (userId, currentStatus) => {
@@ -43,66 +48,237 @@ export default function AdminUsersPage() {
   };
 
   const filtered = users.filter(u => {
-    const matchSearch = !searchTerm || u.name?.toLowerCase().includes(searchTerm.toLowerCase()) || u.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchSearch = !searchTerm || 
+      u.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (u.email && u.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      u.mobile?.includes(searchTerm);
     const matchType = !typeFilter || u.userType === typeFilter;
     return matchSearch && matchType;
   });
 
+  const counts = {
+    all: users.length,
+    buyer: users.filter(u => u.userType === 'Buyer').length,
+    supplier: users.filter(u => u.userType === 'Supplier').length,
+    delivery: users.filter(u => u.userType === 'Delivery Partner').length,
+    admin: users.filter(u => u.userType === 'Admin').length,
+  };
+
+  const filterTabs = [
+    { key: '', label: 'All', count: counts.all, icon: Users },
+    { key: 'Buyer', label: 'Buyers', count: counts.buyer, icon: ShoppingBag },
+    { key: 'Supplier', label: 'Suppliers', count: counts.supplier, icon: Building },
+    { key: 'Delivery Partner', label: 'Delivery', count: counts.delivery, icon: Bike },
+    { key: 'Admin', label: 'Admins', count: counts.admin, icon: Shield },
+  ];
+
+  const formatDate = (date) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <div><h1 className="text-2xl font-bold text-gray-900">Users</h1><p className="text-gray-500">{users.length} registered users</p></div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+          <p className="text-gray-500 text-sm mt-1">{users.length} registered users</p>
+        </div>
+        <button onClick={fetchUsers} className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg text-sm font-medium hover:bg-gray-50">
+          <RefreshCw className="h-4 w-4" /> Refresh
+        </button>
       </div>
 
-      <div className="bg-white rounded-xl border p-4 mb-4 flex gap-3">
-        <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><input type="text" placeholder="Search by name or email..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" /></div>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-2 border rounded-lg text-sm"><option value="">All Types</option><option value="Admin">Admin</option><option value="Supplier">Supplier</option><option value="Buyer">Buyer</option><option value="User">User</option></select>
+      {/* Filter Tabs */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
+        {filterTabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setTypeFilter(tab.key)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
+              typeFilter === tab.key
+                ? 'bg-white shadow text-gray-900'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <tab.icon className="h-4 w-4" />
+            {tab.label}
+            <span className="text-xs text-gray-400">({tab.count})</span>
+          </button>
+        ))}
       </div>
 
+      {/* Search */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <input 
+          type="text" 
+          placeholder="Search by name, email or mobile..." 
+          value={searchTerm} 
+          onChange={(e) => setSearchTerm(e.target.value)} 
+          className="w-full pl-10 pr-4 py-2.5 border rounded-lg text-sm" 
+        />
+        {searchTerm && (
+          <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <XCircle className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Table */}
       <div className="bg-white rounded-xl border overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b">
-            <tr><th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">User</th><th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Type</th><th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Contact</th><th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Verified</th><th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th><th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Joined</th><th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th></tr>
-          </thead>
-          <tbody className="divide-y">
-            {filtered.map(user => (
-              <tr key={user.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-xs font-bold text-gray-600">{user.name?.charAt(0)}</div>
-                    <div><p className="font-medium text-sm">{user.name}</p><div className="flex gap-1 mt-0.5">{user.roles.map(r => <span key={r} className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-xs">{r}</span>)}</div></div>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 text-xs rounded-full ${
-                    user.userType === 'Admin' ? 'bg-red-100 text-red-700' :
-                    user.userType === 'Supplier' ? 'bg-purple-100 text-purple-700' :
-                    'bg-blue-100 text-blue-700'
-                  }`}>{user.userType}</span>
-                  {user.supplierName && <p className="text-xs text-gray-400 mt-0.5">{user.supplierName}</p>}
-                </td>
-                <td className="px-4 py-3 text-sm">
-                  <div className="flex items-center gap-1"><Mail className="h-3 w-3 text-gray-400" />{user.email}</div>
-                  {user.mobile && <div className="flex items-center gap-1 text-xs text-gray-500"><Phone className="h-3 w-3" />{user.mobile}</div>}
-                </td>
-                <td className="px-4 py-3">
-                  {user.emailVerified ? <CheckCircle className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-400" />}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{user.isActive ? 'Active' : 'Inactive'}</span>
-                </td>
-                <td className="px-4 py-3 text-xs text-gray-500">{new Date(user.createdAt).toLocaleDateString()}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1">
-                    {!user.emailVerified && <button onClick={() => handleVerifyEmail(user.id)} className="p-1.5 hover:bg-green-50 rounded" title="Verify Email"><UserCheck className="h-4 w-4 text-green-500" /></button>}
-                    <button onClick={() => handleToggleActive(user.id, user.isActive)} className="p-1.5 hover:bg-gray-100 rounded" title={user.isActive ? 'Deactivate' : 'Activate'}>{user.isActive ? <Ban className="h-4 w-4 text-yellow-500" /> : <CheckCircle className="h-4 w-4 text-green-500" />}</button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 border-b">
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">User</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Details</th>
+                <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Joined</th>
+                <th className="text-center px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
-            ))}
-            {filtered.length === 0 && <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">No users found</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-16 text-center">
+                    <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin text-gray-400" />
+                    <p className="text-gray-400 text-sm">Loading users...</p>
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-16 text-center">
+                    <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-gray-500 text-sm font-medium">No users found</p>
+                    <p className="text-gray-400 text-xs mt-1">Try adjusting your search or filter</p>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map(user => (
+                  <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                    {/* User Name + Contact */}
+                    <td className="px-5 py-4">
+                      <div>
+                        <p className="font-semibold text-sm text-gray-900">{user.name || 'Unnamed'}</p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                          {user.email ? (
+                            <span className="flex items-center gap-1">
+                              {user.email}
+                              {user.emailVerified ? 
+                                <CheckCircle className="h-3 w-3 text-green-500" /> : 
+                                <span className="text-amber-500 font-medium">(Unverified)</span>
+                              }
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 italic">No email</span>
+                          )}
+                          {user.mobile && (
+                            <span>+91 {user.mobile}</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Type */}
+                    <td className="px-5 py-4">
+                      <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        user.userType === 'Admin' ? 'bg-red-50 text-red-700' :
+                        user.userType === 'Supplier' ? 'bg-purple-50 text-purple-700' :
+                        user.userType === 'Delivery Partner' ? 'bg-orange-50 text-orange-700' :
+                        'bg-blue-50 text-blue-700'
+                      }`}>
+                        {user.userType}
+                      </span>
+                    </td>
+
+                    {/* Details */}
+                    <td className="px-5 py-4">
+                      <div className="text-xs text-gray-500 space-y-0.5">
+                        {user.supplier && (
+                          <>
+                            <p className="font-medium text-gray-700">{user.supplier.businessName}</p>
+                            <p>{user.supplier.productCount} products · {user.supplier.isVerified ? 'Verified' : 'Pending'}</p>
+                          </>
+                        )}
+                        {user.deliveryPartner && (
+                          <>
+                            <p>
+                              {user.deliveryPartner.vehicle || 'No vehicle'} 
+                              {user.deliveryPartner.vehicleNumber && ` (${user.deliveryPartner.vehicleNumber})`}
+                            </p>
+                            <p>
+                              {user.deliveryPartner.totalDeliveries || 0} deliveries · Rating {user.deliveryPartner.rating?.toFixed(1) || '0.0'} 
+                              · {user.deliveryPartner.isVerified ? 'Verified' : 'Pending'}
+                              {user.deliveryPartner.isOnline && <span className="text-green-600 ml-1">· Online</span>}
+                            </p>
+                          </>
+                        )}
+                        {user.buyer && (
+                          <p>{user.buyer.orderCount || 0} orders</p>
+                        )}
+                        {!user.supplier && !user.deliveryPartner && !user.buyer && user.userType === 'Admin' && (
+                          <p className="text-gray-400">Platform administrator</p>
+                        )}
+                        {user.userType === 'User' && (
+                          <p className="text-gray-400">No profile</p>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-5 py-4 text-center">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                        user.isActive 
+                          ? 'bg-green-50 text-green-700' 
+                          : 'bg-red-50 text-red-700'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${user.isActive ? 'bg-green-500' : 'bg-red-500'}`} />
+                        {user.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+
+                    {/* Joined */}
+                    <td className="px-5 py-4 text-xs text-gray-500">
+                      {formatDate(user.createdAt)}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-center gap-1">
+                        {user.email && !user.emailVerified && (
+                          <button 
+                            onClick={() => handleVerifyEmail(user.id)} 
+                            className="p-2 rounded-lg hover:bg-green-50 transition" 
+                            title="Verify Email"
+                          >
+                            <UserCheck className="h-4 w-4 text-green-500" />
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => handleToggleActive(user.id, user.isActive)} 
+                          className="p-2 rounded-lg hover:bg-gray-100 transition" 
+                          title={user.isActive ? 'Deactivate' : 'Activate'}
+                        >
+                          {user.isActive ? 
+                            <Ban className="h-4 w-4 text-gray-400 hover:text-red-500" /> : 
+                            <CheckCircle className="h-4 w-4 text-gray-400 hover:text-green-500" />
+                          }
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {!loading && (
+          <div className="px-5 py-3 border-t bg-gray-50 text-xs text-gray-500">
+            Showing {filtered.length} of {users.length} users
+          </div>
+        )}
       </div>
     </div>
   );

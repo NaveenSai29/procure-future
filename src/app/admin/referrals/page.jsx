@@ -18,9 +18,11 @@ export default function AdminReferralsPage() {
   const [rewardAmount, setRewardAmount] = useState('');
   const [processing, setProcessing] = useState(false);
 
-  // Reward Setting
+  // Reward Settings
   const [rewardSetting, setRewardSetting] = useState('100');
+  const [thresholdSetting, setThresholdSetting] = useState('5000');
   const [savingReward, setSavingReward] = useState(false);
+  const [savingThreshold, setSavingThreshold] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -29,7 +31,12 @@ export default function AdminReferralsPage() {
       if (statusFilter !== 'ALL') params.append('status', statusFilter);
       const res = await fetch(`/api/admin/referrals?${params}`);
       const json = await res.json();
-      if (json.success) setData(json.data);
+      if (json.success) {
+        setData(json.data);
+        if (json.data.purchaseThreshold) {
+          setThresholdSetting(String(json.data.purchaseThreshold));
+        }
+      }
     } catch {
       toast.error('Failed to load referrals');
     } finally {
@@ -37,20 +44,25 @@ export default function AdminReferralsPage() {
     }
   }, [statusFilter]);
 
-  // Fetch reward setting from system settings
-  const fetchRewardSetting = async () => {
+  // Fetch settings from system settings
+  const fetchSettings = async () => {
     try {
       const res = await fetch('/api/admin/settings');
       const json = await res.json();
-      if (json.settings?.REFERRAL?.reward_amount) {
-        setRewardSetting(json.settings.REFERRAL.reward_amount);
+      if (json.settings?.REFERRAL) {
+        if (json.settings.REFERRAL.reward_amount) {
+          setRewardSetting(json.settings.REFERRAL.reward_amount);
+        }
+        if (json.settings.REFERRAL.purchase_threshold) {
+          setThresholdSetting(json.settings.REFERRAL.purchase_threshold);
+        }
       }
     } catch {}
   };
 
   useEffect(() => { 
     fetchData(); 
-    fetchRewardSetting();
+    fetchSettings();
   }, [fetchData]);
 
   // Save reward setting
@@ -65,34 +77,44 @@ export default function AdminReferralsPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-        category: 'REFERRAL',
-        settings: {
-          reward_amount: String(rewardSetting),
-        },
-      }),
+          category: 'REFERRAL',
+          settings: { reward_amount: String(rewardSetting) },
+        }),
       });
-      const json = await res.json();
-      if (json.success) {
-        toast.success(`Referral reward set to ₹${rewardSetting}!`);
-      } else {
-        // Try direct system setting update as fallback
-        await fetch('/api/admin/settings/referral', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            category: 'REFERRAL',
-            key: 'reward_amount',
-            value: String(rewardSetting),
-            description: 'Amount rewarded per successful referral (in INR)',
-          }),
-        });
+      if (res.ok) {
         toast.success(`Referral reward set to ₹${rewardSetting}!`);
       }
     } catch (err) {
-      console.error('Save reward error:', err);
-      toast.error('Failed to save. Try again.');
+      toast.error('Failed to save');
     } finally {
       setSavingReward(false);
+    }
+  };
+
+  // Save threshold setting
+  const handleSaveThreshold = async () => {
+    if (!thresholdSetting || parseInt(thresholdSetting) <= 0) {
+      toast.error('Enter valid threshold amount');
+      return;
+    }
+    setSavingThreshold(true);
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: 'REFERRAL',
+          settings: { purchase_threshold: String(thresholdSetting) },
+        }),
+      });
+      if (res.ok) {
+        toast.success(`Purchase threshold set to ₹${thresholdSetting}!`);
+        fetchData();
+      }
+    } catch (err) {
+      toast.error('Failed to save');
+    } finally {
+      setSavingThreshold(false);
     }
   };
 
@@ -128,7 +150,8 @@ export default function AdminReferralsPage() {
     }
   };
 
-  const handleUpdateStatus = async (referralId, status) => {
+  const handleUpdateStatus = async (referralId, status, referrerName) => {
+    if (!confirm(`Mark this referral as "${status}" for ${referrerName}?`)) return;
     try {
       const res = await fetch('/api/admin/referrals', {
         method: 'PATCH',
@@ -178,16 +201,17 @@ export default function AdminReferralsPage() {
         </button>
       </div>
 
-      {/* ========== REFERRAL REWARD SETTING ========== */}
-      <div className="bg-white rounded-xl border shadow-sm p-5 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-100 rounded-xl">
+      {/* ========== REFERRAL SETTINGS ========== */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Reward Amount Setting */}
+        <div className="bg-white rounded-xl border shadow-sm p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-amber-100 rounded-lg">
               <Gift className="h-5 w-5 text-amber-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">Default Referral Reward</h3>
-              <p className="text-sm text-gray-500">Amount credited to referrer's wallet when their friend makes first purchase</p>
+              <h3 className="font-semibold text-gray-900 text-sm">Reward Amount</h3>
+              <p className="text-xs text-gray-500">Paid to referrer on successful referral</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -197,27 +221,47 @@ export default function AdminReferralsPage() {
                 type="number"
                 value={rewardSetting}
                 onChange={(e) => setRewardSetting(e.target.value)}
-                className="w-28 pl-8 pr-3 py-2.5 border border-gray-300 rounded-lg text-lg font-bold text-center focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                className="w-28 pl-8 pr-3 py-2 border rounded-lg text-lg font-bold text-center"
                 min="1"
               />
             </div>
-            <button
-              onClick={handleSaveReward}
-              disabled={savingReward}
-              className="px-5 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2 transition"
-            >
-              {savingReward ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
-              ) : (
-                <>Save</>
-              )}
+            <button onClick={handleSaveReward} disabled={savingReward}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2">
+              {savingReward ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {savingReward ? 'Saving...' : 'Save'}
             </button>
           </div>
         </div>
-        <p className="text-xs text-gray-400 mt-2">
-          <Settings className="h-3 w-3 inline mr-1" />
-          This is the default amount. You can override it when paying individual referrals.
-        </p>
+
+        {/* Purchase Threshold Setting */}
+        <div className="bg-white rounded-xl border shadow-sm p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <ShoppingCart className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900 text-sm">Eligibility Threshold</h3>
+              <p className="text-xs text-gray-500">Minimum purchase amount to qualify for reward</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-sm">₹</span>
+              <input
+                type="number"
+                value={thresholdSetting}
+                onChange={(e) => setThresholdSetting(e.target.value)}
+                className="w-28 pl-8 pr-3 py-2 border rounded-lg text-lg font-bold text-center"
+                min="1"
+              />
+            </div>
+            <button onClick={handleSaveThreshold} disabled={savingThreshold}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+              {savingThreshold ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {savingThreshold ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Stats */}
@@ -372,7 +416,7 @@ export default function AdminReferralsPage() {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {r.status === 'REGISTERED' && (
-                          <button onClick={() => handleUpdateStatus(r.id, 'PURCHASED')}
+                          <button onClick={() => handleUpdateStatus(r.id, 'PURCHASED', r.referrer?.name)}
                             className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs hover:bg-purple-200">
                             Mark Purchased
                           </button>
