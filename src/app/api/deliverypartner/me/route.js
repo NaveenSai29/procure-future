@@ -43,7 +43,8 @@ export async function GET(request) {
               select: {
                 id: true, accountHolder: true, accountNumber: true,
                 ifscCode: true, bankName: true, branchName: true,
-                isDefault: true, createdAt: true,
+                upiId: true, isDefault: true, pennyDropVerified: true,
+                createdAt: true,
               },
               orderBy: { createdAt: 'desc' },
               take: 1,
@@ -147,29 +148,35 @@ export async function PATCH(request) {
 
     // Handle bank account update
     if (bankAccount && partnerId) {
-      const { accountHolder, accountNumber, ifscCode, bankName, branchName } = bankAccount;
+      const { accountHolder, accountNumber, ifscCode, bankName, branchName, upiId, pennyDropVerified } = bankAccount;
       
-      if (accountHolder && accountNumber && ifscCode && bankName) {
+      const hasBankDetails = accountHolder && accountNumber && ifscCode && bankName;
+      const hasUpi = !!upiId;
+      
+      if (hasBankDetails || hasUpi) {
         const existingBank = await prisma.partnerBankAccount.findFirst({
           where: { partnerId, isDefault: true },
         });
 
+        const bankData = {
+          accountHolder: accountHolder || null,
+          accountNumber: accountNumber || null,
+          ifscCode: ifscCode || null,
+          bankName: bankName || null,
+          branchName: branchName || null,
+          upiId: upiId || null,
+          isDefault: true,
+          ...(pennyDropVerified !== undefined && { pennyDropVerified }),
+        };
+
         if (existingBank) {
           await prisma.partnerBankAccount.update({
             where: { id: existingBank.id },
-            data: { accountHolder, accountNumber, ifscCode, bankName, branchName: branchName || null },
+            data: bankData,
           });
         } else {
           await prisma.partnerBankAccount.create({
-            data: {
-              partnerId,
-              accountHolder,
-              accountNumber,
-              ifscCode,
-              bankName,
-              branchName: branchName || null,
-              isDefault: true,
-            },
+            data: { partnerId, ...bankData },
           });
         }
       }
@@ -195,7 +202,7 @@ export async function PATCH(request) {
               vehicles: { select: { id: true, vehicleType: true, vehicleNumber: true, rcDocument: true, isVerified: true, verificationStatus: true, verificationNote: true }, orderBy: { createdAt: 'desc' } },
               activeVehicle: { select: { id: true, vehicleType: true, vehicleNumber: true, rcDocument: true, isVerified: true } },
               documentChecks: { select: { documentType: true, documentUrl: true, status: true, rejectionReason: true } },
-              bankAccounts: { select: { id: true, accountHolder: true, accountNumber: true, ifscCode: true, bankName: true, branchName: true, isDefault: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+              bankAccounts: { select: { id: true, accountHolder: true, accountNumber: true, ifscCode: true, bankName: true, branchName: true, upiId: true, isDefault: true, pennyDropVerified: true }, orderBy: { createdAt: 'desc' }, take: 1 },
             },
           },
         },

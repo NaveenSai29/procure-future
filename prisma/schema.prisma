@@ -423,18 +423,21 @@ model SupplierStaff {
 }
 
 model SupplierBankAccount {
-  id            String   @id @default(uuid())
-  supplierId    String
-  accountHolder String
-  accountNumber String
-  ifscCode      String
-  bankName      String
-  branchName    String?
-  isDefault     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+    id            String   @id @default(uuid())
+    supplierId    String
+    accountHolder String
+    accountNumber String
+    ifscCode      String
+    bankName      String
+    branchName    String?
+    isDefault     Boolean  @default(false)
+    pennyDropVerified Boolean @default(false)
+    verificationStatus String @default("PENDING")
+    razorpayFundAccountId String?
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
+  
+    supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 }
 
 model SupplierSettings {
@@ -841,8 +844,10 @@ model PartnerBankAccount {
   ifscCode      String
   bankName      String
   branchName    String?
+  upiId         String?
   isDefault     Boolean  @default(true)
   razorpayFundAccountId String?
+  pennyDropVerified Boolean @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

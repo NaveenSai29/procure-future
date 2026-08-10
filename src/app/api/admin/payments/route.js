@@ -11,71 +11,143 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'list';
-    const count = parseInt(searchParams.get('count') || '50');
+    const status = searchParams.get('status') || 'ALL';
+    const method = searchParams.get('method') || 'ALL';
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const limit = parseInt(searchParams.get('limit') || '100');
+    const page = parseInt(searchParams.get('page') || '1');
+
+    // Date filter
+    const dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.gte = new Date(startDate);
+      if (endDate) dateFilter.createdAt.lte = new Date(endDate + 'T23:59:59.999Z');
+    }
+
+    // Payment method filter
+    const methodFilter = {};
+    if (method !== 'ALL') {
+      methodFilter.paymentMethod = method;
+    }
 
     if (type === 'stats') {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const thisWeek = new Date(today);
+      thisWeek.setDate(thisWeek.getDate() - 7);
 
-      const [totalOrders, todayOrders, monthlyRevenue, totalRevenue, successfulPayments] = await Promise.all([
-        prisma.order.count(),
-        prisma.order.count({ where: { createdAt: { gte: today } } }),
-        prisma.order.aggregate({ where: { createdAt: { gte: thisMonth } }, _sum: { totalAmount: true } }),
-        prisma.order.aggregate({ _sum: { totalAmount: true } }),
-        prisma.auditLog.count({ where: { action: 'PAYMENT_RECEIVED' } }),
+      const [
+        totalPaidOrders,
+        totalPaidAmount,
+        todayOrders,
+        todayAmount,
+        weeklyAmount,
+        monthlyAmount,
+        codOrders,
+        codAmount,
+        onlineOrders,
+        onlineAmount,
+        refundedAmount,
+        methodBreakdown,
+      ] = await Promise.all([
+        prisma.order.count({ where: { razorpayPaymentId: { not: null } } }),
+        prisma.order.aggregate({ where: { razorpayPaymentId: { not: null } }, _sum: { totalAmount: true } }),
+        prisma.order.count({ where: { ...dateFilter, createdAt: { gte: today }, razorpayPaymentId: { not: null } } }),
+        prisma.order.aggregate({ where: { createdAt: { gte: today }, razorpayPaymentId: { not: null } }, _sum: { totalAmount: true } }),
+        prisma.order.aggregate({ where: { createdAt: { gte: thisWeek }, razorpayPaymentId: { not: null } }, _sum: { totalAmount: true } }),
+        prisma.order.aggregate({ where: { createdAt: { gte: thisMonth }, razorpayPaymentId: { not: null } }, _sum: { totalAmount: true } }),
+        prisma.order.count({ where: { paymentMethod: 'COD' } }),
+        prisma.order.aggregate({ where: { paymentMethod: 'COD' }, _sum: { totalAmount: true } }),
+        prisma.order.count({ where: { paymentMethod: 'ONLINE' } }),
+        prisma.order.aggregate({ where: { paymentMethod: 'ONLINE' }, _sum: { totalAmount: true } }),
+        prisma.refundTransaction.aggregate({ where: { status: 'SUCCESS' }, _sum: { amount: true } }),
+        prisma.order.groupBy({ by: ['paymentMethod'], _count: true, _sum: { totalAmount: true } }),
       ]);
 
       return NextResponse.json({
-        totalPayments: successfulPayments,
-        monthlyAmount: monthlyRevenue._sum?.totalAmount || 0,
+        totalPayments: totalPaidOrders,
+        totalRevenue: totalPaidAmount._sum?.totalAmount || 0,
         todayPayments: todayOrders,
-        todayAmount: 0,
-        totalRevenue: totalRevenue._sum?.totalAmount || 0,
+        todayAmount: todayAmount._sum?.totalAmount || 0,
+        weeklyAmount: weeklyAmount._sum?.totalAmount || 0,
+        monthlyAmount: monthlyAmount._sum?.totalAmount || 0,
+        codOrders: codOrders,
+        codAmount: codAmount._sum?.totalAmount || 0,
+        onlineOrders: onlineOrders,
+        onlineAmount: onlineAmount._sum?.totalAmount || 0,
+        refundedAmount: refundedAmount._sum?.amount || 0,
+        methodBreakdown: methodBreakdown.map(m => ({
+          method: m.paymentMethod,
+          count: m._count,
+          amount: m._sum?.totalAmount || 0,
+        })),
       });
     }
 
-    // List all payments from audit logs
-    const auditLogs = await prisma.auditLog.findMany({
-      where: { action: 'PAYMENT_RECEIVED' },
-      orderBy: { createdAt: 'desc' },
-      take: count,
-      select: {
-        id: true,
-        newValue: true,
-        createdAt: true,
-        userId: true,
-      },
+    // Build where clause for payments list
+    const where = { 
+      razorpayPaymentId: { not: null },
+      ...dateFilter,
+      ...methodFilter,
+    };
+
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        select: {
+          id: true,
+          totalAmount: true,
+          deliveryFee: true,
+          paymentMethod: true,
+          razorpayPaymentId: true,
+          paymentDetails: true,
+          status: true,
+          walletDeduction: true,
+          createdAt: true,
+          buyer: { select: { id: true, name: true, email: true, mobile: true } },
+          product: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    const payments = orders.map(order => ({
+      id: order.id,
+      orderId: order.id,
+      paymentId: order.razorpayPaymentId,
+      amount: order.totalAmount,
+      deliveryFee: order.deliveryFee,
+      method: order.paymentMethod === 'ONLINE' 
+        ? (order.paymentDetails?.method || 'Online')
+        : 'COD',
+      methodDetail: order.paymentDetails?.method || null,
+      bank: order.paymentDetails?.bank || null,
+      wallet: order.paymentDetails?.wallet || null,
+      vpa: order.paymentDetails?.vpa || null,
+      walletDeduction: order.walletDeduction || 0,
+      status: order.status === 'DELIVERED' || order.status === 'COMPLETED' ? 'captured' : 
+              order.status === 'CANCELLED' ? 'refunded' : 'captured',
+      buyerName: order.buyer?.name || 'Unknown',
+      buyerEmail: order.buyer?.email || null,
+      buyerMobile: order.buyer?.mobile || null,
+      productName: order.product?.name || 'N/A',
+      createdAt: order.createdAt,
+    }));
+
+    return NextResponse.json({ 
+      payments, 
+      total, 
+      page, 
+      totalPages: Math.ceil(total / limit),
     });
-
-    // Get user details separately
-    const userIds = [...new Set(auditLogs.map(log => log.userId).filter(Boolean))];
-    const users = userIds.length > 0 ? await prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, name: true, email: true },
-    }) : [];
-    
-    const userMap = {};
-    users.forEach(u => { userMap[u.id] = u; });
-
-    const payments = auditLogs.map(log => {
-      const usr = userMap[log.userId] || {};
-      return {
-        id: log.id,
-        paymentId: log.newValue?.razorpayPaymentId || log.id,
-        amount: log.newValue?.amount || 0,
-        method: log.newValue?.method || 'Online',
-        status: 'captured',
-        email: usr.email || 'N/A',
-        name: usr.name || 'N/A',
-        contact: log.newValue?.contact || '',
-        createdAt: log.createdAt,
-      };
-    });
-
-    return NextResponse.json({ items: payments, count: payments.length });
   } catch (error) {
     console.error('Admin payments error:', error);
-    return NextResponse.json({ items: [], count: 0, error: error.message }, { status: 500 });
+    return NextResponse.json({ payments: [], total: 0, error: error.message }, { status: 500 });
   }
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Package, Warehouse, DollarSign, TrendingUp, AlertTriangle, Plus, ArrowUp, ArrowDown } from "lucide-react";
+import { ShoppingCart, Package, Warehouse, DollarSign, TrendingUp, AlertTriangle, Plus, ArrowUp, ArrowDown, Megaphone, Info, X } from "lucide-react";
 import { toast } from "sonner";
 
 export default function DashboardPage() {
@@ -12,10 +12,13 @@ export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [supplier, setSupplier] = useState(null);
   const [stats, setStats] = useState(null);
+  const [announcements, setAnnouncements] = useState([]);
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchData();
+    fetchAnnouncements();
   }, []);
 
   const fetchData = async () => {
@@ -56,6 +59,29 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchAnnouncements = async () => {
+    try {
+      const res = await fetch('/api/admin/cms/announcements');
+      const data = await res.json();
+      if (data.announcements) {
+        // Show only active announcements targeted to ALL or SUPPLIERS
+        const now = new Date();
+        const relevant = data.announcements.filter(a => {
+          if (a.isActive === false) return false;
+          if (a.targetUsers && a.targetUsers !== 'ALL' && a.targetUsers !== 'SUPPLIERS') return false;
+          if (a.startDate && new Date(a.startDate) > now) return false;
+          if (a.endDate && new Date(a.endDate) < now) return false;
+          return true;
+        });
+        setAnnouncements(relevant);
+      }
+    } catch {}
+  };
+
+  const dismissAnnouncement = (id) => {
+    setDismissedAnnouncements(prev => [...prev, id]);
   };
 
   if (loading) {
@@ -133,6 +159,8 @@ export default function DashboardPage() {
     },
   ];
 
+  const visibleAnnouncements = announcements.filter(a => !dismissedAnnouncements.includes(a.id));
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -151,6 +179,32 @@ export default function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      {/* Announcements */}
+      {visibleAnnouncements.length > 0 && (
+        <div className="space-y-2">
+          {visibleAnnouncements.map(a => {
+            const colors = {
+              INFO: 'bg-blue-50 border-blue-200 text-blue-800',
+              WARNING: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+              SUCCESS: 'bg-green-50 border-green-200 text-green-800',
+              MAINTENANCE: 'bg-orange-50 border-orange-200 text-orange-800',
+            };
+            return (
+              <div key={a.id} className={`${colors[a.type] || colors.INFO} border rounded-xl p-4 flex items-start gap-3`}>
+                <Megaphone className="h-5 w-5 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-semibold text-sm">{a.title}</p>
+                  <p className="text-sm mt-0.5 opacity-80">{a.content}</p>
+                </div>
+                <button onClick={() => dismissAnnouncement(a.id)} className="p-1 hover:bg-black/5 rounded flex-shrink-0">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

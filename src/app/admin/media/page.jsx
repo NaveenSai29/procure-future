@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  FolderOpen, Search, Trash2, Image, FileText,
-  AlertTriangle, Loader2, X, Download, RefreshCw, ExternalLink,
+  FolderOpen, Search, Trash2, Image, FileText, Upload,
+  AlertTriangle, Loader2, X, Download, RefreshCw, ExternalLink, Plus, Copy, Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import MediaGrid from "@/components/media/MediaGrid";
@@ -26,6 +26,13 @@ export default function AdminMediaPage() {
   const [previewFile, setPreviewFile] = useState(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [scanning, setScanning] = useState(false);
+
+  // Upload state
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedUrl, setUploadedUrl] = useState("");
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const fileInputRef = useRef(null);
 
   const fetchMedia = useCallback(async () => {
     setLoading(true);
@@ -53,8 +60,7 @@ export default function AdminMediaPage() {
       const res = await fetch("/api/admin/media/scan", { method: "POST" });
       const json = await res.json();
       if (json.success) {
-        const msg = json.data?.message || json.message || "Scan complete!";
-        toast.success(msg);
+        toast.success(json.data?.message || "Scan complete!");
         fetchMedia();
       } else {
         toast.error(json.error || "Scan failed");
@@ -63,6 +69,44 @@ export default function AdminMediaPage() {
       toast.error("Scan failed");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadedUrl("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "GENERAL");
+      formData.append("entityId", "manual-upload");
+
+      const res = await fetch("/api/admin/media/upload", { method: "POST", body: formData });
+      const json = await res.json();
+      if (json.success) {
+        setUploadedUrl(json.url);
+        toast.success("File uploaded!");
+        fetchMedia();
+      } else {
+        toast.error(json.error || "Upload failed");
+      }
+    } catch {
+      toast.error("Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const copyUrl = () => {
+    if (uploadedUrl) {
+      const fullUrl = window.location.origin + uploadedUrl;
+      navigator.clipboard.writeText(fullUrl);
+      setCopiedUrl(true);
+      toast.success("URL copied!");
+      setTimeout(() => setCopiedUrl(false), 2000);
     }
   };
 
@@ -121,6 +165,12 @@ export default function AdminMediaPage() {
               Delete ({selectedIds.length})
             </button>
           )}
+          <button
+            onClick={() => setShowUpload(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition flex items-center gap-2"
+          >
+            <Upload className="h-4 w-4" /> Upload (Max 5MB)
+          </button>
           <button
             onClick={handleScan}
             disabled={scanning}
@@ -227,6 +277,63 @@ export default function AdminMediaPage() {
           >
             Next
           </button>
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUpload && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowUpload(false)}>
+          <div className="bg-white rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Upload File</h3>
+              <button onClick={() => { setShowUpload(false); setUploadedUrl(""); }} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {!uploadedUrl ? (
+              <div className="space-y-4">
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition"
+                >
+                  {uploading ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                      <p className="text-sm text-gray-500">Uploading...</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="h-10 w-10 text-gray-400" />
+                      <p className="text-sm font-medium text-gray-700">Click to select file</p>
+                      <p className="text-xs text-gray-400">Images, PDFs, documents • Max 5MB</p>
+                    </div>
+                  )}
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} accept="image/*,.pdf,.doc,.docx" />
+                </div>
+                <button onClick={() => { setShowUpload(false); setUploadedUrl(""); }} className="w-full py-2.5 border rounded-lg text-sm font-medium">
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                  <Check className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-green-700">Upload Successful!</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3 flex items-center justify-between">
+                  <code className="text-xs font-mono text-gray-700 truncate flex-1">{uploadedUrl}</code>
+                  <button onClick={copyUrl} className="ml-2 p-1.5 hover:bg-gray-200 rounded-lg flex-shrink-0">
+                    {copiedUrl ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-gray-500" />}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400">Full URL: <code className="text-blue-600">{window.location.origin}{uploadedUrl}</code></p>
+                <button onClick={() => { setShowUpload(false); setUploadedUrl(""); }} className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

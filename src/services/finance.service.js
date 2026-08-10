@@ -323,7 +323,8 @@ export class FinanceService {
 
   /**
    * Process DELIVERY PARTNER settlement
-   * Uses partner's bank account for Razorpay payout
+   * Priority: Verified Bank > UPI > Unverified Bank
+   * SAFE: Only deducts wallet after successful payout
    */
   static async processPartnerSettlement(settlementId) {
     const settlement = await prisma.settlement.findUnique({
@@ -342,58 +343,149 @@ export class FinanceService {
     if (settlement.status !== 'PENDING') throw new Error('Settlement already processed');
     if (settlement.settlementFor !== 'DELIVERY_PARTNER') throw new Error('Not a delivery partner settlement');
 
-    // BLOCK: Partner must have a bank account
+    // BLOCK: Partner must have a bank account or UPI
     const bankAccount = settlement.partner?.bankAccounts?.[0];
     if (!bankAccount) {
-      throw new Error('Delivery partner has no bank account. Please add a bank account before processing settlement.');
+      throw new Error('Delivery partner has no bank account or UPI. Please add payment details before processing settlement.');
+    }
+
+    // Must have either bank details or UPI
+    const hasBank = bankAccount.accountNumber && bankAccount.ifscCode;
+    const hasUpi = !!bankAccount.upiId;
+    
+    if (!hasBank && !hasUpi) {
+      throw new Error('Delivery partner has no bank account or UPI. Please add payment details before processing settlement.');
     }
 
     const wallet = settlement.partner?.wallet;
     if (!wallet) throw new Error('Partner wallet not found');
 
-    // Try Razorpay payout to partner's bank
+    // TRY PAYOUT FIRST (before deducting wallet)
     let payoutResult = null;
+    let payoutMode = 'NEFT';
+    let payoutError = null;
+    
     try {
       const { RazorpayService } = await import('@/services/razorpay.service');
       
-      let fundAccountId = bankAccount?.razorpayFundAccountId;
-      
-      if (!fundAccountId && bankAccount) {
-        const fundAccount = await RazorpayService.createFundAccount({
-          accountHolder: bankAccount.accountHolder,
-          accountNumber: bankAccount.accountNumber,
-          ifsc: bankAccount.ifscCode,
-          bankName: bankAccount.bankName,
-        });
-        fundAccountId = fundAccount.id;
+      // Priority 1: Verified bank account
+      if (hasBank && bankAccount.pennyDropVerified) {
+        let fundAccountId = bankAccount.razorpayFundAccountId;
         
-        await prisma.partnerBankAccount.update({
-          where: { id: bankAccount.id },
-          data: { razorpayFundAccountId: fundAccountId }
-        }).catch(() => {});
-      }
+        if (!fundAccountId) {
+          const fundAccount = await RazorpayService.createFundAccount({
+            accountHolder: bankAccount.accountHolder,
+            accountNumber: bankAccount.accountNumber,
+            ifsc: bankAccount.ifscCode,
+            bankName: bankAccount.bankName,
+          });
+          fundAccountId = fundAccount.id;
+          
+          await prisma.partnerBankAccount.update({
+            where: { id: bankAccount.id },
+            data: { razorpayFundAccountId: fundAccountId }
+          }).catch(() => {});
+        }
 
-      if (fundAccountId) {
-        payoutResult = await RazorpayService.createPayout({
-          fundAccountId,
-          amount: settlement.amount,
-          reference: `partner_settlement_${settlementId}`,
-          narration: `PROCURE Partner Settlement #${settlementId.slice(0, 8)}`,
-        });
+        if (fundAccountId) {
+          payoutResult = await RazorpayService.createPayout({
+            fundAccountId,
+            amount: settlement.amount,
+            reference: `partner_settlement_${settlementId}`,
+            narration: `PROCURE Partner Settlement #${settlementId.slice(0, 8)}`,
+          });
+          payoutMode = 'NEFT (Verified)';
+        }
       }
-    } catch (payoutError) {
-      console.log('Partner payout not available:', payoutError.message);
+      // Priority 2: UPI ID
+      else if (hasUpi) {
+        try {
+          payoutResult = await RazorpayService.createPayout({
+            upiId: bankAccount.upiId,
+            amount: settlement.amount,
+            reference: `partner_settlement_${settlementId}`,
+            narration: `PROCURE Partner Settlement #${settlementId.slice(0, 8)}`,
+          });
+          payoutMode = 'UPI';
+        } catch (upiError) {
+          payoutError = `UPI payout failed: ${upiError.message}. UPI ID may be invalid.`;
+        }
+      }
+      
+      // Priority 3: Unverified bank account (fallback)
+      if (!payoutResult && !payoutError && hasBank) {
+        let fundAccountId = bankAccount.razorpayFundAccountId;
+        
+        if (!fundAccountId) {
+          const fundAccount = await RazorpayService.createFundAccount({
+            accountHolder: bankAccount.accountHolder,
+            accountNumber: bankAccount.accountNumber,
+            ifsc: bankAccount.ifscCode,
+            bankName: bankAccount.bankName,
+          });
+          fundAccountId = fundAccount.id;
+          
+          await prisma.partnerBankAccount.update({
+            where: { id: bankAccount.id },
+            data: { razorpayFundAccountId: fundAccountId }
+          }).catch(() => {});
+        }
+
+        if (fundAccountId) {
+          payoutResult = await RazorpayService.createPayout({
+            fundAccountId,
+            amount: settlement.amount,
+            reference: `partner_settlement_${settlementId}`,
+            narration: `PROCURE Partner Settlement #${settlementId.slice(0, 8)}`,
+          });
+          payoutMode = 'NEFT (Unverified)';
+        }
+      }
+    } catch (payoutErrorCatch) {
+      payoutError = payoutErrorCatch.message;
+      console.log('Partner payout error:', payoutErrorCatch.message);
     }
 
+    // IF PAYOUT FAILED → Mark settlement as FAILED, keep wallet unchanged
+    if (!payoutResult) {
+      await prisma.settlement.update({
+        where: { id: settlementId },
+        data: {
+          status: 'FAILED',
+          processedAt: new Date(),
+          notes: payoutError || 'Payout failed. Please verify payment details and retry.',
+        },
+      });
+
+      // Notify admin about the failure
+      try {
+        const { NotificationService } = await import('@/services/notification.service');
+        const admins = await prisma.user.findMany({
+          where: { roles: { some: { role: { name: 'ADMIN' } } } },
+          select: { id: true },
+          take: 5,
+        });
+        for (const admin of admins) {
+          NotificationService.send({
+            userId: admin.id,
+            type: 'IN_APP',
+            title: '⚠️ Settlement Failed',
+            message: `Partner settlement #${settlementId.slice(0, 8)} failed: ${payoutError || 'Unknown error'}. Partner: ${settlement.partner?.user?.name || 'Unknown'}`,
+          }).catch(() => {});
+        }
+      } catch {}
+
+      throw new Error(payoutError || 'Payout failed. Wallet not deducted. Please verify payment details and retry.');
+    }
+
+    // PAYOUT SUCCESS → Now deduct wallet
     const result = await prisma.$transaction([
       prisma.settlement.update({
         where: { id: settlementId },
         data: {
           status: 'PROCESSED',
           processedAt: new Date(),
-          notes: payoutResult
-            ? `Razorpay Payout ID: ${payoutResult.id} | Mode: NEFT`
-            : settlement.notes || 'Settlement processed'
+          notes: `Razorpay Payout ID: ${payoutResult.id} | Mode: ${payoutMode}`,
         }
       }),
       // If COD settlement, reduce codPending
@@ -422,7 +514,8 @@ export class FinanceService {
       amount: settlement.amount,
       status: 'PROCESSED',
       payoutId: payoutResult?.id || null,
-      isRealPayout: !!payoutResult,
+      payoutMode,
+      isRealPayout: true,
     };
   }
 
