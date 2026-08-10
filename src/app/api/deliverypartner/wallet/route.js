@@ -33,12 +33,32 @@ export async function GET(request) {
     const codLimit = parseFloat(codSettings.find(s => s.key === 'codMaxPending')?.value || '5000');
     const securityDeposit = parseFloat(codSettings.find(s => s.key === 'codSecurityDeposit')?.value || '1000');
 
+    // Get BANK_DETAILS settings for partner to see where to deposit
+    const bankSettings = await prisma.systemSetting.findMany({
+      where: { category: 'BANK_DETAILS' },
+    });
+
+    const bankDetails = {};
+    bankSettings.forEach(s => {
+      try { bankDetails[s.key] = JSON.parse(s.value); } 
+      catch { bankDetails[s.key] = s.value; }
+    });
+
     return successResponse({
       wallet,
       codLimit,
       securityDeposit,
       canTakeCOD: wallet.codPending < codLimit,
       remainingCOD: Math.max(0, codLimit - wallet.codPending),
+      bankDetails: {
+        bankName: bankDetails.bankName || '',
+        accountHolder: bankDetails.accountHolder || '',
+        accountNumber: bankDetails.accountNumber || '',
+        ifscCode: bankDetails.ifscCode || '',
+        branchName: bankDetails.branchName || '',
+        upiId: bankDetails.upiId || '',
+        notes: bankDetails.notes || '',
+      },
     });
   } catch (error) {
     console.error('Wallet error:', error);

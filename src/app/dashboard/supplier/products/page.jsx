@@ -170,6 +170,7 @@ export default function ProductsPage() {
               <thead>
                 <tr className="border-b text-sm text-muted-foreground bg-muted/30">
                   <th className="text-left p-4">Product</th>
+                  <th className="text-left p-4">Brand</th>
                   <th className="text-left p-4">Category</th>
                   <th className="text-left p-4">SKU</th>
                   <th className="text-left p-4">Price</th>
@@ -213,6 +214,7 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       </td>
+                      <td className="p-4 text-sm">{p.brand?.name || "-"}</td>
                       <td className="p-4 text-sm">{p.category?.name || "-"}</td>
                       <td className="p-4 text-sm font-mono">{p.sku || "-"}</td>
                       <td className="p-4 text-sm font-semibold">{priceDisplay}</td>

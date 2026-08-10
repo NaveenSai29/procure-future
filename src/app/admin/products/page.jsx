@@ -265,6 +265,7 @@ export default function AdminProductsPage() {
                   </th>
                   <th className="text-left p-4">Product</th>
                   <th className="text-left p-4">Supplier</th>
+                  <th className="text-left p-4">Brand</th>
                   <th className="text-left p-4">Category</th>
                   <th className="text-left p-4">Price</th>
                   <th className="text-left p-4">Stock</th>
@@ -305,6 +306,7 @@ export default function AdminProductsPage() {
                           </div>
                         </div>
                       </td>
+                      <td className="p-4 text-sm text-gray-600">{p.brand?.name || "-"}</td>
                       <td className="p-4 text-sm text-gray-600">{p.category?.name || "N/A"}</td>
                       <td className="p-4">
                         <p className="font-medium">₹{p.pricing?.[0]?.sellingPrice || "N/A"}</p>

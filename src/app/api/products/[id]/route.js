@@ -9,6 +9,7 @@ export async function GET(request, { params }) {
       where: { id },
       include: {
         category: true,
+        brand: { select: { id: true, name: true } },
         pricing: true,
         attributes: true,
         images: true,
@@ -31,7 +32,7 @@ export async function PATCH(request, { params }) {
     const { id } = await params;
     const body = await request.json();
     const {
-      name, categoryId, sku, barcode, hsnCode, unit,
+      name, categoryId, brandId, sku, barcode, hsnCode, unit,
       description, longDescription, highlights,
       weight, length, width, height, warranty, countryOfOrigin,
       metaTitle, metaDescription, pricing, attributes,
@@ -45,6 +46,7 @@ export async function PATCH(request, { params }) {
     const updateData = {
       ...(name !== undefined && { name }),
       ...(categoryId !== undefined && { categoryId }),
+      ...(brandId !== undefined && { brandId: brandId || null }),
       ...(sku !== undefined && { sku }),
       ...(barcode !== undefined && { barcode }),
       ...(hsnCode !== undefined && { hsnCode }),

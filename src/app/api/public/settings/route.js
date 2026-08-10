@@ -25,6 +25,17 @@ export async function GET() {
       catch { delivery[s.key] = s.value; }
     });
 
+    // Get BANK_DETAILS settings
+    const bankSettings = await prisma.systemSetting.findMany({
+      where: { category: 'BANK_DETAILS' },
+    });
+
+    const bankDetails = {};
+    bankSettings.forEach(s => {
+      try { bankDetails[s.key] = JSON.parse(s.value); } 
+      catch { bankDetails[s.key] = s.value; }
+    });
+
     // Parse vehicles from delivery settings
     let vehicles = [];
     try {
@@ -47,6 +58,15 @@ export async function GET() {
         freeDeliveryAbove: parseFloat(delivery.freeDeliveryAbove) || 999,
         riderIconUrl: delivery.riderIconUrl || null,
         vehicles: vehicles,
+        bankDetails: {
+          bankName: bankDetails.bankName || '',
+          accountHolder: bankDetails.accountHolder || '',
+          accountNumber: bankDetails.accountNumber || '',
+          ifscCode: bankDetails.ifscCode || '',
+          branchName: bankDetails.branchName || '',
+          upiId: bankDetails.upiId || '',
+          notes: bankDetails.notes || '',
+        },
       },
     });
   } catch (error) {
@@ -62,6 +82,15 @@ export async function GET() {
         freeDeliveryAbove: 999,
         riderIconUrl: null,
         vehicles: [],
+        bankDetails: {
+          bankName: '',
+          accountHolder: '',
+          accountNumber: '',
+          ifscCode: '',
+          branchName: '',
+          upiId: '',
+          notes: '',
+        },
       },
     });
   }

@@ -39,6 +39,7 @@ export async function GET(req) {
         include: {
           supplier: { select: { id: true, businessName: true, isVerified: true } },
           category: { select: { id: true, name: true } },
+          brand: { select: { id: true, name: true } },
           pricing: { take: 1, orderBy: { minQty: "asc" } },
           inventory: { select: { availableQty: true, warehouse: { select: { name: true } } } },
           _count: { select: { variants: true, images: true } },

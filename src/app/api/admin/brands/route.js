@@ -2,16 +2,19 @@ import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
-// GET - List all brands
+// GET - List all brands (admin + supplier accessible)
 export async function GET(request) {
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const adminProfile = await prisma.adminProfile.findFirst({
-      where: { userId: user.id }
-    });
-    if (!adminProfile) return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    // Allow admin, supplier staff, and users with SUPPLIER role
+    const adminProfile = await prisma.adminProfile.findFirst({ where: { userId: user.id } });
+    const supplierStaff = await prisma.supplierStaff.findFirst({ where: { userId: user.id } });
+    const hasSupplierRole = user.roles?.some(r => r.role?.name === 'SUPPLIER');
+    if (!adminProfile && !supplierStaff && !hasSupplierRole) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
@@ -41,33 +44,44 @@ export async function GET(request) {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
     });
   } catch (error) {
+    console.error('Brand GET error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// POST - Create brand
+// POST - Create brand (admin + supplier accessible)
 export async function POST(request) {
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const adminProfile = await prisma.adminProfile.findFirst({
-      where: { userId: user.id }
-    });
-    if (!adminProfile) return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    // Allow admin, supplier staff, and users with SUPPLIER role
+    const adminProfile = await prisma.adminProfile.findFirst({ where: { userId: user.id } });
+    const supplierStaff = await prisma.supplierStaff.findFirst({ where: { userId: user.id } });
+    const hasSupplierRole = user.roles?.some(r => r.role?.name === 'SUPPLIER');
+    if (!adminProfile && !supplierStaff && !hasSupplierRole) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { name, logo, description, website, isActive } = body;
 
+    if (!name || !name.trim()) {
+      return NextResponse.json({ error: 'Brand name is required' }, { status: 400 });
+    }
+
     // Check duplicate
-    const existing = await prisma.brand.findUnique({ where: { name } });
+    const existing = await prisma.brand.findFirst({ 
+      where: { name: { equals: name.trim() } } 
+    });
     if (existing) {
-      return NextResponse.json({ error: 'Brand already exists' }, { status: 400 });
+      // Return the existing brand instead of error
+      return NextResponse.json({ error: 'Brand already exists', id: existing.id, name: existing.name });
     }
 
     const brand = await prisma.brand.create({
       data: {
-        name,
+        name: name.trim(),
         logo: logo || null,
         description: description || null,
         website: website || null,
@@ -84,13 +98,14 @@ export async function POST(request) {
         action: 'CREATE_BRAND',
         entity: 'Brand',
         entityId: brand.id,
-        newValue: { name },
+        newValue: { name: name.trim(), createdBy: adminProfile ? 'admin' : 'supplier' },
         ipAddress: request.headers.get('x-forwarded-for') || 'unknown'
       }
     });
 
     return NextResponse.json(brand, { status: 201 });
   } catch (error) {
+    console.error('Brand POST error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

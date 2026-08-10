@@ -27,6 +27,7 @@ export async function GET(request) {
         where,
         include: {
           category: { select: { name: true } },
+          brand: { select: { id: true, name: true } },
           images: { take: 1, orderBy: { sortOrder: "asc" } },
           pricing: { take: 1 },
           variants: { select: { id: true, isActive: true, price: true, images: { take: 1 } } },
@@ -58,7 +59,7 @@ export async function POST(request) {
     });
     if (!staff) return errorResponse("No supplier account", 404);
 
-    // ─── KYC RESTRICTION: Cannot add products without KYC verification ───
+    // KYC RESTRICTION: Cannot add products without KYC verification
     if (!staff.supplier.isVerified) {
       return errorResponse(
         "Your KYC verification is pending. Please complete KYC verification before adding products.",
@@ -69,7 +70,7 @@ export async function POST(request) {
     const body = await request.json();
     const {
       name, description, longDescription, highlights,
-      categoryId, sku, barcode, hsnCode, unit,
+      categoryId, brandId, sku, barcode, hsnCode, unit,
       weight, length, width, height, warranty, countryOfOrigin,
       metaTitle, metaDescription, pricing,
       warehouseId, stockQty,
@@ -94,6 +95,7 @@ export async function POST(request) {
         longDescription: longDescription || null,
         highlights: highlights || null,
         categoryId,
+        brandId: brandId || null,
         sku: sku || null,
         barcode: barcode || null,
         hsnCode: hsnCode || null,

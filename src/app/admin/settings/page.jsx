@@ -65,6 +65,11 @@ export default function AdminSettingsPage() {
     sponsoredProducts: false, marketplace: true,
   });
 
+  const [bankForm, setBankForm] = useState({
+    bankName: '', accountHolder: '', accountNumber: '', ifscCode: '',
+    branchName: '', upiId: '', qrCodeUrl: '', notes: '',
+  });
+
   useEffect(() => { fetchSettings(); }, []);
 
   const fetchSettings = async () => {
@@ -79,6 +84,7 @@ export default function AdminSettingsPage() {
       if (data.settings?.PAYMENT) setPaymentForm(prev => ({ ...prev, ...data.settings.PAYMENT }));
       if (data.settings?.NOTIFICATION) setNotifForm(prev => ({ ...prev, ...data.settings.NOTIFICATION }));
       if (data.settings?.FEATURES) setFeatureForm(prev => ({ ...prev, ...data.settings.FEATURES }));
+      if (data.settings?.BANK_DETAILS) setBankForm(prev => ({ ...prev, ...data.settings.BANK_DETAILS }));
       if (data.settings?.DELIVERY) {
         const d = data.settings.DELIVERY;
         setDeliveryForm(prev => ({
@@ -119,6 +125,7 @@ export default function AdminSettingsPage() {
 
   const tabs = [
     { id: 'GENERAL', label: 'General', icon: Building2 },
+    { id: 'BANK_DETAILS', label: 'Bank Details', icon: Building },
     { id: 'COMMISSION', label: 'Supplier Commission', icon: Percent },
     { id: 'DELIVERY_COMMISSION', label: 'Delivery Commission', icon: Truck },
     { id: 'DELIVERY', label: 'Delivery', icon: MapPin },
@@ -198,9 +205,29 @@ export default function AdminSettingsPage() {
               </div>
             </div>
             <div className="mt-6 pt-4 border-t"><h4 className="font-medium text-sm text-gray-700 mb-3">SEO Settings</h4>
-              <div className="space-y-3"><input type="text" value={generalForm.metaTitle || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaTitle: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="Meta Title" /><textarea value={generalForm.metaDescription || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaDescription: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" rows={2} placeholder="Meta Description" /><input type="text" value={generalForm.metaKeywords || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaKeywords: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="Meta Keywords" /></div>
+              <div className="space-y-3"><input type="text" value={generalForm.metaTitle || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaTitle: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="Meta Title" /><textarea value={generalForm.metaDescription || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaDescription: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" rows={2} placeholder="MetaDescription" /><input type="text" value={generalForm.metaKeywords || ''} onChange={(e) => setGeneralForm(prev => ({ ...prev, metaKeywords: e.target.value }))} className="w-full px-3 py-2 border rounded-lg" placeholder="Meta Keywords" /></div>
             </div>
             <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('GENERAL', generalForm)} disabled={saving} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ?'Saving...' : 'Save General Settings'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* BANK DETAILS TAB */}
+      {activeTab === 'BANK_DETAILS' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl border shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-indigo-100 rounded-lg"><Building className="h-5 w-5 text-indigo-600" /></div><div><h3 className="font-semibold text-gray-900">PROCURE Bank Details</h3><p className="text-xs text-gray-500">Bank account where delivery partners deposit COD collections</p></div></div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"><p className="text-sm text-blue-800 font-medium">ℹ️ Visible to Delivery Partners</p><p className="text-xs text-blue-700 mt-1">These bank details are shown to delivery partners in their wallet deposit screen so they know where to transfer COD money.</p></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div><label className="text-sm font-medium text-gray-700">Bank Name *</label><input type="text" value={bankForm.bankName || ''} onChange={(e) => setBankForm(prev => ({ ...prev, bankName: e.target.value }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" placeholder="e.g. HDFC Bank" /></div>
+              <div><label className="text-sm font-medium text-gray-700">Account Holder Name *</label><input type="text" value={bankForm.accountHolder || ''} onChange={(e) => setBankForm(prev => ({ ...prev, accountHolder: e.target.value }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" placeholder="e.g. PROCURE TECHNOLOGIES PVT LTD" /></div>
+              <div><label className="text-sm font-medium text-gray-700">Account Number *</label><input type="text" value={bankForm.accountNumber || ''} onChange={(e) => setBankForm(prev => ({ ...prev, accountNumber: e.target.value }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-mono" placeholder="e.g. 12345678901" /></div>
+              <div><label className="text-sm font-medium text-gray-700">IFSC Code *</label><input type="text" value={bankForm.ifscCode || ''} onChange={(e) => setBankForm(prev => ({ ...prev, ifscCode: e.target.value }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-mono uppercase" placeholder="e.g. HDFC0001234" /></div>
+              <div><label className="text-sm font-medium text-gray-700">Branch Name</label><input type="text" value={bankForm.branchName || ''} onChange={(e) => setBankForm(prev => ({ ...prev, branchName: e.target.value }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" placeholder="e.g. Andheri West, Mumbai" /></div>
+              <div><label className="text-sm font-medium text-gray-700">UPI ID (Optional)</label><input type="text" value={bankForm.upiId || ''} onChange={(e) => setBankForm(prev => ({ ...prev, upiId: e.target.value }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" placeholder="e.g. procure@hdfcbank" /></div>
+              <div className="col-span-2"><label className="text-sm font-medium text-gray-700">Additional Notes (Optional)</label><textarea value={bankForm.notes || ''} onChange={(e) => setBankForm(prev => ({ ...prev, notes: e.target.value }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" rows={2} placeholder="e.g. Use UPI ID or Account Number + IFSC for NEFT/IMPS transfer" /></div>
+            </div>
+            <div className="mt-6 pt-4 border-t flex justify-end"><button onClick={() => handleSave('BANK_DETAILS', bankForm)} disabled={saving} className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2 font-medium"><Save className="h-4 w-4" />{saving ? 'Saving...' : 'Save Bank Details'}</button></div>
           </div>
         </div>
       )}
@@ -271,7 +298,7 @@ export default function AdminSettingsPage() {
                         <label className="text-xs text-gray-400">Up to (km)</label>
                         <input type="number" value={slab.upToKm} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].distanceSlabs[sIdx].upToKm = parseInt(e.target.value) || 0; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="w-full px-2 py-1.5 border rounded text-center font-bold text-sm mt-0.5" />
                         <label className="text-xs text-gray-400 mt-2 block">Per Km (Rs)</label>
-                        <input type="number" value={slab.perKmRate || 0} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].distanceSlabs[sIdx].perKmRate = parseInt(e.target.value) || 0; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="w-full px-2 py-1.5 border rounded text-center font-bold text-green-600 text-sm mt-0.5" />
+                        <input type="number" value={slab.perKmRate || 0} onChange={e => { const u = [...deliveryForm.vehicles]; u[vIdx].distanceSlabs[sIdx].perKmRate = parseInt(e.target.value) || 0; setDeliveryForm(prev => ({ ...prev, vehicles: u })); }} className="w-full px-2 py-1.5 border rounded text-centerfont-bold text-green-600 text-sm mt-0.5" />
                         <p className="text-xs text-gray-400 text-center mt-1">Ex: 3km = Rs {((slab.perKmRate || 0) * 3).toLocaleString()}</p>
                       </div>
                     ))}
@@ -295,7 +322,7 @@ export default function AdminSettingsPage() {
             <div className="bg-white rounded-xl border shadow-sm p-6">
               <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-purple-100 rounded-lg"><Gauge className="h-5 w-5 text-purple-600" /></div><h3 className="font-semibold text-gray-900">Weight Handling</h3></div>
               <div className="space-y-4">
-                <div><label className="text-sm font-medium">Free Weight (kg)</label><input type="number" value={deliveryForm.freeWeightUpTo} onChange={e => setDeliveryForm(prev => ({ ...prev, freeWeightUpTo: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
+                <div><label className="text-sm font-medium">Free Weight (kg)</label><input type="number" value={deliveryForm.freeWeightUpTo} onChange={e =>setDeliveryForm(prev => ({ ...prev, freeWeightUpTo: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
                 <div><label className="text-sm font-medium">Per Extra Kg (Rs)</label><input type="number" value={deliveryForm.weightChargePerKg} onChange={e => setDeliveryForm(prev => ({ ...prev, weightChargePerKg: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
                 <div><label className="text-sm font-medium mb-1 block">Max Weight (kg)</label><input type="number" value={deliveryForm.maxWeight} onChange={e => setDeliveryForm(prev => ({ ...prev, maxWeight: parseInt(e.target.value) || 40000 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5" /></div>
               </div>
@@ -417,7 +444,7 @@ export default function AdminSettingsPage() {
               <div className="flex flex-wrap gap-4">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={paymentForm.refundApprovalRequired} onChange={(e) => setPaymentForm(prev => ({ ...prev, refundApprovalRequired: e.target.checked }))} /><span className="text-sm">Refund Requires Approval</span></label>
                 <label className="flex items-center gap-2"><input type="checkbox" checked={paymentForm.partialRefundEnabled} onChange={(e) => setPaymentForm(prev => ({ ...prev, partialRefundEnabled: e.target.checked }))} /><span className="text-sm">Partial Refunds</span></label>
-                <label className="flex items-center gap-2"><input type="checkbox" checked={paymentForm.refundToWallet} onChange={(e) => setPaymentForm(prev => ({ ...prev, refundToWallet: e.target.checked }))} /><span className="text-sm">Refund to Wallet</span></label>
+                <label className="flex items-center gap-2"><input type="checkbox" checked={paymentForm.refundToWallet} onChange={(e) => setPaymentForm(prev=> ({ ...prev, refundToWallet: e.target.checked }))} /><span className="text-sm">Refund to Wallet</span></label>
               </div>
             </div>
 
@@ -456,7 +483,7 @@ export default function AdminSettingsPage() {
       {activeTab === 'FEATURES' && (
         <div className="space-y-6">
           <div className="bg-white rounded-xl border shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-yellow-100 rounded-lg"><Zap className="h-5 w-5 text-yellow-600" /></div><div><h3 className="font-semibold text-gray-900">Feature Flags</h3><p className="text-xs text-gray-500">Enable or disable platform features. Disabled features are hidden from users.</p></div></div>
+            <div className="flex items-center gap-3 mb-6"><div className="p-2 bg-yellow-100 rounded-lg"><Zap className="h-5 w-5 text-yellow-600" /></div><div><h3 className="font-semibold text-gray-900">Feature Flags</h3><p className="text-xs text-gray-500">Enable or disable platform features. Disabled featuresare hidden from users.</p></div></div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {[
                 { key: 'marketplace', label: 'Marketplace', desc: 'Product listings & orders' },

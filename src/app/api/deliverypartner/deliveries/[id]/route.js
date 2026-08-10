@@ -110,7 +110,15 @@ export async function PATCH(request, { params }) {
         partnerId: user.deliveryPartner.id,
       },
       include: {
-        order: true,
+        order: {
+          include: {
+            product: {
+              select: {
+                supplierId: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -121,6 +129,8 @@ export async function PATCH(request, { params }) {
     let updateData = {};
     let orderUpdate = {};
     let responseMessage = '';
+    let deliveryCommRate = 0;
+    let supplierCommRate = 0;
 
     switch (action) {
       case 'ACCEPT':
@@ -156,6 +166,14 @@ export async function PATCH(request, { params }) {
         if (delivery.otp && otp !== delivery.otp) {
           return errorResponse('Invalid OTP', 400);
         }
+
+        // Calculate commissions BEFORE transaction
+        const { CommissionService } = await import('@/services/commission.service');
+        const deliveryFee = delivery.order.deliveryFee || 0;
+        const { netEarning, commissionRate: calcDeliveryCommRate } = await CommissionService.calculateDeliveryNetEarning(deliveryFee);
+        deliveryCommRate = calcDeliveryCommRate;
+        supplierCommRate = await CommissionService.getSupplierCommissionRate();
+
         updateData = {
           status: 'DELIVERED', deliveryTime: new Date(),
           notes: notes || delivery.notes,
@@ -214,56 +232,97 @@ export async function PATCH(request, { params }) {
           data: { totalDeliveries: { increment: 1 } },
         });
 
-        const deliveryFee = delivery.order.deliveryFee || 0;
+        const orderDeliveryFee = delivery.order.deliveryFee || 0;
+        const orderTotalAmount = delivery.order.totalAmount || 0;
+        const isCOD = delivery.order.paymentMethod === 'COD';
+        const supplierId = delivery.order.product?.supplierId;
 
         // Calculate net earning after delivery commission
-        const { CommissionService } = await import('@/services/commission.service');
-        const { netEarning, commissionRate: deliveryCommRate } = await CommissionService.calculateDeliveryNetEarning(deliveryFee);
-        const supplierCommRate = await CommissionService.getSupplierCommissionRate();
+        const { CommissionService: TxCommissionService } = await import('@/services/commission.service');
+        const { netEarning: txNetEarning } = await TxCommissionService.calculateDeliveryNetEarning(orderDeliveryFee);
+        const txSupplierCommRate = await TxCommissionService.getSupplierCommissionRate();
+        const supplierCommissionAmount = Math.round((orderTotalAmount * txSupplierCommRate) / 100 * 100) / 100;
+        const supplierNetAmount = orderTotalAmount - supplierCommissionAmount;
 
         // Update or create partner wallet — track net earnings + COD
         await tx.partnerWallet.upsert({
           where: { partnerId: user.deliveryPartner.id },
           create: {
             partnerId: user.deliveryPartner.id,
-            totalEarned: netEarning,
-            codCollected: delivery.order.paymentMethod === 'COD' ? (delivery.order.totalAmount || 0) : 0,
-            codPending: delivery.order.paymentMethod === 'COD' ? (delivery.order.totalAmount || 0) : 0,
+            totalEarned: txNetEarning,
+            codCollected: isCOD ? orderTotalAmount : 0,
+            codPending: isCOD ? orderTotalAmount : 0,
           },
           update: {
-            totalEarned: { increment: netEarning },
-            ...(delivery.order.paymentMethod === 'COD' ? {
-              codCollected: { increment: delivery.order.totalAmount || 0 },
-              codPending: { increment: delivery.order.totalAmount || 0 },
+            totalEarned: { increment: txNetEarning },
+            ...(isCOD ? {
+              codCollected: { increment: orderTotalAmount },
+              codPending: { increment: orderTotalAmount },
             } : {}),
           },
         });
 
         // Process supplier commission on delivery
         try {
-          await CommissionService.processOrderCommission(delivery.orderId);
+          await TxCommissionService.processOrderCommission(delivery.orderId);
         } catch (err) {
           console.error('Commission processing error:', err.message);
         }
 
-        // COD Settlement: Create settlement entry for tracking
-        if (delivery.order.paymentMethod === 'COD') {
-          const orderAmount = delivery.order.totalAmount || 0;
-          const codAmountToSettle = orderAmount - deliveryFee;
+        // ============ SETTLEMENT CREATION ============
+        const now = new Date();
+        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-          if (codAmountToSettle > 0) {
+        if (isCOD && supplierId) {
+          // COD ORDER: Partner collected full amount from buyer
+          
+          // Create DELIVERY_PARTNER settlement for full COD amount collected
+          await tx.settlement.create({
+            data: {
+              supplierId: supplierId,
+              partnerId: user.deliveryPartner.id,
+              amount: orderTotalAmount,
+              status: 'PENDING',
+              settlementType: 'COD_COLLECTION',
+              settlementFor: 'DELIVERY_PARTNER',
+              referenceId: delivery.orderId,
+              periodStart: periodStart,
+              periodEnd: periodEnd,
+              notes: `COD ₹${orderTotalAmount.toLocaleString('en-IN')} collected from buyer. Awaiting deposit.`,
+            },
+          });
+
+          // Create SUPPLIER settlement for supplier's share (net after commission)
+          await tx.settlement.create({
+            data: {
+              supplierId: supplierId,
+              partnerId: user.deliveryPartner.id,
+              amount: supplierNetAmount,
+              status: 'PENDING',
+              settlementType: 'COD_COLLECTION',
+              settlementFor: 'SUPPLIER',
+              referenceId: delivery.orderId,
+              periodStart: periodStart,
+              periodEnd: periodEnd,
+              notes: `COD order - Supplier net after ${txSupplierCommRate}% commission (₹${supplierCommissionAmount}). Total: ₹${orderTotalAmount}`,
+            },
+          });
+        } else {
+          // ONLINE ORDER: Create DELIVERY_PARTNER settlement for delivery fee earnings
+          if (txNetEarning > 0) {
             await tx.settlement.create({
               data: {
-                supplierId: delivery.order.supplierId,
+                supplierId: supplierId || null,
                 partnerId: user.deliveryPartner.id,
-                amount: codAmountToSettle,
+                amount: txNetEarning,
                 status: 'PENDING',
-                settlementType: 'COD_COLLECTION',
+                settlementType: 'DELIVERY_FEE',
                 settlementFor: 'DELIVERY_PARTNER',
                 referenceId: delivery.orderId,
-                periodStart: new Date(new Date().setDate(1)),
-                periodEnd: new Date(),
-                notes: `COD ₹${orderAmount} collected. Fee: ₹${deliveryFee}. Net: ₹${codAmountToSettle}`,
+                periodStart: periodStart,
+                periodEnd: periodEnd,
+                notes: `Delivery fee ₹${orderDeliveryFee} - ${deliveryCommRate}% commission = Net ₹${txNetEarning}`,
               },
             });
           }

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import {
   Building2, Plus, Edit, Trash2, X, Save, Search,
-  Globe, Image, Package, ExternalLink, Filter
+  Globe, Image, Package, ExternalLink, Filter,
+  GitMerge, Trash, AlertTriangle, CheckCircle, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -14,6 +15,14 @@ export default function AdminBrandsPage() {
   const [editingBrand, setEditingBrand] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+
+  // Merge & Cleanup states
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [duplicates, setDuplicates] = useState([]);
+  const [mergeSource, setMergeSource] = useState('');
+  const [mergeTarget, setMergeTarget] = useState('');
+  const [merging, setMerging] = useState(false);
+  const [deletingEmpty, setDeletingEmpty] = useState(false);
 
   const [form, setForm] = useState({
     name: '', logo: '', description: '', website: '', isActive: true
@@ -26,7 +35,7 @@ export default function AdminBrandsPage() {
       setLoading(true);
       const params = new URLSearchParams({
         page: pagination.page,
-        limit: 20,
+        limit: 50,
         search: searchTerm
       });
       const res = await fetch('/api/admin/brands?' + params.toString());
@@ -98,6 +107,83 @@ export default function AdminBrandsPage() {
     setShowModal(true);
   };
 
+  // Find duplicate brands by normalized name
+  const findDuplicates = () => {
+    const groups = {};
+    brands.forEach(b => {
+      const key = b.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(b);
+    });
+    const dups = Object.values(groups).filter(g => g.length > 1);
+    setDuplicates(dups);
+    setShowDuplicates(true);
+    setMergeSource('');
+    setMergeTarget('');
+  };
+
+  // Merge source brand into target brand
+  const handleMerge = async () => {
+    if (!mergeSource || !mergeTarget) {
+      toast.error('Select both source and target brands');
+      return;
+    }
+    if (mergeSource === mergeTarget) {
+      toast.error('Cannot merge a brand into itself');
+      return;
+    }
+    const sourceName = brands.find(b => b.id === mergeSource)?.name || 'Source';
+    const targetName = brands.find(b => b.id === mergeTarget)?.name || 'Target';
+    if (!confirm(`Merge "${sourceName}" into "${targetName}"?\n\nAll products from "${sourceName}" will move to "${targetName}" and "${sourceName}" will be deleted.`)) return;
+
+    setMerging(true);
+    try {
+      const res = await fetch('/api/admin/brands/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceBrandId: mergeSource, targetBrandId: mergeTarget }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message);
+        fetchBrands();
+        setMergeSource('');
+        setMergeTarget('');
+        findDuplicates();
+      } else {
+        toast.error(data.error || 'Merge failed');
+      }
+    } catch {
+      toast.error('Merge failed');
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  // Delete all brands with 0 products
+  const deleteEmptyBrands = async () => {
+    const emptyBrands = brands.filter(b => (b._count?.products || 0) === 0);
+    if (emptyBrands.length === 0) {
+      toast.info('No empty brands to delete');
+      return;
+    }
+    if (!confirm(`Delete ${emptyBrands.length} brands with 0 products? This cannot be undone.`)) return;
+
+    setDeletingEmpty(true);
+    let deleted = 0;
+    let failed = 0;
+    for (const b of emptyBrands) {
+      try {
+        const res = await fetch('/api/admin/brands/' + b.id, { method: 'DELETE' });
+        if (res.ok) deleted++;
+        else failed++;
+      } catch { failed++; }
+    }
+    toast.success(`${deleted} empty brands deleted${failed > 0 ? `, ${failed} failed` : ''}`);
+    setDeletingEmpty(false);
+    fetchBrands();
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
@@ -106,12 +192,28 @@ export default function AdminBrandsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Brand Management</h1>
           <p className="text-gray-500 mt-1">{pagination.total} brands</p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowModal(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" /> Add Brand
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={findDuplicates}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm"
+          >
+            <GitMerge className="h-4 w-4" /> Find Duplicates
+          </button>
+          <button
+            onClick={deleteEmptyBrands}
+            disabled={deletingEmpty}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm disabled:opacity-50"
+          >
+            {deletingEmpty ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash className="h-4 w-4" />}
+            Delete Empty
+          </button>
+          <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+          >
+            <Plus className="h-4 w-4" /> Add Brand
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -127,6 +229,70 @@ export default function AdminBrandsPage() {
           />
         </div>
       </div>
+
+      {/* Duplicates Panel */}
+      {showDuplicates && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-amber-800 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Possible Duplicates ({duplicates.length} groups found)
+            </h3>
+            <button onClick={() => setShowDuplicates(false)} className="text-amber-600 hover:text-amber-800 text-sm font-medium">
+              ✕ Close
+            </button>
+          </div>
+
+          {duplicates.length === 0 ? (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <p className="text-green-700 text-sm font-medium">✅ No duplicate brands found! All brand names are unique.</p>
+            </div>
+          ) : (
+            duplicates.map((group, i) => (
+              <div key={i} className="bg-white rounded-lg p-3 mb-2 border border-amber-100">
+                <p className="text-xs text-gray-500 mb-2">Group {i + 1}: {group.length} similar brands</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {group.map(b => (
+                    <span key={b.id} className={`px-2 py-1 rounded text-sm font-medium ${
+                      b._count?.products > 0 ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {b.name} ({b._count?.products || 0} products)
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2 items-center">
+                  <select 
+                    value={mergeSource} 
+                    onChange={e => setMergeSource(e.target.value)}
+                    className="text-xs px-2 py-1.5 border rounded bg-white"
+                  >
+                    <option value="">Merge from...</option>
+                    {group.map(b => <option key={b.id} value={b.id}>{b.name} ({b._count?.products || 0})</option>)}
+                  </select>
+                  <span className="text-xs text-gray-400">→</span>
+                  <select 
+                    value={mergeTarget} 
+                    onChange={e => setMergeTarget(e.target.value)}
+                    className="text-xs px-2 py-1.5 border rounded bg-white"
+                  >
+                    <option value="">into...</option>
+                    {group.map(b => <option key={b.id} value={b.id}>{b.name} ({b._count?.products || 0})</option>)}
+                  </select>
+                  <button 
+                    onClick={handleMerge} 
+                    disabled={!mergeSource || !mergeTarget || merging}
+                    className="text-xs px-3 py-1.5 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {merging ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitMerge className="h-3 w-3" />}
+                    {merging ? 'Merging...' : 'Merge'}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Brands Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -165,7 +331,7 @@ export default function AdminBrandsPage() {
             )}
 
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 text-xs text-gray-400">
+              <span className={`flex items-center gap-1 text-xs ${(brand._count?.products || 0) > 0 ? 'text-blue-600 font-medium' : 'text-gray-400'}`}>
                 <Package className="h-3 w-3" />
                 {brand._count?.products || 0} products
               </span>
@@ -178,7 +344,7 @@ export default function AdminBrandsPage() {
           </div>
         ))}
 
-        {brands.length === 0 && (
+        {brands.length === 0 && !loading && (
           <div className="col-span-full text-center py-12 text-gray-400">
             <Building2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
             <p>No brands found</p>

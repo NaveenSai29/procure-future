@@ -45,11 +45,12 @@ export async function GET(request) {
       },
       ...(search && {
         OR: [
-          { name: { contains: search } },
-          { description: { contains: search } },
-          { hsnCode: { contains: search } },
-          { sku: { contains: search } },
-        ],
+        { name: { contains: search } },
+        { description: { contains: search } },
+        { hsnCode: { contains: search } },
+        { sku: { contains: search } },
+        { brand: { name: { contains: search } } },
+      ],
       }),
       ...(categoryId && { categoryId }),
       ...(supplierId && { supplierId }),
@@ -70,6 +71,7 @@ export async function GET(request) {
       where,
       include: {
         category: { select: { id: true, name: true } },
+        brand: { select: { id: true, name: true, logo: true } },
         supplier: {
           select: {
             id: true,
@@ -119,6 +121,7 @@ export async function GET(request) {
         categoryId: product.category?.id,
         supplier: product.supplier?.businessName,
         supplierId: product.supplier?.id,
+        brand: product.brand?.name || null,
         isVerified: product.supplier?.isVerified,
         gstVerified: product.supplier?.gstVerified,
         image: product.images[0]?.url || null,

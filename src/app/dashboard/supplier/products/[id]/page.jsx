@@ -19,12 +19,15 @@ export default function EditProductPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [showPricing, setShowPricing] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [brandId, setBrandId] = useState("");
+  const [newBrandName, setNewBrandName] = useState("");
   const [description, setDescription] = useState("");
   const [highlights, setHighlights] = useState("");
   const [metaTitle, setMetaTitle] = useState("");
@@ -45,9 +48,15 @@ export default function EditProductPage() {
   const [pricingTiers, setPricingTiers] = useState([{ priceType: "RETAIL", mrp: "", sellingPrice: "", minQty: "1" }]);
 
   useEffect(() => {
-    fetch("/api/categories").then(r => r.json()).then(d => { if (d.success) setCategories(d.data); });
-    fetchWarehouses();
-    fetchProduct();
+    async function loadData() {
+      await Promise.all([
+        fetch("/api/categories").then(r => r.json()).then(d => { if (d.success) setCategories(d.data); }),
+        fetch("/api/admin/brands").then(r => r.json()).then(d => { if (d.brands) setBrands(d.brands); }).catch(() => {}),
+        fetchWarehouses(),
+      ]);
+      fetchProduct();
+    }
+    loadData();
   }, [id]);
 
   const fetchWarehouses = async () => {
@@ -78,6 +87,8 @@ export default function EditProductPage() {
       const p = data.data;
       setName(p.name || "");
       setCategoryId(p.categoryId || "");
+      setBrandId(p.brandId || "");
+      setNewBrandName("");
       setDescription(p.description || "");
       setHighlights(p.highlights || "");
       setMetaTitle(p.metaTitle || "");
@@ -127,11 +138,29 @@ export default function EditProductPage() {
     }));
     
     try {
+      // Determine final brand: custom typed name takes priority, then selected brand
+      let finalBrandId = brandId || null;
+      if (newBrandName && newBrandName.trim()) {
+        try {
+          const brandRes = await fetch('/api/admin/brands', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newBrandName.trim(), isActive: true }),
+          });
+          const brandData = await brandRes.json();
+          if (brandData.id) {
+            finalBrandId = brandData.id;
+          }
+        } catch (err) {
+          console.error('Brand creation error:', err);
+        }
+      }
+
       const res = await fetch(`/api/products/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, categoryId, description,
+          name, categoryId, brandId: finalBrandId, description,
           longDescription: description, highlights,
           metaTitle, metaDescription,
           sku, hsnCode, barcode, unit,
@@ -185,6 +214,33 @@ export default function EditProductPage() {
               <option value="">Select category</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Brand</label>
+            <div className="flex gap-2 mt-1">
+              <select 
+                value={brandId} 
+                onChange={e => {
+                  setBrandId(e.target.value);
+                  setNewBrandName('');
+                }} 
+                className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm" 
+                style={{width: '55%'}}
+              >
+                <option value="">Select brand</option>
+                {brands.filter(b => b.isActive).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+              <Input 
+                value={newBrandName}
+                placeholder="Or type custom brand"
+                onChange={e => {
+                  setNewBrandName(e.target.value);
+                  if (e.target.value) setBrandId('');
+                }}
+                className="flex-1"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Select from list or type a custom brand — it will be auto-created</p>
           </div>
 
           {/* Description + AI */}

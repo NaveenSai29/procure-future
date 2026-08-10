@@ -506,22 +506,44 @@ export class FinanceService {
       }
     } catch { }
 
-    // Partner settlements
+    // Partner settlements - FIX: Include both codPending AND totalEarned
     try {
-      const pwallets = await prisma.partnerWallet.findMany({ where: { codPending: { gte: minSettlement } }, include: { partner: { select: { id: true } } } });
+      const pwallets = await prisma.partnerWallet.findMany({ 
+        where: { 
+          OR: [
+            { codPending: { gte: minSettlement } },
+            { totalEarned: { gte: minSettlement } }
+          ]
+        }, 
+        include: { partner: { select: { id: true } } } 
+      });
       const systemSupplier = await prisma.supplier.findFirst({ where: { businessName: 'PROCURE' } });
       for (const w of pwallets) {
         try {
           const already = await FinanceService.hasExistingPartnerSettlement(w.partnerId, periodStart, periodEnd);
           if (already) { results.partner.skipped++; continue; }
+          
+          // Settle COD pending if any
           if (systemSupplier && w.codPending > 0) {
             const settlement = await FinanceService.createSettlement(systemSupplier.id, { amount: w.codPending, settlementType: 'AUTO', settlementFor: 'DELIVERY_PARTNER', partnerId: w.partnerId, notes: `Auto ${settlementCycle.toLowerCase()} COD settlement`, periodStart, periodEnd });
             await FinanceService.processSettlement(settlement.id);
             results.partner.processed++;
           }
-        } catch { results.partner.errors++; }
+          
+          // Settle delivery earnings if no COD pending but has earnings
+          if (systemSupplier && w.codPending === 0 && w.totalEarned > 0) {
+            const settlement = await FinanceService.createSettlement(systemSupplier.id, { amount: w.totalEarned, settlementType: 'AUTO', settlementFor: 'DELIVERY_PARTNER', partnerId: w.partnerId, notes: `Auto ${settlementCycle.toLowerCase()} delivery earnings settlement`, periodStart, periodEnd });
+            await FinanceService.processSettlement(settlement.id);
+            results.partner.processed++;
+          }
+        } catch (e) { 
+          console.error('Partner auto-settlement error:', e.message);
+          results.partner.errors++; 
+        }
       }
-    } catch { }
+    } catch (e) {
+      console.error('Partner auto-settlement batch error:', e.message);
+    }
 
     return { results, period: { start: periodStart, end: periodEnd }, cycle: settlementCycle };
   }
