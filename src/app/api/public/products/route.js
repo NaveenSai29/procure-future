@@ -18,6 +18,69 @@ function toRad(deg) {
   return deg * (Math.PI / 180);
 }
 
+// Helper to calculate shop status
+function getShopStatus(settings, isActive) {
+  if (!isActive) return { isOpen: false, reason: 'offline', nextOpenTime: null, closesIn: null };
+  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: true, reason: null, nextOpenTime: null, closesIn: null };
+
+  const now = new Date();
+  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const today = days[now.getDay()];
+
+  let openDays = [];
+  try {
+    openDays = settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : days;
+  } catch { openDays = days; }
+
+  const [openH, openM] = settings.shopOpenTime.split(':').map(Number);
+  const [closeH, closeM] = settings.shopCloseTime.split(':').map(Number);
+
+  const todayOpen = new Date(now);
+  todayOpen.setHours(openH, openM, 0, 0);
+
+  const todayClose = new Date(now);
+  todayClose.setHours(closeH, closeM, 0, 0);
+
+  // If today is not an open day
+  if (!openDays.includes(today)) {
+    let nextDay = new Date(now);
+    for (let i = 1; i <= 7; i++) {
+      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDayName = days[nextDay.getDay()];
+      if (openDays.includes(nextDayName)) {
+        nextDay.setHours(openH, openM, 0, 0);
+        return { isOpen: false, reason: 'day_off', nextOpenTime: nextDay.toISOString(), closesIn: null };
+      }
+    }
+    return { isOpen: false, reason: 'day_off', nextOpenTime: null, closesIn: null };
+  }
+
+  // Check if within open hours
+  if (now >= todayOpen && now < todayClose) {
+    const closesInMs = todayClose.getTime() - now.getTime();
+    const closesInMin = Math.floor(closesInMs / 60000);
+    return { isOpen: true, reason: null, nextOpenTime: null, closesIn: closesInMin };
+  }
+
+  // Shop is closed - find next open time
+  if (now >= todayClose) {
+    let nextDay = new Date(now);
+    nextDay.setDate(nextDay.getDate() + 1);
+    for (let i = 1; i <= 7; i++) {
+      const nextDayName = days[nextDay.getDay()];
+      if (openDays.includes(nextDayName)) {
+        nextDay.setHours(openH, openM, 0, 0);
+        return { isOpen: false, reason: 'closed', nextOpenTime: nextDay.toISOString(), closesIn: null };
+      }
+      nextDay.setDate(nextDay.getDate() + 1);
+    }
+    return { isOpen: false, reason: 'closed', nextOpenTime: null, closesIn: null };
+  }
+
+  // Before opening time today
+  return { isOpen: false, reason: 'not_open_yet', nextOpenTime: todayOpen.toISOString(), closesIn: null };
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -78,6 +141,14 @@ export async function GET(request) {
             businessName: true,
             isVerified: true,
             gstVerified: true,
+            isActive: true,
+            settings: {
+              select: {
+                shopOpenTime: true,
+                shopCloseTime: true,
+                shopOpenDays: true,
+              },
+            },
             warehouses: {
               where: {
                 isActive: true,
@@ -113,6 +184,15 @@ export async function GET(request) {
       if (hasLocation && lat && lng) {
         distance = getDistance(buyerLat, buyerLng, lat, lng);
       }
+
+      // Calculate shop status from supplier settings
+      const shopStatus = getShopStatus(product.supplier?.settings, product.supplier?.isActive);
+      const shopHours = product.supplier?.settings ? {
+        openTime: product.supplier.settings.shopOpenTime,
+        closeTime: product.supplier.settings.shopCloseTime,
+        openDays: product.supplier.settings.shopOpenDays ? (() => { try { return JSON.parse(product.supplier.settings.shopOpenDays); } catch { return null; } })() : null,
+      } : null;
+
       return {
         id: product.id,
         name: product.name,
@@ -124,6 +204,8 @@ export async function GET(request) {
         brand: product.brand?.name || null,
         isVerified: product.supplier?.isVerified,
         gstVerified: product.supplier?.gstVerified,
+        shopStatus,
+        shopHours,
         image: product.images[0]?.url || null,
         price: product.pricing[0]?.sellingPrice || 0,
         mrp: product.pricing[0]?.mrp || 0,

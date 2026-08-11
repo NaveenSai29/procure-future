@@ -441,15 +441,18 @@ model SupplierBankAccount {
 }
 
 model SupplierSettings {
-  id            String   @id @default(uuid())
-  supplierId    String   @unique
-  autoAccept    Boolean  @default(false)
-  lowStockAlert Boolean  @default(true)
-  lowStockQty   Int      @default(10)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+    id            String   @id @default(uuid())
+    supplierId    String   @unique
+    autoAccept    Boolean  @default(false)
+    lowStockAlert Boolean  @default(true)
+    lowStockQty   Int      @default(10)
+    shopOpenTime  String?  // HH:mm format, e.g., "09:00"
+    shopCloseTime String?  // HH:mm format, e.g., "21:00"
+    shopOpenDays  String?  // JSON array, e.g., ["MON","TUE","WED","THU","FRI","SAT"]
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
+  
+    supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 }
 
 // ============================================

@@ -56,6 +56,7 @@ export async function PATCH(request) {
 
     const body = await request.json();
     
+    // Toggle store active/inactive
     if (body.isActive !== undefined) {
       await prisma.supplier.update({
         where: { id: supplierStaff.supplierId },
@@ -63,6 +64,22 @@ export async function PATCH(request) {
       });
 
       return NextResponse.json({ success: true, isActive: body.isActive });
+    }
+
+    // Update shop hours
+    if (body.shopOpenTime !== undefined || body.shopCloseTime !== undefined || body.shopOpenDays !== undefined) {
+      const settingsData = {};
+      if (body.shopOpenTime !== undefined) settingsData.shopOpenTime = body.shopOpenTime;
+      if (body.shopCloseTime !== undefined) settingsData.shopCloseTime = body.shopCloseTime;
+      if (body.shopOpenDays !== undefined) settingsData.shopOpenDays = body.shopOpenDays;
+
+      const settings = await prisma.supplierSettings.upsert({
+        where: { supplierId: supplierStaff.supplierId },
+        create: { supplierId: supplierStaff.supplierId, ...settingsData },
+        update: settingsData,
+      });
+
+      return NextResponse.json({ success: true, settings });
     }
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });

@@ -16,6 +16,16 @@ const TABS = [
   { id: "kyc", label: "KYC Documents", icon: Shield },
 ];
 
+const DAYS = [
+  { key: 'MON', label: 'Mon' },
+  { key: 'TUE', label: 'Tue' },
+  { key: 'WED', label: 'Wed' },
+  { key: 'THU', label: 'Thu' },
+  { key: 'FRI', label: 'Fri' },
+  { key: 'SAT', label: 'Sat' },
+  { key: 'SUN', label: 'Sun' },
+];
+
 // Business Info Edit Form Component
 function BusinessInfoForm({ supplier, onUpdate }) {
   const [editing, setEditing] = useState(false);
@@ -279,6 +289,225 @@ function BusinessInfoForm({ supplier, onUpdate }) {
   );
 }
 
+// Shop Hours Component
+function ShopHoursForm({ settings, onUpdate }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [openTime, setOpenTime] = useState('09:00');
+  const [closeTime, setCloseTime] = useState('21:00');
+  const [openDays, setOpenDays] = useState(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']);
+
+  useEffect(() => {
+    if (settings) {
+      setOpenTime(settings.shopOpenTime || '09:00');
+      setCloseTime(settings.shopCloseTime || '21:00');
+      if (settings.shopOpenDays) {
+        try {
+          const parsed = JSON.parse(settings.shopOpenDays);
+          if (Array.isArray(parsed)) setOpenDays(parsed);
+        } catch {}
+      }
+    }
+  }, [settings]);
+
+  const toggleDay = (day) => {
+    if (openDays.includes(day)) {
+      setOpenDays(openDays.filter(d => d !== day));
+    } else {
+      setOpenDays([...openDays, day].sort((a, b) => {
+        const order = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+        return order.indexOf(a) - order.indexOf(b);
+      }));
+    }
+  };
+
+  const handleSave = async () => {
+    if (!openTime || !closeTime) {
+      toast.error('Please set both open and close time');
+      return;
+    }
+    if (openDays.length === 0) {
+      toast.error('Please select at least one open day');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/supplier/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopOpenTime: openTime,
+          shopCloseTime: closeTime,
+          shopOpenDays: JSON.stringify(openDays),
+        }),
+      });
+      if (res.ok) {
+        toast.success('Shop hours saved!');
+        setEditing(false);
+        onUpdate?.();
+      } else {
+        toast.error('Failed to save');
+      }
+    } catch {
+      toast.error('Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Calculate if shop is currently open
+  const getCurrentStatus = () => {
+    if (!openTime || !closeTime) return { text: 'Not set', color: 'text-gray-500', bg: 'bg-gray-100', icon: Clock };
+    const now = new Date();
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const today = days[now.getDay()];
+    
+    if (!openDays.includes(today)) {
+      return { text: 'Closed today', color: 'text-red-600', bg: 'bg-red-50', icon: AlertCircle };
+    }
+
+    const [oh, om] = openTime.split(':').map(Number);
+    const [ch, cm] = closeTime.split(':').map(Number);
+    const openDate = new Date(now); openDate.setHours(oh, om, 0, 0);
+    const closeDate = new Date(now); closeDate.setHours(ch, cm, 0, 0);
+
+    if (now >= openDate && now < closeDate) {
+      const minsLeft = Math.floor((closeDate.getTime() - now.getTime()) / 60000);
+      const hrsLeft = Math.floor(minsLeft / 60);
+      const minsRemain = minsLeft % 60;
+      const timeText = hrsLeft > 0 ? `${hrsLeft}h ${minsRemain}m` : `${minsRemain}m`;
+      return { text: `Open · Closes in ${timeText}`, color: 'text-green-600', bg: 'bg-green-50', icon: CheckCircle };
+    }
+    return { text: 'Closed', color: 'text-red-600', bg: 'bg-red-50', icon: AlertCircle };
+  };
+
+  const status = getCurrentStatus();
+
+  return (
+    <div className="bg-white rounded-xl border p-6 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-semibold text-gray-900">🕐 Shop Hours</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Set when your store accepts orders</p>
+        </div>
+        {!editing ? (
+          <button
+            onClick={() => setEditing(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+          >
+            Edit
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setEditing(false);
+                if (settings) {
+                  setOpenTime(settings.shopOpenTime || '09:00');
+                  setCloseTime(settings.shopCloseTime || '21:00');
+                  if (settings.shopOpenDays) {
+                    try { const parsed = JSON.parse(settings.shopOpenDays); if (Array.isArray(parsed)) setOpenDays(parsed); } catch {}
+                  }
+                }
+              }}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-1"
+            >
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : <><Save className="h-4 w-4" /> Save Hours</>}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Current Status */}
+      <div className={`${status.bg} rounded-lg p-3 mb-4 flex items-center gap-2`}>
+        <status.icon className={`h-4 w-4 ${status.color}`} />
+        <span className={`text-sm font-semibold ${status.color}`}>{status.text}</span>
+      </div>
+
+      {!editing ? (
+        /* Display Mode */
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="text-xs text-gray-500">Open Time</label>
+            <p className="text-lg font-bold text-gray-900">{openTime || '—'}</p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Close Time</label>
+            <p className="text-lg font-bold text-gray-900">{closeTime || '—'}</p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Open Days</label>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {DAYS.map(d => (
+                <span
+                  key={d.key}
+                  className={`px-2 py-0.5 text-xs rounded-md font-medium ${
+                    openDays.includes(d.key)
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-gray-100 text-gray-400'
+                  }`}
+                >
+                  {d.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Edit Mode */
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700">Open Time</label>
+              <input
+                type="time"
+                value={openTime}
+                onChange={(e) => setOpenTime(e.target.value)}
+                className="w-full mt-1 px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Close Time</label>
+              <input
+                type="time"
+                value={closeTime}
+                onChange={(e) => setCloseTime(e.target.value)}
+                className="w-full mt-1 px-3 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Open Days</label>
+            <div className="flex gap-2">
+              {DAYS.map(d => (
+                <button
+                  key={d.key}
+                  onClick={() => toggleDay(d.key)}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition border ${
+                    openDays.includes(d.key)
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SupplierSettingsPage() {
   const [supplier, setSupplier] = useState(null);
   const [settings, setSettings] = useState(null);
@@ -437,6 +666,7 @@ export default function SupplierSettingsPage() {
       {activeTab === "business" && (
         <>
           <BusinessInfoForm supplier={supplier} onUpdate={fetchSettings} />
+          <ShopHoursForm settings={settings} onUpdate={fetchSettings} />
 
           <h3 className="font-semibold text-gray-900 mb-3">Quick Settings</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
