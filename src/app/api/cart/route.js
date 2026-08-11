@@ -45,6 +45,27 @@ async function getProductSupplier(productId) {
   return product?.supplierId || null;
 }
 
+// Helper: Check if shop is currently open based on hours
+function getShopStatus(isActive, settings) {
+  if (!isActive) return { isOpen: false, reason: 'offline' };
+  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: true, reason: null };
+
+  const now = new Date();
+  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const today = days[now.getDay()];
+  let openDays = days;
+  try { openDays = settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : days; } catch {}
+
+  const [oh, om] = settings.shopOpenTime.split(':').map(Number);
+  const [ch, cm] = settings.shopCloseTime.split(':').map(Number);
+  const tOpen = new Date(now); tOpen.setHours(oh, om, 0, 0);
+  const tClose = new Date(now); tClose.setHours(ch, cm, 0, 0);
+
+  if (!openDays.includes(today)) return { isOpen: false, reason: 'day_off' };
+  if (now >= tOpen && now < tClose) return { isOpen: true, reason: null };
+  return { isOpen: false, reason: 'closed' };
+}
+
 export async function GET(request) {
   try {
     const session = await getSessionUser();
@@ -64,7 +85,10 @@ export async function GET(request) {
       where: { buyerId: buyerProfile.id },
       include: {
         supplier: {
-          select: { id: true, businessName: true, isVerified: true },
+          select: {
+            id: true, businessName: true, isVerified: true, isActive: true,
+            settings: { select: { shopOpenTime: true, shopCloseTime: true, shopOpenDays: true } },
+          },
         },
         items: {
           include: {
@@ -73,7 +97,12 @@ export async function GET(request) {
                 id: true,
                 name: true,
                 weight: true,
-                supplier: { select: { id: true, businessName: true, isVerified: true } },
+                supplier: {
+                  select: {
+                    id: true, businessName: true, isVerified: true, isActive: true,
+                    settings: { select: { shopOpenTime: true, shopCloseTime: true, shopOpenDays: true } },
+                  },
+                },
                 images: { take: 1, orderBy: { sortOrder: "asc" } },
                 pricing: { take: 1, orderBy: { minQty: "asc" } },
               },
@@ -103,6 +132,9 @@ export async function GET(request) {
     // Format all items across all carts (for backward compatibility with cartMap)
     const allItems = [];
     const formattedCarts = carts.map(cart => {
+      const cartSupplierSettings = cart.supplier?.settings;
+      const cartSupplierIsActive = cart.supplier?.isActive;
+
       const cartItems = (cart.items || []).map(item => {
         let rfqDeadline = null;
         for (const rfq of awardedRfqs) {
@@ -118,13 +150,18 @@ export async function GET(request) {
         const isExpired = rfqDeadline ? new Date(rfqDeadline) < new Date() : false;
         const hasCustomPrice = !!item.customPrice;
 
+        // Use product supplier settings if available, otherwise cart supplier
+        const productSupplier = item.product?.supplier;
+        const effectiveIsActive = productSupplier?.isActive ?? cartSupplierIsActive;
+        const effectiveSettings = productSupplier?.settings || cartSupplierSettings;
+
         const formatted = {
           id: item.id,
           productId: item.productId,
           productName: item.product?.name,
-          supplier: item.product?.supplier?.businessName || cart.supplier?.businessName,
-          supplierId: item.product?.supplier?.id || cart.supplierId,
-          isVerified: item.product?.supplier?.isVerified || cart.supplier?.isVerified,
+          supplier: productSupplier?.businessName || cart.supplier?.businessName,
+          supplierId: productSupplier?.id || cart.supplierId,
+          isVerified: productSupplier?.isVerified || cart.supplier?.isVerified,
           image: item.product?.images[0]?.url || null,
           price: (hasCustomPrice && !isExpired) ? item.customPrice : (item.product?.pricing[0]?.sellingPrice || 0),
           mrp: item.product?.pricing[0]?.mrp || 0,
@@ -133,6 +170,7 @@ export async function GET(request) {
           moq: item.product?.pricing[0]?.minQty || 1,
           weight: item.product?.weight || 1,
           quantity: item.quantity,
+          shopStatus: getShopStatus(effectiveIsActive, effectiveSettings),
         };
         allItems.push(formatted);
         return formatted;
@@ -143,6 +181,7 @@ export async function GET(request) {
         supplierId: cart.supplierId,
         supplierName: cart.supplier?.businessName,
         isVerified: cart.supplier?.isVerified,
+        shopStatus: getShopStatus(cartSupplierIsActive, cartSupplierSettings),
         items: cartItems,
         itemCount: cartItems.length,
         subtotal: cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0),

@@ -38,6 +38,46 @@ async function deductWallet(userId, amount, referenceId, description) {
   }
 }
 
+// Helper: Check if shop is currently open
+async function isShopOpen(supplierId) {
+  try {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { isActive: true },
+    });
+    if (!supplier?.isActive) return false;
+
+    const settings = await prisma.supplierSettings.findUnique({
+      where: { supplierId },
+      select: { shopOpenTime: true, shopCloseTime: true, shopOpenDays: true },
+    });
+
+    // If no shop hours set, shop is always open
+    if (!settings?.shopOpenTime || !settings?.shopCloseTime) return true;
+
+    const now = new Date();
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    const today = days[now.getDay()];
+
+    let openDays = days;
+    try {
+      openDays = settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : days;
+    } catch { openDays = days; }
+
+    // Not an open day
+    if (!openDays.includes(today)) return false;
+
+    const [openH, openM] = settings.shopOpenTime.split(':').map(Number);
+    const [closeH, closeM] = settings.shopCloseTime.split(':').map(Number);
+    const todayOpen = new Date(now); todayOpen.setHours(openH, openM, 0, 0);
+    const todayClose = new Date(now); todayClose.setHours(closeH, closeM, 0, 0);
+
+    return now >= todayOpen && now < todayClose;
+  } catch {
+    return true; // On error, allow order to go through
+  }
+}
+
 // Create SLA 0 (Response SLA) for new orders
 async function createResponseSLA(orderId, supplierId) {
   try {
@@ -209,9 +249,19 @@ export async function POST(request) {
         select: { id: true, name: true, email: true },
       });
 
+      // Collect closed shop product IDs
+      const closedShopProductIds = [];
+
       for (const item of items) {
         const product = productMap[item.productId];
         if (!product || !product.isActive || !product.isApproved) continue;
+
+        // Check if supplier's shop is open
+        const shopOpen = await isShopOpen(product.supplierId);
+        if (!shopOpen) {
+          closedShopProductIds.push(item.productId);
+          continue;
+        }
 
         const orderPrice = item.customPrice || product.pricing[0]?.sellingPrice || 0;
         const itemTotal = orderPrice * (item.quantity || 1);
@@ -255,6 +305,11 @@ export async function POST(request) {
         createdOrders.push(order);
       }
 
+      // If some items were skipped due to closed shops, notify
+      if (closedShopProductIds.length > 0 && createdOrders.length === 0) {
+        return errorResponse("All selected shops are currently closed. Please try again during business hours.", 400);
+      }
+
       if (walletDeduction > 0 && createdOrders.length > 0) {
         const firstOrderId = createdOrders[0].id;
         const orderRefs = createdOrders.map(o => `#${o.id.slice(0, 8)}`).join(', ');
@@ -271,11 +326,15 @@ export async function POST(request) {
         });
       }
 
+      if (createdOrders.length === 0) {
+        return errorResponse("No valid products found to order", 400);
+      }
+
       NotificationService.send({
         userId: session.userId,
         type: 'IN_APP',
         title: 'Order Placed Successfully',
-        message: `${createdOrders.length} order(s) placed. Track them in My Orders.`,
+        message: `${createdOrders.length} order(s) placed. Track them in My Orders.${closedShopProductIds.length > 0 ? ` (${closedShopProductIds.length} item(s) skipped - shop closed)` : ''}`,
       }).catch(() => {});
 
       if (buyer?.email) {
@@ -313,7 +372,7 @@ export async function POST(request) {
 
       handleReferralOnPurchase(session.userId).catch(() => {});
 
-      return successResponse({ orders: createdOrders, count: createdOrders.length }, 201);
+      return successResponse({ orders: createdOrders, count: createdOrders.length, skippedClosedShop: closedShopProductIds.length }, 201);
     }
 
     // ─── SINGLE PRODUCT ORDER ───
@@ -331,6 +390,12 @@ export async function POST(request) {
 
     if (!product || !product.isActive || !product.isApproved) {
       return errorResponse("Product not available", 404);
+    }
+
+    // Check if supplier's shop is open
+    const shopOpen = await isShopOpen(product.supplierId);
+    if (!shopOpen) {
+      return errorResponse("Shop is currently closed. Please try again during business hours.", 400);
     }
 
     const orderPrice = product.pricing[0]?.sellingPrice || 0;
