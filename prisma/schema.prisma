@@ -1475,19 +1475,21 @@ model Campaign {
 }
 
 model Referral {
-  id              String     @id @default(uuid())
-  supplierId      String?
-  referrerId      String
-  referredId      String
-  rewardAmount    Float      @default(0)
-  status          String     @default("PENDING")
-  processedAt     DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+    id                String     @id @default(uuid())
+    supplierId        String?
+    referrerId        String
+    referredId        String
+    referralType      String     @default("BUYER")    // BUYER or DELIVERY
+    rewardAmount      Float      @default(0)
+    deliveryOrderCount Int       @default(0)           // Track completed deliveries for DELIVERY referrals
+    status            String     @default("PENDING")   // PENDING, REGISTERED, PURCHASED, PAID
+    processedAt       DateTime?
+    createdAt         DateTime   @default(now())
+    updatedAt         DateTime   @updatedAt
 
-  supplier        Supplier?  @relation(fields: [supplierId], references: [id])
-  referrer        User       @relation("Referrer", fields: [referrerId], references: [id])
-  referred        User       @relation("Referred", fields: [referredId], references: [id])
+    supplier          Supplier?  @relation(fields: [supplierId], references: [id])
+    referrer          User       @relation("Referrer", fields: [referrerId], references: [id])
+    referred          User       @relation("Referred", fields: [referredId], references: [id])
 }
 
 model LoyaltyPoint {

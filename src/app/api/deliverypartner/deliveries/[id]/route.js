@@ -333,10 +333,17 @@ export async function PATCH(request, { params }) {
       return updatedDelivery;
     });
 
-    // Auto-process referral reward after delivery (outside transaction, non-blocking)
-    if (action === 'DELIVER' && delivery.order?.buyer?.id) {
-      ReferralService.processReferralReward(delivery.order.buyer.id).catch((err) => {
-        console.error('Referral reward error:', err.message);
+    // Auto-process referral rewards after delivery (outside transaction, non-blocking)
+    if (action === 'DELIVER') {
+      // Buyer referral — check if buyer was referred
+      if (delivery.order?.buyer?.id) {
+        ReferralService.processReferralReward(delivery.order.buyer.id).catch((err) => {
+          console.error('Referral reward error:', err.message);
+        });
+      }
+      // Delivery partner referral — check if this partner was referred
+      ReferralService.processDeliveryReferralReward(session.userId).catch((err) => {
+        console.error('Delivery referral reward error:', err.message);
       });
     }
 

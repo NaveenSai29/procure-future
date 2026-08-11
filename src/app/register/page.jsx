@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,10 +9,12 @@ import { registerSchema } from "@/lib/validators";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Eye, EyeOff, Package, ArrowRight, Check } from "lucide-react";
+import { Eye, EyeOff, Package, ArrowRight, Store, ShoppingCart } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isSupplier = searchParams.get('type') === 'supplier';
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -40,8 +42,13 @@ export default function RegisterPage() {
         return;
       }
 
-      toast.success("Account created successfully! Please sign in.");
-      router.push("/login");
+      if (isSupplier) {
+        toast.success("Account created! Redirecting to business setup...");
+        router.push("/dashboard/become-supplier");
+      } else {
+        toast.success("Account created successfully! Please sign in.");
+        router.push("/login");
+      }
     } catch {
       toast.error("Something went wrong");
     } finally {
@@ -60,13 +67,25 @@ export default function RegisterPage() {
               </div>
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">PROCURE</span>
             </Link>
-            <h2 className="mt-6 text-2xl font-bold text-gray-900">Create your account</h2>
-            <p className="text-gray-500 mt-1">Start your procurement journey today</p>
+            <h2 className="mt-6 text-2xl font-bold text-gray-900">
+              {isSupplier ? "Create your supplier account" : "Create your account"}
+            </h2>
+            <p className="text-gray-500 mt-1">
+              {isSupplier 
+                ? "Register first, then set up your business profile" 
+                : "Start your procurement journey today"}
+            </p>
+            {isSupplier && (
+              <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-200 rounded-full text-sm font-medium text-orange-700">
+                <Store className="h-4 w-4" />
+                Supplier Registration
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-gray-700">Full Name</label>
+              <label className="text-sm font-medium text-gray-700">Full Name *</label>
               <Input
                 {...register("name")}
                 placeholder="Enter your full name"
@@ -78,7 +97,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Email</label>
+              <label className="text-sm font-medium text-gray-700">Email *</label>
               <Input
                 {...register("email")}
                 type="email"
@@ -91,11 +110,11 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Mobile (optional)</label>
+              <label className="text-sm font-medium text-gray-700">Mobile *</label>
               <Input
                 {...register("mobile")}
                 type="tel"
-                placeholder="Enter 10-digit number"
+                placeholder="Enter your 10-digit mobile number"
                 className="mt-1.5 h-11"
               />
               {errors.mobile && (
@@ -104,7 +123,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Password</label>
+              <label className="text-sm font-medium text-gray-700">Password *</label>
               <div className="relative mt-1.5">
                 <Input
                   {...register("password")}
@@ -126,7 +145,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Confirm Password</label>
+              <label className="text-sm font-medium text-gray-700">Confirm Password *</label>
               <Input
                 {...register("confirmPassword")}
                 type="password"
@@ -139,7 +158,7 @@ export default function RegisterPage() {
             </div>
 
             <Button type="submit" className="w-full h-11 text-base" loading={loading}>
-              Create Account <ArrowRight className="h-4 w-4 ml-2" />
+              {isSupplier ? "Continue to Business Setup" : "Create Account"} <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </form>
 

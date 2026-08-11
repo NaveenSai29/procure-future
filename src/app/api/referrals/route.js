@@ -2,6 +2,8 @@ import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 
 const DEFAULT_REFERRAL_REWARD = 100;
+const DEFAULT_DELIVERY_REFERRAL_ORDERS = 50;
+const DEFAULT_DELIVERY_REFERRAL_REWARD = 500;
 
 async function getReferralReward() {
   try {
@@ -12,7 +14,6 @@ async function getReferralReward() {
       const val = parseInt(setting.value);
       return isNaN(val) ? DEFAULT_REFERRAL_REWARD : val;
     }
-    // Auto-create default setting
     await prisma.systemSetting.create({
       data: {
         category: 'REFERRAL',
@@ -27,6 +28,27 @@ async function getReferralReward() {
   }
 }
 
+async function getDeliveryReferralSettings() {
+  try {
+    const [thresholdSetting, rewardSetting, enabledSetting] = await Promise.all([
+      prisma.systemSetting.findFirst({ where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_orders_threshold' } }),
+      prisma.systemSetting.findFirst({ where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_reward_amount' } }),
+      prisma.systemSetting.findFirst({ where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_enabled' } }),
+    ]);
+    return {
+      enabled: enabledSetting ? enabledSetting.value === 'true' : true,
+      ordersThreshold: thresholdSetting ? parseInt(thresholdSetting.value) : DEFAULT_DELIVERY_REFERRAL_ORDERS,
+      rewardAmount: rewardSetting ? parseFloat(rewardSetting.value) : DEFAULT_DELIVERY_REFERRAL_REWARD,
+    };
+  } catch {
+    return {
+      enabled: true,
+      ordersThreshold: DEFAULT_DELIVERY_REFERRAL_ORDERS,
+      rewardAmount: DEFAULT_DELIVERY_REFERRAL_REWARD,
+    };
+  }
+}
+
 export async function GET() {
   try {
     const session = await getSessionUser();
@@ -34,7 +56,7 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
-      select: { id: true, referralCode: true, name: true },
+      select: { id: true, referralCode: true, name: true, roles: { include: { role: true } } },
     });
     if (!user) return errorResponse("User not found", 404);
 
@@ -45,9 +67,13 @@ export async function GET() {
     }
 
     const rewardAmount = await getReferralReward();
+    const deliverySettings = await getDeliveryReferralSettings();
+    const userRoles = user.roles.map(r => r.role.name);
+    const isDeliveryPartner = userRoles.includes('DELIVERY_PARTNER');
 
-    const referrals = await prisma.referral.findMany({
-      where: { referrerId: user.id },
+    // Get buyer referrals
+    const buyerReferrals = await prisma.referral.findMany({
+      where: { referrerId: user.id, referralType: 'BUYER' },
       include: {
         referred: {
           select: {
@@ -62,7 +88,24 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    const wallet = await prisma.buyerWallet.findUnique({
+    // Get delivery referrals
+    const deliveryReferrals = await prisma.referral.findMany({
+      where: { referrerId: user.id, referralType: 'DELIVERY' },
+      include: {
+        referred: {
+          select: {
+            id: true, name: true, mobile: true, createdAt: true,
+            deliveryPartner: {
+              select: { totalDeliveries: true, isVerified: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // Calculate buyer referral earnings
+    const buyerWallet = await prisma.buyerWallet.findUnique({
       where: { userId: user.id },
       include: {
         transactions: {
@@ -72,10 +115,26 @@ export async function GET() {
       },
     });
 
-    const totalEarned = wallet?.transactions?.reduce((sum, t) => sum + t.amount, 0) || 0;
+    // Calculate delivery referral earnings (from PartnerWallet if they're a partner)
+    let partnerReferralEarnings = 0;
+    if (isDeliveryPartner) {
+      const partner = await prisma.deliveryPartner.findUnique({
+        where: { userId: user.id },
+        select: {
+          wallet: { select: { totalEarned: true } },
+        },
+      });
+      // We track total earned from referrals separately via the referral records
+      const deliveryPaidReferrals = deliveryReferrals.filter(r => r.status === 'PAID');
+      partnerReferralEarnings = deliveryPaidReferrals.reduce((sum, r) => sum + (r.rewardAmount || 0), 0);
+    }
 
-    const formattedReferrals = referrals.map(r => ({
+    const totalBuyerEarned = buyerWallet?.transactions?.reduce((sum, t) => sum + t.amount, 0) || 0;
+    const totalEarned = totalBuyerEarned + partnerReferralEarnings;
+
+    const formattedBuyerReferrals = buyerReferrals.map(r => ({
       id: r.id,
+      type: 'BUYER',
       name: r.referred?.name || 'User',
       joinedAt: r.referred?.createdAt || r.createdAt,
       status: r.status,
@@ -84,12 +143,28 @@ export async function GET() {
       totalPurchaseValue: r.referred?.orders?.reduce((sum, o) => sum + o.totalAmount, 0) || 0,
     }));
 
+    const formattedDeliveryReferrals = deliveryReferrals.map(r => ({
+      id: r.id,
+      type: 'DELIVERY',
+      name: r.referred?.name || 'Partner',
+      mobile: r.referred?.mobile,
+      joinedAt: r.referred?.createdAt || r.createdAt,
+      status: r.status,
+      reward: r.rewardAmount || 0,
+      deliveryCount: r.deliveryOrderCount || 0,
+      totalDeliveries: r.referred?.deliveryPartner?.totalDeliveries || 0,
+      isVerified: r.referred?.deliveryPartner?.isVerified || false,
+      progressPercent: Math.min(100, Math.round(((r.deliveryOrderCount || 0) / deliverySettings.ordersThreshold) * 100)),
+    }));
+
     return successResponse({
       referralCode,
       rewardAmount,
       totalEarned,
-      totalReferrals: referrals.length,
-      referrals: formattedReferrals,
+      totalReferrals: buyerReferrals.length + deliveryReferrals.length,
+      buyerReferrals: formattedBuyerReferrals,
+      deliveryReferrals: formattedDeliveryReferrals,
+      deliverySettings: isDeliveryPartner ? deliverySettings : null,
     });
   } catch (error) {
     console.error("User referrals error:", error);

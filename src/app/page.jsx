@@ -75,7 +75,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-white overflow-x-hidden">
       {/* NAVBAR */}
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
-        scrolled ? "bg-white/95 backdrop-blur-xl shadow-lg border-b border-gray-100" : "bg-transparent"
+        scrolled ? "bg-white/95 backdrop-blur-xl shadow-lg border-b border-gray-100" : "bg-white/10 backdrop-blur-sm"
       }`}>
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
@@ -97,14 +97,14 @@ export default function HomePage() {
           <div className="hidden md:flex items-center gap-3">
             {user ? (
               <>
-                {isSupplier && (
-                  <Link href="/dashboard">
-                    <Button variant="ghost" size="sm" className="text-orange-600 hover:text-orange-700 font-medium">Dashboard</Button>
-                  </Link>
-                )}
                 {isAdmin && (
                   <Link href="/admin">
                     <Button variant="ghost" size="sm" className="font-medium">Admin Panel</Button>
+                  </Link>
+                )}
+                {isSupplier && (
+                  <Link href="/dashboard">
+                    <Button variant="ghost" size="sm" className="text-orange-600 hover:text-orange-700 font-medium">Dashboard</Button>
                   </Link>
                 )}
                 <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">{user.name}</span>
@@ -114,12 +114,14 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <Link href="/login">
-                  <Button variant="ghost" size="sm" className="font-medium">Sign In</Button>
+                <Link href="/register?type=supplier">
+                  <Button variant="outline" size="sm" className="font-semibold rounded-xl border-orange-300 text-orange-600 hover:bg-orange-50">
+                    Register as Supplier
+                  </Button>
                 </Link>
-                <Link href="/register">
+                <Link href="/login">
                   <Button size="sm" className="bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 shadow-lg shadow-orange-200 font-semibold rounded-xl">
-                    Get Started <ArrowRight className="h-4 w-4 ml-1.5" />
+                    Sign In <ArrowRight className="h-4 w-4 ml-1.5" />
                   </Button>
                 </Link>
               </>
@@ -142,14 +144,18 @@ export default function HomePage() {
             <div className="pt-2 border-t">
               {user ? (
                 <>
-                  {isSupplier && <Link href="/dashboard" className="block px-4 py-3 text-sm font-medium text-orange-600">Dashboard</Link>}
                   {isAdmin && <Link href="/admin" className="block px-4 py-3 text-sm font-medium">Admin Panel</Link>}
+                  {isSupplier && <Link href="/dashboard" className="block px-4 py-3 text-sm font-medium text-orange-600">Dashboard</Link>}
                   <button onClick={handleLogout} className="block px-4 py-3 text-sm text-red-500">Logout</button>
                 </>
               ) : (
-                <div className="flex gap-2 pt-2">
-                  <Link href="/login" className="flex-1"><Button variant="outline" className="w-full rounded-xl">Sign In</Button></Link>
-                  <Link href="/register" className="flex-1"><Button className="w-full bg-gradient-to-r from-orange-500 to-rose-500 rounded-xl">Register</Button></Link>
+                <div className="space-y-2">
+                  <Link href="/register?type=supplier" className="block px-4 py-3 text-center">
+                    <Button variant="outline" className="w-full rounded-xl border-orange-300 text-orange-600">Register as Supplier</Button>
+                  </Link>
+                  <Link href="/login" className="block px-4 py-3 text-center">
+                    <Button className="w-full bg-gradient-to-r from-orange-500 to-rose-500 rounded-xl">Sign In</Button>
+                  </Link>
                 </div>
               )}
             </div>
@@ -158,13 +164,10 @@ export default function HomePage() {
       </header>
 
       {/* HERO SECTION */}
-      <section className="relative min-h-screen flex items-center px-4 overflow-hidden bg-gradient-to-br from-orange-50 via-rose-50 to-pink-50">
+      <section className="relative min-h-screen flex items-center px-4 pt-24 pb-12 overflow-hidden bg-gradient-to-br from-orange-50 via-rose-50 to-pink-50">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-gradient-to-br from-orange-200/40 to-yellow-200/40 blur-3xl animate-pulse" />
-          <div className="absolute -bottom-32 -left-20 w-[600px] h-[600px] rounded-full bg-gradient-to-br from-rose-200/40 to-pink-200/40 blur-3xl animate-pulse" />
-          <div className="absolute top-1/4 right-1/4 w-4 h-4 rounded-full bg-orange-400 animate-float" />
-          <div className="absolute top-1/3 left-1/4 w-3 h-3 rounded-full bg-rose-400 animate-float-delayed" />
-          <div className="absolute bottom-1/3 right-1/3 w-5 h-5 rounded-full bg-yellow-400 animate-float" />
+          <div className="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-gradient-to-br from-orange-200/40 to-yellow-200/40 blur-3xl" />
+          <div className="absolute -bottom-32 -left-20 w-[600px] h-[600px] rounded-full bg-gradient-to-br from-rose-200/40 to-pink-200/40 blur-3xl" />
         </div>
 
         <div className="max-w-7xl mx-auto relative w-full">
@@ -186,46 +189,82 @@ export default function HomePage() {
                 From small retailers to large enterprises — source products, manage orders, and grow your business with zero commission on signup.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4">
-                {user ? (
-                  <>
-                    {isSupplier && (
-                      <Link href="/dashboard">
-                        <Button size="lg" className="text-base px-8 h-14 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 shadow-2xl shadow-orange-200 rounded-2xl font-bold">
-                          Go to Dashboard <ArrowRight className="h-5 w-5 ml-2" />
-                        </Button>
-                      </Link>
-                    )}
-                    {isAdmin && (
-                      <Link href="/admin">
-                        <Button size="lg" variant="outline" className="text-base px-8 h-14 rounded-2xl font-bold border-2">
-                          Admin Panel <Shield className="h-5 w-5 ml-2" />
-                        </Button>
-                      </Link>
-                    )}
-                    {!isSupplier && !isAdmin && (
-                      <Link href="/dashboard/become-supplier">
-                        <Button size="lg" className="text-base px-8 h-14 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 shadow-2xl shadow-orange-200 rounded-2xl font-bold">
-                          Become a Supplier <ArrowRight className="h-5 w-5 ml-2" />
-                        </Button>
-                      </Link>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <Link href="/register">
+              {/* User Type Selection */}
+              {!user && (
+                <div className="space-y-4">
+                  <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">I want to...</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Buyer */}
+                    <a href="#download-app" className="group flex flex-col items-center text-center p-6 rounded-2xl border-2 border-blue-200 bg-white hover:border-blue-500 hover:shadow-xl hover:shadow-blue-100 transition-all duration-300 hover:-translate-y-1">
+                      <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                        <ShoppingCart className="h-7 w-7 text-blue-600" />
+                      </div>
+                      <h3 className="font-bold text-gray-900 text-lg mb-1">Buy Products</h3>
+                      <p className="text-sm text-gray-500 mb-3">Browse, order & track purchases</p>
+                      <span className="text-blue-600 text-sm font-semibold inline-flex items-center gap-1 group-hover:gap-2 transition-all mt-auto">
+                        Download App <ArrowRight className="h-4 w-4" />
+                      </span>
+                    </a>
+
+                    {/* Supplier */}
+                    <Link href="/register?type=supplier" className="group flex flex-col items-center text-center p-6 rounded-2xl border-2 border-orange-300 bg-gradient-to-b from-orange-50 to-white hover:border-orange-500 hover:shadow-2xl hover:shadow-orange-200 transition-all duration-300 hover:-translate-y-1 relative overflow-hidden">
+                      <div className="absolute top-3 right-3 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full">Popular</div>
+                      <div className="w-14 h-14 rounded-2xl bg-orange-100 flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                        <Store className="h-7 w-7 text-orange-600" />
+                      </div>
+                      <h3 className="font-bold text-gray-900 text-lg mb-1">Sell Products</h3>
+                      <p className="text-sm text-gray-500 mb-3">List products & manage orders</p>
+                      <span className="text-orange-600 text-sm font-semibold inline-flex items-center gap-1 group-hover:gap-2 transition-all mt-auto">
+                        Register as Supplier <ArrowRight className="h-4 w-4" />
+                      </span>
+                    </Link>
+
+                    {/* Delivery */}
+                    <a href="#download-app" className="group flex flex-col items-center text-center p-6 rounded-2xl border-2 border-green-200 bg-white hover:border-green-500 hover:shadow-xl hover:shadow-green-100 transition-all duration-300 hover:-translate-y-1">
+                      <div className="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center mb-4 group-hover:scale-110 transition">
+                        <Truck className="h-7 w-7 text-green-600" />
+                      </div>
+                      <h3 className="font-bold text-gray-900 text-lg mb-1">Deliver Orders</h3>
+                      <p className="text-sm text-gray-500 mb-3">Earn by delivering products</p>
+                      <span className="text-green-600 text-sm font-semibold inline-flex items-center gap-1 group-hover:gap-2 transition-all mt-auto">
+                        Download App <ArrowRight className="h-4 w-4" />
+                      </span>
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* Logged In User Actions */}
+              {user && (
+                <div className="flex flex-col sm:flex-row gap-4">
+                  {isAdmin && (
+                    <Link href="/admin">
                       <Button size="lg" className="text-base px-8 h-14 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 shadow-2xl shadow-orange-200 rounded-2xl font-bold">
-                        Start Free Trial <ArrowRight className="h-5 w-5 ml-2" />
+                        Go to Admin Panel <Shield className="h-5 w-5 ml-2" />
                       </Button>
                     </Link>
-                    <Link href="#how-it-works">
-                      <Button size="lg" variant="outline" className="text-base px-8 h-14 rounded-2xl font-bold border-2 hover:bg-gray-50">
-                        <Play className="h-5 w-5 mr-2 fill-orange-500 text-orange-500" /> How It Works
+                  )}
+                  {isSupplier && (
+                    <Link href="/dashboard">
+                      <Button size="lg" className="text-base px-8 h-14 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 shadow-2xl shadow-orange-200 rounded-2xl font-bold">
+                        Go to Dashboard <ArrowRight className="h-5 w-5 ml-2" />
                       </Button>
                     </Link>
-                  </>
-                )}
-              </div>
+                  )}
+                  {!isSupplier && !isAdmin && (
+                    <Link href="/dashboard/become-supplier">
+                      <Button size="lg" className="text-base px-8 h-14 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 shadow-2xl shadow-orange-200 rounded-2xl font-bold">
+                        Become a Supplier <ArrowRight className="h-5 w-5 ml-2" />
+                      </Button>
+                    </Link>
+                  )}
+                  <Link href="#how-it-works">
+                    <Button size="lg" variant="outline" className="text-base px-8 h-14 rounded-2xl font-bold border-2 hover:bg-gray-50">
+                      <Play className="h-5 w-5 mr-2 fill-orange-500 text-orange-500" /> How It Works
+                    </Button>
+                  </Link>
+                </div>
+              )}
 
               <div className="flex items-center gap-6 text-sm text-gray-500">
                 <span className="flex items-center gap-1.5"><Check className="h-4 w-4 text-green-500" /> No credit card</span>
@@ -389,9 +428,15 @@ export default function HomePage() {
           <p className="mt-6 text-xl text-white/90">Join thousands of businesses already using {platform.name}</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
             {!user ? (
-              <Link href="/register">
+              <Link href="/register?type=supplier">
                 <Button size="lg" className="text-base px-10 h-14 bg-white text-gray-900 hover:bg-gray-100 rounded-2xl font-bold shadow-2xl">
-                  Get Started Free <ArrowRight className="h-5 w-5 ml-2" />
+                  Register as Supplier <ArrowRight className="h-5 w-5 ml-2" />
+                </Button>
+              </Link>
+            ) : isAdmin ? (
+              <Link href="/admin">
+                <Button size="lg" className="text-base px-10 h-14 bg-white text-gray-900 hover:bg-gray-100 rounded-2xl font-bold shadow-2xl">
+                  Go to Admin Panel <Shield className="h-5 w-5 ml-2" />
                 </Button>
               </Link>
             ) : isSupplier ? (
@@ -400,7 +445,13 @@ export default function HomePage() {
                   Go to Dashboard <ArrowRight className="h-5 w-5 ml-2" />
                 </Button>
               </Link>
-            ) : null}
+            ) : (
+              <Link href="/dashboard/become-supplier">
+                <Button size="lg" className="text-base px-10 h-14 bg-white text-gray-900 hover:bg-gray-100 rounded-2xl font-bold shadow-2xl">
+                  Become a Supplier <ArrowRight className="h-5 w-5 ml-2" />
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </section>

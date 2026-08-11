@@ -6,11 +6,29 @@ export async function GET(request) {
     const session = await getSessionUser();
     if (!session?.userId) return errorResponse('Unauthorized', 401);
 
-    const user = await prisma.user.findUnique({
+      const user = await prisma.user.findUnique({
       where: { id: session.userId },
       select: {
         id: true, name: true, email: true, mobile: true,
         mobileVerified: true, profileImage: true,
+        referralCode: true,
+        referralsMade: {
+          where: { referralType: 'DELIVERY' },
+          include: {
+            referred: {
+              select: {
+                id: true, name: true, mobile: true, createdAt: true,
+                deliveryPartner: {
+                  select: {
+                    totalDeliveries: true,
+                    isVerified: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
         deliveryPartner: {
           select: {
             id: true, licenseNumber: true, licenseDoc: true,

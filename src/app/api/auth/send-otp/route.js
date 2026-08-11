@@ -5,7 +5,51 @@ import { z } from 'zod';
 
 const sendOtpSchema = z.object({
   mobile: z.string().regex(/^[6-9]\d{9}$/, 'Invalid mobile number'),
+  referralCode: z.string().optional(),
+  userType: z.enum(['BUYER', 'DELIVERY_PARTNER']).optional().default('BUYER'),
 });
+
+// Send SMS via Fast2SMS
+async function sendSMS(mobile, otp) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // In development, just log to console
+  if (!isProduction) {
+    console.log(`📱 OTP for ${mobile}: ${otp}`);
+    return true;
+  }
+
+  // Production: Send via Fast2SMS
+  try {
+    const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+      method: 'POST',
+      headers: {
+        'authorization': process.env.FAST2SMS_API_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        route: 'otp',
+        variables_values: otp,
+        numbers: mobile,
+        flash: 0,
+        message: 'Your OTP for PROCURE login is: ' + otp + '. Valid for 5 minutes.',
+      }),
+    });
+    
+    const data = await res.json();
+    
+    if (data.return === true) {
+      console.log(`✅ SMS sent to ${mobile}`);
+      return true;
+    } else {
+      console.error('Fast2SMS error:', data.message || 'Unknown error');
+      return false;
+    }
+  } catch (e) {
+    console.error('SMS send error:', e.message);
+    return false;
+  }
+}
 
 export async function POST(request) {
   try {
@@ -22,31 +66,114 @@ export async function POST(request) {
       return errorResponse('Invalid mobile number', 400);
     }
 
-    const { mobile } = validation.data;
+    const { mobile, referralCode, userType } = validation.data;
+    const isDelivery = userType === 'DELIVERY_PARTNER';
 
     // Find or create user by mobile
     let user = await prisma.user.findUnique({ where: { mobile } });
 
+    // Check referral code if provided
+    let referrerUser = null;
+    if (referralCode) {
+      referrerUser = await prisma.user.findFirst({
+        where: { referralCode: referralCode },
+        select: { id: true, name: true },
+      });
+    }
+
     if (!user) {
-      // Auto-register: Create user with DELIVERY_PARTNER role
-      user = await prisma.user.create({
-        data: {
-          name: 'Delivery Partner',
-          email: `${mobile}@procure.delivery`,
-          mobile,
-          mobileVerified: false,
-          roles: {
-            create: {
-              role: { connect: { name: 'DELIVERY_PARTNER' } },
-            },
-          },
-          deliveryPartner: {
-            create: {
-              vehicleType: 'Bike',
-            },
+      // Auto-register with appropriate role based on userType
+      const createData = {
+        name: isDelivery ? 'Delivery Partner' : 'Buyer',
+        email: `${mobile}@procure.${isDelivery ? 'delivery' : 'buyer'}`,
+        mobile,
+        mobileVerified: false,
+        referredBy: referrerUser?.id || null,
+        roles: {
+          create: {
+            role: { connect: { name: isDelivery ? 'DELIVERY_PARTNER' : 'BUYER' } },
           },
         },
+      };
+
+      // Only create DeliveryPartner profile for delivery users
+      if (isDelivery) {
+        createData.deliveryPartner = { create: {} };
+      }
+
+      user = await prisma.user.create({ data: createData });
+
+      // Create referral record if referred by someone
+      if (referrerUser) {
+        const referralType = isDelivery ? 'DELIVERY' : 'BUYER';
+        await prisma.referral.create({
+          data: {
+            referrerId: referrerUser.id,
+            referredId: user.id,
+            referralType,
+            status: 'REGISTERED',
+          },
+        }).catch(err => console.error('Referral creation failed:', err.message));
+
+        // Notify referrer
+        try {
+          const { NotificationService } = await import('@/services/notification.service');
+          const title = isDelivery ? '🎉 New Delivery Referral!' : '🎉 New Referral!';
+          const message = isDelivery 
+            ? `A new delivery partner joined using your referral code!`
+            : `Someone just joined using your referral code!`;
+          NotificationService.send({
+            userId: referrerUser.id,
+            type: 'IN_APP',
+            title,
+            message,
+          }).catch(() => {});
+        } catch {}
+      }
+    } else if (referralCode && !user.referredBy) {
+      // User exists but wasn't referred — update if referral code provided
+      const existingReferral = await prisma.referral.findFirst({
+        where: { referredId: user.id },
       });
+      
+      if (!existingReferral && referrerUser && referrerUser.id !== user.id) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { referredBy: referrerUser.id },
+        });
+        
+        // Determine referral type based on user's existing role
+        const userRoles = await prisma.userRole.findMany({
+          where: { userId: user.id },
+          include: { role: true },
+        });
+        const isExistingDelivery = userRoles.some(r => r.role.name === 'DELIVERY_PARTNER');
+        const referralType = isExistingDelivery ? 'DELIVERY' : 'BUYER';
+
+        await prisma.referral.create({
+          data: {
+            referrerId: referrerUser.id,
+            referredId: user.id,
+            referralType,
+            status: 'REGISTERED',
+          },
+        }).catch(err => console.error('Referral creation failed:', err.message));
+
+        // Notify referrer
+        try {
+          const { NotificationService } = await import('@/services/notification.service');
+          const title = isExistingDelivery ? '🎉 New Delivery Referral!' : '🎉 New Referral!';
+          const message = isExistingDelivery
+            ? `A delivery partner joined using your referral code!`
+            : `Someone just joined using your referral code!`;
+          NotificationService.send({
+            userId: referrerUser.id,
+            type: 'IN_APP',
+            title,
+            message,
+          }).catch(() => {});
+        } catch {}
+      }
     }
 
     // Generate 6-digit OTP
@@ -67,14 +194,17 @@ export async function POST(request) {
       },
     });
 
-    // In production: Send SMS via Twilio/Fast2SMS
-    // For development: Return OTP in response
-    console.log(`📱 OTP for ${mobile}: ${otp}`);
+    // Send SMS via Fast2SMS (dev: console log, prod: real SMS)
+    const smsSent = await sendSMS(mobile, otp);
+
+    if (!smsSent && process.env.NODE_ENV === 'production') {
+      return errorResponse('Failed to send OTP. Please try again later.', 500);
+    }
 
     return successResponse({
-      message: 'OTP sent successfully',
-      // Remove in production
-      otp: process.env.NODE_ENV === 'production' ? undefined : otp,
+      message: smsSent ? 'OTP sent successfully' : 'OTP logged (dev mode)',
+      // Return OTP in response only in development
+      ...(process.env.NODE_ENV !== 'production' && { otp }),
     });
   } catch (error) {
     console.error('Send OTP error:', error);

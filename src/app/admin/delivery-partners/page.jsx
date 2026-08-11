@@ -4,6 +4,7 @@ import {
   Users, Search, CheckCircle, XCircle, Eye, Phone,
   Bike, Shield, Star, AlertTriangle, Clock, Image as ImageIcon,
   ChevronLeft, ChevronRight, FileText, Camera, User, Truck, Edit3,
+  Wallet, IndianRupee,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -155,6 +156,7 @@ export default function AdminDeliveryPartnersPage() {
                 <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Partner</th>
                 <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Vehicle</th>
                 <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Documents</th>
+                <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Wallet</th>
                 <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="text-left px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Performance</th>
                 <th className="text-center px-4 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -162,9 +164,9 @@ export default function AdminDeliveryPartnersPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-12 text-center"><div className="flex items-center justify-center gap-2 text-gray-400"><div className="animate-spin h-5 w-5 border-2 border-orange-500 border-t-transparent rounded-full" /><span className="text-sm">Loading partners...</span></div></td></tr>
+                <tr><td colSpan={7} className="px-4 py-12 text-center"><div className="flex items-center justify-center gap-2 text-gray-400"><div className="animate-spin h-5 w-5 border-2 border-orange-500 border-t-transparent rounded-full" /><span className="text-sm">Loading partners...</span></div></td></tr>
               ) : partners.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-16 text-center"><Users className="h-12 w-12 mx-auto text-gray-300 mb-3" /><p className="text-gray-500 font-medium">No delivery partners found</p><p className="text-gray-400 text-sm mt-1">{filter ? 'Try changing the filter' : 'Partners will appear here after registration'}</p></td></tr>
+                <tr><td colSpan={7} className="px-4 py-16 text-center"><Users className="h-12 w-12 mx-auto text-gray-300 mb-3" /><p className="text-gray-500 font-medium">No delivery partners found</p><p className="text-gray-400 text-sm mt-1">{filter ? 'Try changing the filter' : 'Partners will appear here after registration'}</p></td></tr>
               ) : (
                 partners.map((p) => (
                   <tr key={p.id} className="hover:bg-orange-50/30 transition-colors">
@@ -198,6 +200,13 @@ export default function AdminDeliveryPartnersPage() {
                         {p.selfieWithVehicle && <button onClick={() => setPreviewImage({ url: p.selfieWithVehicle, label: 'Selfie' })} className="text-xs bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded font-medium hover:bg-orange-100">Selfie</button>}
                         {!p.licenseDoc && !p.activeVehicle?.rcDocument && !p.profilePhoto && !p.selfieWithVehicle && <span className="text-xs text-gray-400 italic">No documents</span>}
                       </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <p className="text-sm font-bold text-green-700">₹{(p.wallet?.totalEarned || 0).toLocaleString('en-IN')}</p>
+                      {p.wallet?.codPending > 0 && (
+                        <p className="text-xs text-amber-600 font-medium flex items-center gap-1"><IndianRupee className="h-3 w-3" /> COD: ₹{p.wallet.codPending.toLocaleString('en-IN')}</p>
+                      )}
+                      {!p.wallet && <p className="text-xs text-gray-400">No wallet</p>}
                     </td>
                     <td className="px-4 py-3.5">
                       {getStatusBadge(p)}
@@ -271,6 +280,35 @@ export default function AdminDeliveryPartnersPage() {
                   <div key={i} className={`${item.color} rounded-xl p-3.5`}><item.icon className="h-4 w-4 mb-1 opacity-70" /><p className="text-xs opacity-70">{item.label}</p><p className="font-semibold text-sm mt-0.5">{item.value}</p></div>
                 ))}
               </div>
+
+              {/* Wallet & Earnings Card */}
+              {selectedPartner.wallet && (
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><Wallet className="h-4 w-4" /> Wallet & Earnings</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200 p-3">
+                      <p className="text-xs text-gray-500">Total Earned</p>
+                      <p className="text-lg font-bold text-green-700">₹{(selectedPartner.wallet.totalEarned || 0).toLocaleString('en-IN')}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Withdrawable</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border border-amber-200 p-3">
+                      <p className="text-xs text-gray-500">COD Pending</p>
+                      <p className="text-lg font-bold text-amber-700">₹{(selectedPartner.wallet.codPending || 0).toLocaleString('en-IN')}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Awaiting deposit</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-50 to-sky-50 rounded-xl border border-blue-200 p-3">
+                      <p className="text-xs text-gray-500">COD Collected</p>
+                      <p className="text-lg font-bold text-blue-700">₹{(selectedPartner.wallet.codCollected || 0).toLocaleString('en-IN')}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Lifetime</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl border border-purple-200 p-3">
+                      <p className="text-xs text-gray-500">Security Deposit</p>
+                      <p className="text-lg font-bold text-purple-700">₹{(selectedPartner.wallet.securityDeposit || 0).toLocaleString('en-IN')}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Held</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Editable Fields Section */}
               <div>

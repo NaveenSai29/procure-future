@@ -27,7 +27,7 @@ export const mobileSchema = z
 export const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100).trim(),
   email: emailSchema,
-  mobile: mobileSchema.optional(),
+  mobile: mobileSchema,
   password: passwordSchema,
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {

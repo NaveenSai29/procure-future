@@ -42,6 +42,12 @@ export async function GET(request) {
             select: { id: true, name: true, mobile: true, mobileVerified: true, profileImage: true },
           },
           deliveries: { select: { id: true, status: true } },
+          wallet: {
+            select: {
+              id: true, totalEarned: true, codCollected: true,
+              codPending: true, securityDeposit: true,
+            },
+          },
           documentChecks: { select: { documentType: true, documentUrl: true, status: true, rejectionReason: true } },
           vehicles: { select: { id: true, vehicleType: true, vehicleNumber: true, rcDocument: true, isVerified: true, verificationStatus: true, verificationNote: true }, orderBy: { createdAt: 'desc' } },
           activeVehicle: { select: { id: true, vehicleType: true, vehicleNumber: true, rcDocument: true, isVerified: true } },

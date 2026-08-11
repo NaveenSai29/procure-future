@@ -118,7 +118,7 @@ export async function dispatchWebhook(event, payload) {
   const webhooks = await prisma.webhook.findMany({
     where: {
       isActive: true,
-      events: { array_contains: [event] },
+      events: { has: event },
     },
   });
 
