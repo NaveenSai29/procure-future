@@ -24,6 +24,14 @@ export async function GET(request, { params }) {
         processingSlaHours: true,
         pickupSlaHours: true,
         autoCancelEnabled: true,
+        responseSlaHours: true,
+        settings: {
+          select: {
+            shopOpenTime: true,
+            shopCloseTime: true,
+            shopOpenDays: true,
+          },
+        },
         _count: { select: { products: true, warehouses: true, dedicatedAgents: true } },
         dedicatedAgents: {
           select: {

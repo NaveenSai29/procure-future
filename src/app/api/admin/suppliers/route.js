@@ -67,7 +67,7 @@ export async function PATCH(request) {
     if (!session) return errorResponse("Not authenticated", 401);
 
     const body = await request.json();
-    const { supplierId, action, codEnabled, codThreshold, processingSlaHours, pickupSlaHours, autoCancelEnabled, responseSlaHours } = body;
+    const { supplierId, action, codEnabled, codThreshold, processingSlaHours, pickupSlaHours, autoCancelEnabled, responseSlaHours, shopOpenTime, shopCloseTime, shopOpenDays } = body;
 
     if (action === 'verify') {
       await prisma.supplier.update({ where: { id: supplierId }, data: { isVerified: true } });
@@ -99,6 +99,24 @@ export async function PATCH(request) {
         data: updateData,
       });
       return successResponse({ message: 'COD & SLA settings updated' });
+    }
+
+    if (action === 'updateShopHours') {
+      await prisma.supplierSettings.upsert({
+        where: { supplierId },
+        create: {
+          supplierId,
+          shopOpenTime: shopOpenTime || null,
+          shopCloseTime: shopCloseTime || null,
+          shopOpenDays: shopOpenDays || null,
+        },
+        update: {
+          shopOpenTime: shopOpenTime || null,
+          shopCloseTime: shopCloseTime || null,
+          shopOpenDays: shopOpenDays || null,
+        },
+      });
+      return successResponse({ message: 'Shop hours updated' });
     }
 
     return errorResponse("Invalid action", 400);

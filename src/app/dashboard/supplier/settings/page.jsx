@@ -357,7 +357,7 @@ function ShopHoursForm({ settings, onUpdate }) {
 
   // Calculate if shop is currently open
   const getCurrentStatus = () => {
-    if (!openTime || !closeTime) return { text: 'Not set', color: 'text-gray-500', bg: 'bg-gray-100', icon: Clock };
+    if (!openTime || !closeTime) return { text: 'Not configured — Shop is CLOSED until hours are set', color: 'text-red-600', bg: 'bg-red-50', icon: AlertCircle };
     const now = new Date();
     const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const today = days[now.getDay()];
@@ -433,6 +433,13 @@ function ShopHoursForm({ settings, onUpdate }) {
 
       {!editing ? (
         /* Display Mode */
+        <>
+        {(!openTime || !closeTime) && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <span className="text-sm text-red-700 font-semibold">⚠️ Your shop is CLOSED — Set your hours to start accepting orders</span>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="text-xs text-gray-500">Open Time</label>
@@ -460,6 +467,7 @@ function ShopHoursForm({ settings, onUpdate }) {
             </div>
           </div>
         </div>
+        </>
       ) : (
         /* Edit Mode */
         <div className="space-y-4">

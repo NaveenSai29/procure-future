@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 // Helper to check if shop is currently open
 function getShopStatus(settings, isActive) {
   if (!isActive) return { isOpen: false, reason: 'offline', nextOpenTime: null, closesIn: null };
-  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: true, reason: null, nextOpenTime: null, closesIn: null };
+  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: false, reason: 'not_set', nextOpenTime: null, closesIn: null };
 
   const now = new Date();
   const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];

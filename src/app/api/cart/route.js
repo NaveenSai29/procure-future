@@ -48,7 +48,7 @@ async function getProductSupplier(productId) {
 // Helper: Check if shop is currently open based on hours
 function getShopStatus(isActive, settings) {
   if (!isActive) return { isOpen: false, reason: 'offline' };
-  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: true, reason: null };
+  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: false, reason: 'not_set' };
 
   const now = new Date();
   const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];

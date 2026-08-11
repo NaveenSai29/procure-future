@@ -22,6 +22,12 @@ export default function SupplierDetailPage() {
   const [pickupSlaHours, setPickupSlaHours] = useState(2);
   const [autoCancelEnabled, setAutoCancelEnabled] = useState(true);
 
+  // Shop Hours Settings
+  const [shopOpenTime, setShopOpenTime] = useState('');
+  const [shopCloseTime, setShopCloseTime] = useState('');
+  const [shopOpenDays, setShopOpenDays] = useState([]);
+  const [savingShopHours, setSavingShopHours] = useState(false);
+
   useEffect(() => {
     fetchSupplier();
     fetchAvailablePartners();
@@ -39,6 +45,13 @@ export default function SupplierDetailPage() {
         setProcessingSlaHours(data.data.processingSlaHours || 4);
         setPickupSlaHours(data.data.pickupSlaHours || 2);
         setAutoCancelEnabled(data.data.autoCancelEnabled !== false);
+        if (data.data.settings) {
+          setShopOpenTime(data.data.settings.shopOpenTime || '');
+          setShopCloseTime(data.data.settings.shopCloseTime || '');
+          try {
+            setShopOpenDays(data.data.settings.shopOpenDays ? JSON.parse(data.data.settings.shopOpenDays) : []);
+          } catch { setShopOpenDays([]); }
+        }
       }
     } catch (err) {
       toast.error('Failed to load supplier');
@@ -85,6 +98,39 @@ export default function SupplierDetailPage() {
       toast.error('Failed to save settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveShopHours = async () => {
+    setSavingShopHours(true);
+    try {
+      const res = await fetch('/api/admin/suppliers', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supplierId: id,
+          action: 'updateShopHours',
+          shopOpenTime,
+          shopCloseTime,
+          shopOpenDays: JSON.stringify(shopOpenDays),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Shop hours saved');
+      } else {
+        toast.error(data.message || 'Failed');
+      }
+    } catch { toast.error('Failed to save'); }
+    finally { setSavingShopHours(false); }
+  };
+
+  const toggleDay = (day) => {
+    const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    if (shopOpenDays.includes(day)) {
+      setShopOpenDays(shopOpenDays.filter(d => d !== day));
+    } else {
+      setShopOpenDays([...shopOpenDays, day].sort((a, b) => DAYS.indexOf(a) - DAYS.indexOf(b)));
     }
   };
 
@@ -177,6 +223,166 @@ export default function SupplierDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Shop Hours Card */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border p-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+            <Clock className="h-5 w-5 text-orange-600" /> Shop Hours
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">Set when this supplier accepts orders. If not set, shop is always open.</p>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Open Time</label>
+                <input
+                  type="time"
+                  value={shopOpenTime}
+                  onChange={(e) => setShopOpenTime(e.target.value)}
+                  className="w-full px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Close Time</label>
+                <input
+                  type="time"
+                  value={shopCloseTime}
+                  onChange={(e) => setShopCloseTime(e.target.value)}
+                  className="w-full px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Open Days</label>
+              <div className="flex gap-2">
+                {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => (
+                  <button
+                    key={day}
+                    onClick={() => toggleDay(day)}
+                    className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition border ${
+                      shopOpenDays.includes(day)
+                        ? 'bg-orange-600 text-white border-orange-600'
+                        : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {day.substring(0, 3)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {shopOpenTime && shopCloseTime && shopOpenDays.length > 0 && (
+              <div className="p-3 bg-green-50 rounded-xl border border-green-200">
+                <p className="text-sm text-green-700 font-medium">
+                  🕐 {shopOpenTime} - {shopCloseTime} on {shopOpenDays.map(d => d.substring(0, 3)).join(', ')}
+                </p>
+              </div>
+            )}
+
+            <button
+              onClick={handleSaveShopHours}
+              disabled={savingShopHours}
+              className="w-full bg-orange-600 text-white py-3 rounded-xl font-semibold hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {savingShopHours ? (
+                <><div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" /> Saving...</>
+              ) : (
+                <><Save className="h-4 w-4" /> Save Shop Hours</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Dedicated Agents Card */}
+        <div className="bg-white rounded-2xl border p-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+            <Users className="h-5 w-5 text-purple-600" /> Dedicated Agents
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            {dedicatedAgents.length} agent{dedicatedAgents.length !== 1 ? 's' : ''} assigned
+          </p>
+
+          {/* Agent List */}
+          <div className="space-y-2 mb-4">
+            {dedicatedAgents.map((agent) => (
+              <div key={agent.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center">
+                    <Bike className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{agent.partner?.user?.name || 'Unknown'}</p>
+                    <p className="text-xs text-gray-500">
+                      {agent.partner?.activeVehicle?.vehicleType || 'N/A'} • ⭐ {agent.partner?.rating?.toFixed(1) || '0.0'}
+                      {agent.partner?.isOnline && <span className="text-green-500 ml-1">• Online</span>}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRemoveAgent(agent.id)}
+                  className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            {dedicatedAgents.length === 0 && (
+              <div className="text-center py-6 text-gray-400">
+                <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No dedicated agents</p>
+                <p className="text-xs">Add agents for high-value COD orders</p>
+              </div>
+            )}
+          </div>
+
+          {/* Add Agent */}
+          {showAddAgent ? (
+            <div className="border rounded-xl p-3">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Select a verified delivery partner:</p>
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {unassignedPartners.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-4">No available partners</p>
+                ) : (
+                  unassignedPartners.slice(0, 15).map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => handleAddAgent(p.id)}
+                      className="w-full text-left p-2 hover:bg-blue-50 rounded-lg flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{p.user?.name}</p>
+                        <p className="text-xs text-gray-500">{p.activeVehicle?.vehicleType} • ⭐ {p.rating?.toFixed(1)}</p>
+                      </div>
+                      <UserPlus className="h-4 w-4 text-blue-500" />
+                    </button>
+                  ))
+                )}
+              </div>
+              <button
+                onClick={() => setShowAddAgent(false)}
+                className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddAgent(true)}
+              className="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-500 hover:border-purple-400 hover:text-purple-600 transition flex items-center justify-center gap-2"
+            >
+              <UserPlus className="h-4 w-4" /> Add Agent
+            </button>
+          )}
+
+          {/* Info Note */}
+          <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
+            <p className="text-xs text-amber-700">
+              💡 Dedicated agents handle high-value COD orders (above ₹{codThreshold?.toLocaleString('en-IN')}). 
+              These orders are NOT visible to other delivery partners.
+            </p>
+          </div>
+        </div>
+
         {/* COD Settings Card */}
         <div className="lg:col-span-2 bg-white rounded-2xl border p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
@@ -288,96 +494,6 @@ export default function SupplierDetailPage() {
               <><Save className="h-4 w-4" /> Save COD & SLA Settings</>
             )}
           </button>
-        </div>
-
-        {/* Dedicated Agents Card */}
-        <div className="bg-white rounded-2xl border p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
-            <Users className="h-5 w-5 text-purple-600" /> Dedicated Agents
-          </h2>
-          <p className="text-sm text-gray-500 mb-4">
-            {dedicatedAgents.length} agent{dedicatedAgents.length !== 1 ? 's' : ''} assigned
-          </p>
-
-          {/* Agent List */}
-          <div className="space-y-2 mb-4">
-            {dedicatedAgents.map((agent) => (
-              <div key={agent.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center">
-                    <Bike className="h-4 w-4 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{agent.partner?.user?.name || 'Unknown'}</p>
-                    <p className="text-xs text-gray-500">
-                      {agent.partner?.activeVehicle?.vehicleType || 'N/A'} • ⭐ {agent.partner?.rating?.toFixed(1) || '0.0'}
-                      {agent.partner?.isOnline && <span className="text-green-500 ml-1">• Online</span>}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleRemoveAgent(agent.id)}
-                  className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            {dedicatedAgents.length === 0 && (
-              <div className="text-center py-6 text-gray-400">
-                <Users className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No dedicated agents</p>
-                <p className="text-xs">Add agents for high-value COD orders</p>
-              </div>
-            )}
-          </div>
-
-          {/* Add Agent */}
-          {showAddAgent ? (
-            <div className="border rounded-xl p-3">
-              <p className="text-xs font-semibold text-gray-700 mb-2">Select a verified delivery partner:</p>
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {unassignedPartners.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-4">No available partners</p>
-                ) : (
-                  unassignedPartners.slice(0, 15).map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => handleAddAgent(p.id)}
-                      className="w-full text-left p-2 hover:bg-blue-50 rounded-lg flex items-center justify-between"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{p.user?.name}</p>
-                        <p className="text-xs text-gray-500">{p.activeVehicle?.vehicleType} • ⭐ {p.rating?.toFixed(1)}</p>
-                      </div>
-                      <UserPlus className="h-4 w-4 text-blue-500" />
-                    </button>
-                  ))
-                )}
-              </div>
-              <button
-                onClick={() => setShowAddAgent(false)}
-                className="mt-2 text-xs text-gray-500 hover:text-gray-700"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAddAgent(true)}
-              className="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-medium text-gray-500 hover:border-purple-400 hover:text-purple-600 transition flex items-center justify-center gap-2"
-            >
-              <UserPlus className="h-4 w-4" /> Add Agent
-            </button>
-          )}
-
-          {/* Info Note */}
-          <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
-            <p className="text-xs text-amber-700">
-              💡 Dedicated agents handle high-value COD orders (above ₹{codThreshold?.toLocaleString('en-IN')}). 
-              These orders are NOT visible to other delivery partners.
-            </p>
-          </div>
         </div>
       </div>
     </div>

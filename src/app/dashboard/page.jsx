@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Package, Warehouse, DollarSign, TrendingUp, AlertTriangle, Plus, ArrowUp, ArrowDown, Megaphone, Info, X } from "lucide-react";
+import { ShoppingCart, Package, Warehouse, DollarSign, TrendingUp, AlertTriangle, Plus, ArrowUp, ArrowDown, Megaphone, Info, X, Clock, Building, Shield, Store, CheckCircle, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [supplier, setSupplier] = useState(null);
+  const [supplierSettings, setSupplierSettings] = useState(null);
   const [stats, setStats] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
   const [dismissedAnnouncements, setDismissedAnnouncements] = useState([]);
@@ -23,9 +24,10 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     try {
-      const [userRes, supplierRes] = await Promise.all([
+      const [userRes, supplierRes, settingsRes] = await Promise.all([
         fetch("/api/auth/me"),
         fetch("/api/supplier/me"),
+        fetch("/api/supplier/settings"),
       ]);
 
       const userData = await userRes.json();
@@ -42,6 +44,11 @@ export default function DashboardPage() {
         fetchStats(supplierData.data.id);
       } else {
         setLoading(false);
+      }
+
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        setSupplierSettings(settingsData.settings);
       }
     } catch (err) {
       console.error(err);
@@ -66,7 +73,6 @@ export default function DashboardPage() {
       const res = await fetch('/api/admin/cms/announcements');
       const data = await res.json();
       if (data.announcements) {
-        // Show only active announcements targeted to ALL or SUPPLIERS
         const now = new Date();
         const relevant = data.announcements.filter(a => {
           if (a.isActive === false) return false;
@@ -114,6 +120,65 @@ export default function DashboardPage() {
         </div>
       </div>
     );
+  }
+
+  // Build alerts for missing items
+  const alerts = [];
+  const hasShopHours = supplierSettings?.shopOpenTime && supplierSettings?.shopCloseTime;
+  const hasBankAccount = supplier?.bankAccounts?.length > 0;
+  const isVerified = supplier?.isVerified;
+  const isGstVerified = supplier?.gstVerified;
+
+  if (!isVerified) {
+    alerts.push({
+      icon: Shield,
+      title: 'KYC Verification Pending',
+      desc: 'Complete your KYC to go online and start selling.',
+      href: '/dashboard/supplier/settings?tab=kyc',
+      color: 'text-red-600',
+      bg: 'bg-red-50',
+      border: 'border-red-200',
+      btnText: 'Upload KYC',
+    });
+  }
+
+  if (!hasShopHours) {
+    alerts.push({
+      icon: Clock,
+      title: 'Shop Hours Not Set',
+      desc: 'Your shop is CLOSED. Set your opening hours to accept orders.',
+      href: '/dashboard/supplier/settings',
+      color: 'text-red-600',
+      bg: 'bg-red-50',
+      border: 'border-red-200',
+      btnText: 'Set Hours',
+    });
+  }
+
+  if (!hasBankAccount) {
+    alerts.push({
+      icon: Building,
+      title: 'Bank Account Not Added',
+      desc: 'Add your bank account to receive settlement payments.',
+      href: '/dashboard/supplier/settings/bank',
+      color: 'text-yellow-600',
+      bg: 'bg-yellow-50',
+      border: 'border-yellow-200',
+      btnText: 'Add Bank',
+    });
+  }
+
+  if (!isGstVerified) {
+    alerts.push({
+      icon: Info,
+      title: 'GST Not Verified',
+      desc: 'Verify your GST to build trust and get more orders.',
+      href: '/dashboard/supplier/settings',
+      color: 'text-yellow-600',
+      bg: 'bg-yellow-50',
+      border: 'border-yellow-200',
+      btnText: 'Verify GST',
+    });
   }
 
   const statCards = [
@@ -168,8 +233,9 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold">Welcome back, {supplier.businessName}</h1>
           <p className="text-muted-foreground flex items-center gap-1 mt-1">
-            <span className={`inline-block w-2 h-2 rounded-full ${supplier.isVerified ? "bg-green-500" : "bg-yellow-500"}`} />
-            {supplier.isVerified ? "Verified Supplier" : "Pending Verification"} • {supplier.businessType}
+            <span className={`inline-block w-2 h-2 rounded-full ${isVerified ? "bg-green-500" : "bg-yellow-500"}`} />
+            {isVerified ? "Verified Supplier" : "Pending Verification"} • {supplier.businessType}
+            {hasShopHours && <span className="ml-1">• {supplierSettings.shopOpenTime} - {supplierSettings.shopCloseTime}</span>}
           </p>
         </div>
         <Link href="/dashboard/supplier/products/new">
@@ -203,6 +269,45 @@ export default function DashboardPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Setup Alerts — show what's missing */}
+      {alerts.length > 0 && (
+        <div>
+          <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+            Action Required
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {alerts.map((alert, i) => (
+              <Link
+                key={i}
+                href={alert.href}
+                className={`${alert.bg} ${alert.border} border rounded-xl p-4 flex items-start gap-3 hover:shadow-sm transition-shadow group`}
+              >
+                <alert.icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${alert.color}`} />
+                <div className="flex-1">
+                  <p className="font-semibold text-sm text-gray-900">{alert.title}</p>
+                  <p className="text-xs text-gray-600 mt-0.5">{alert.desc}</p>
+                </div>
+                <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg bg-white border group-hover:bg-gray-50 flex items-center gap-1 ${alert.color}`}>
+                  {alert.btnText} <ArrowRight className="h-3 w-3" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* All Good Banner */}
+      {alerts.length === 0 && isVerified && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+          <CheckCircle className="h-5 w-5 text-green-600" />
+          <div>
+            <p className="font-semibold text-green-800">All set up! 🎉</p>
+            <p className="text-sm text-green-700">Your shop is live and ready to accept orders.</p>
+          </div>
         </div>
       )}
 
@@ -264,12 +369,12 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Alerts */}
+        {/* Low Stock Alerts */}
         <div className="bg-background rounded-xl border">
           <div className="p-4 border-b">
             <h2 className="font-semibold flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-yellow-500" />
-              Alerts
+              Low Stock Alerts
             </h2>
           </div>
           <div className="p-4 space-y-3">
@@ -286,7 +391,7 @@ export default function DashboardPage() {
             ) : (
               <div className="text-center py-4 text-muted-foreground text-sm">
                 <TrendingUp className="h-6 w-6 mx-auto mb-2 opacity-50" />
-                <p>All good! No alerts</p>
+                <p>All good! No low stock alerts</p>
               </div>
             )}
           </div>

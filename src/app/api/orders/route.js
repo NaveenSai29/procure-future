@@ -52,8 +52,8 @@ async function isShopOpen(supplierId) {
       select: { shopOpenTime: true, shopCloseTime: true, shopOpenDays: true },
     });
 
-    // If no shop hours set, shop is always open
-    if (!settings?.shopOpenTime || !settings?.shopCloseTime) return true;
+    // If no shop hours set, shop is closed until configured
+    if (!settings?.shopOpenTime || !settings?.shopCloseTime) return false;
 
     const now = new Date();
     const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
