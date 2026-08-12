@@ -23,18 +23,20 @@ async function getPurchaseThreshold() {
 
 async function getDeliveryReferralSettings() {
   try {
-    const [thresholdSetting, rewardSetting, enabledSetting] = await Promise.all([
+    const [thresholdSetting, rewardSetting, enabledSetting, rewardTypeSetting] = await Promise.all([
       prisma.systemSetting.findFirst({ where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_orders_threshold' } }),
       prisma.systemSetting.findFirst({ where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_reward_amount' } }),
       prisma.systemSetting.findFirst({ where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_enabled' } }),
+      prisma.systemSetting.findFirst({ where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_reward_type' } }),
     ]);
     return {
       enabled: enabledSetting ? enabledSetting.value === 'true' : true,
       ordersThreshold: thresholdSetting ? parseInt(thresholdSetting.value) : 50,
       rewardAmount: rewardSetting ? parseFloat(rewardSetting.value) : 500,
+      rewardType: rewardTypeSetting ? rewardTypeSetting.value : 'ONE_TIME',
     };
   } catch {
-    return { enabled: true, ordersThreshold: 50, rewardAmount: 500 };
+    return { enabled: true, ordersThreshold: 50, rewardAmount: 500, rewardType: 'ONE_TIME' };
   }
 }
 
@@ -99,6 +101,7 @@ export async function GET(request) {
         status: r.status,
         rewardAmount: r.rewardAmount,
         deliveryOrderCount: r.deliveryOrderCount,
+        rewardCycles: r.rewardCycles,
         processedAt: r.processedAt,
         createdAt: r.createdAt,
         referrer: {

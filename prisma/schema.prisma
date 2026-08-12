@@ -791,19 +791,30 @@ model DocumentVerification {
 }
 
 model Delivery {
-  id             String          @id @default(uuid())
-  orderId        String          @unique
-  partnerId      String
-  commissionRate Float            @default(0)
-  status         String          @default("ASSIGNED")
-  pickupTime     DateTime?
-  deliveryTime   DateTime?
-  otp            String?
-  signatureImage String?
-  proofImage     String?
-  notes          String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+    id            String   @id @default(uuid())
+    orderId       String   @unique
+    partnerId     String
+    status        String   @default("ASSIGNED")
+    otp           String?
+    notes         String?
+    signatureImage String?
+    proofImage    String?
+    pickupTime    DateTime?
+    deliveryTime  DateTime?
+    deliveryLat   Float?
+    deliveryLng   Float?
+    leaveAtDoor   Boolean  @default(false)
+    codPaymentMethod String?  // CASH or UPI (for COD orders)
+    returnStartedAt    DateTime?
+    returnCompletedAt  DateTime?
+    returnReason       String?
+    returnPhoto        String?
+    returnNote         String?
+    returnStatus       String?
+    returnLat          Float?
+    returnLng          Float?
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
 
   order          Order           @relation(fields: [orderId], references: [id])
   partner        DeliveryPartner @relation(fields: [partnerId], references: [id])
@@ -1485,6 +1496,7 @@ model Referral {
     referralType      String     @default("BUYER")    // BUYER or DELIVERY
     rewardAmount      Float      @default(0)
     deliveryOrderCount Int       @default(0)           // Track completed deliveries for DELIVERY referrals
+    rewardCycles      Int        @default(0)           // Track how many times reward has been given (for RECURRING mode)
     status            String     @default("PENDING")   // PENDING, REGISTERED, PURCHASED, PAID
     processedAt       DateTime?
     createdAt         DateTime   @default(now())

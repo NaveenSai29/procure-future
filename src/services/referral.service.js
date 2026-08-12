@@ -131,16 +131,22 @@ export class ReferralService {
   /**
    * Process delivery partner referral reward
    * Called after delivery partner completes a delivery
-   * Checks if referred partner has completed required number of deliveries
+   * Supports ONE_TIME and RECURRING modes:
+   * - ONE_TIME: Reward once when threshold reached
+   * - RECURRING: Reward every time threshold is reached (50, 100, 150, 200...)
    */
   static async processDeliveryReferralReward(partnerId) {
     try {
       // Find referral where this partner was referred (DELIVERY type)
+      // For RECURRING mode, also include referrals where status is PAID but more cycles available
       const referral = await prisma.referral.findFirst({
         where: {
           referredId: partnerId,
           referralType: 'DELIVERY',
-          status: { in: ['REGISTERED', 'PURCHASED', 'PENDING'] }, // Not already PAID
+          OR: [
+            { status: { in: ['REGISTERED', 'PURCHASED', 'PENDING'] } },
+            { status: 'PAID' }, // For RECURRING mode - check if more cycles available
+          ],
         },
         include: {
           referrer: { select: { id: true, name: true, deliveryPartner: { select: { id: true } } } },
@@ -165,7 +171,7 @@ export class ReferralService {
       });
 
       // Get delivery referral settings
-      const [thresholdSetting, rewardSetting, enabledSetting] = await Promise.all([
+      const [thresholdSetting, rewardSetting, enabledSetting, rewardTypeSetting] = await Promise.all([
         prisma.systemSetting.findFirst({
           where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_orders_threshold' },
         }),
@@ -175,6 +181,9 @@ export class ReferralService {
         prisma.systemSetting.findFirst({
           where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_enabled' },
         }),
+        prisma.systemSetting.findFirst({
+          where: { category: 'DELIVERY_REFERRAL', key: 'delivery_referral_reward_type' },
+        }),
       ]);
 
       const isEnabled = enabledSetting ? enabledSetting.value === 'true' : true;
@@ -182,135 +191,191 @@ export class ReferralService {
 
       const threshold = thresholdSetting ? parseInt(thresholdSetting.value) : 50;
       const rewardAmount = rewardSetting ? parseFloat(rewardSetting.value) : 500;
+      const rewardType = rewardTypeSetting ? rewardTypeSetting.value : 'ONE_TIME'; // ONE_TIME or RECURRING
 
-      // Check if threshold met
-      if (deliveryCount < threshold) {
-        // Update status to PURCHASED if they've started delivering
-        if (deliveryCount > 0 && referral.status === 'REGISTERED') {
-          await prisma.referral.update({
-            where: { id: referral.id },
-            data: { status: 'PURCHASED' },
-          });
-        }
-        return {
-          rewarded: false,
-          reason: `${deliveryCount}/${threshold} deliveries completed. Need ${threshold - deliveryCount} more.`,
-          currentCount: deliveryCount,
-          threshold,
-        };
-      }
-
-      // Threshold met! Credit reward to referrer's PartnerWallet
-      // Check if referrer is a delivery partner
-      const referrerPartner = referral.referrer?.deliveryPartner;
+      // Calculate how many cycles should have been rewarded
+      const expectedCycles = Math.floor(deliveryCount / threshold);
       
-      if (referrerPartner) {
-        // Credit to PartnerWallet (withdrawable via settlement)
-        await prisma.partnerWallet.upsert({
-          where: { partnerId: referrerPartner.id },
-          create: {
-            partnerId: referrerPartner.id,
-            totalEarned: rewardAmount,
-          },
-          update: {
-            totalEarned: { increment: rewardAmount },
-          },
-        });
-
-        // Mark referral as PAID
-        await prisma.referral.update({
-          where: { id: referral.id },
-          data: {
-            status: 'PAID',
-            rewardAmount,
-            processedAt: new Date(),
-          },
-        });
-
-        // Notify referrer
-        try {
-          const { NotificationService } = await import('@/services/notification.service');
-          NotificationService.send({
-            userId: referral.referrerId,
-            type: 'IN_APP',
-            title: '🎉 Delivery Referral Reward!',
-            message: `You earned ₹${rewardAmount} for referring a delivery partner who completed ${deliveryCount} deliveries! Added to your earnings wallet.`,
-          }).catch(() => {});
-        } catch {}
-
-        console.log(`Delivery referral reward: ₹${rewardAmount} paid to ${referral.referrer?.name} (PartnerWallet). Referred partner completed ${deliveryCount} deliveries.`);
-
-        return {
-          rewarded: true,
-          referralId: referral.id,
-          referrerId: referral.referrerId,
-          amount: rewardAmount,
-          deliveryCount,
-          threshold,
-        };
-      } else {
-        // Referrer is not a delivery partner — credit to BuyerWallet instead
-        let wallet = await prisma.buyerWallet.findUnique({
-          where: { userId: referral.referrerId },
-        });
-        if (!wallet) {
-          wallet = await prisma.buyerWallet.create({
-            data: { userId: referral.referrerId },
-          });
+      // For ONE_TIME mode: only reward once
+      if (rewardType === 'ONE_TIME') {
+        // If already PAID, no more rewards
+        if (referral.status === 'PAID') {
+          return { rewarded: false, reason: 'Already rewarded (one-time mode)', currentCount: deliveryCount, threshold };
         }
-
-        const balanceBefore = wallet.balance;
-        const balanceAfter = balanceBefore + rewardAmount;
-
-        await prisma.$transaction([
-          prisma.buyerWalletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              type: 'CREDIT',
-              amount: rewardAmount,
-              referenceType: 'REFERRAL_BONUS',
-              referenceId: referral.id,
-              description: `Delivery referral reward — referred partner completed ${deliveryCount} deliveries`,
-              balanceBefore,
-              balanceAfter,
-            },
-          }),
-          prisma.buyerWallet.update({
-            where: { id: wallet.id },
-            data: { balance: balanceAfter },
-          }),
-          prisma.referral.update({
-            where: { id: referral.id },
-            data: {
-              status: 'PAID',
-              rewardAmount,
-              processedAt: new Date(),
-            },
-          }),
-        ]);
-
-        try {
-          const { NotificationService } = await import('@/services/notification.service');
-          NotificationService.send({
-            userId: referral.referrerId,
-            type: 'IN_APP',
-            title: '🎉 Delivery Referral Reward!',
-            message: `You earned ₹${rewardAmount} for referring a delivery partner! Added to your wallet.`,
-          }).catch(() => {});
-        } catch {}
-
-        return {
-          rewarded: true,
-          referralId: referral.id,
-          referrerId: referral.referrerId,
-          amount: rewardAmount,
-          deliveryCount,
-          threshold,
-        };
+        
+        // Check if threshold met
+        if (deliveryCount < threshold) {
+          // Update status to PURCHASED if they've started delivering
+          if (deliveryCount > 0 && referral.status === 'REGISTERED') {
+            await prisma.referral.update({
+              where: { id: referral.id },
+              data: { status: 'PURCHASED' },
+            });
+          }
+          return {
+            rewarded: false,
+            reason: `${deliveryCount}/${threshold} deliveries completed. Need ${threshold - deliveryCount} more.`,
+            currentCount: deliveryCount,
+            threshold,
+          };
+        }
+        
+        // ONE_TIME: Only reward if current cycle > rewardCycles (should be 0)
+        if (referral.rewardCycles >= 1) {
+          return { rewarded: false, reason: 'Already rewarded', currentCount: deliveryCount, threshold };
+        }
+        
+        // Credit reward
+        return await this._creditDeliveryReferralReward(referral, rewardAmount, deliveryCount, threshold, 1);
+      }
+      
+      // RECURRING mode: reward every threshold milestone
+      else {
+        // Check if new cycle reached
+        if (expectedCycles <= referral.rewardCycles) {
+          // No new reward cycle reached
+          if (deliveryCount > 0 && referral.status === 'REGISTERED') {
+            await prisma.referral.update({
+              where: { id: referral.id },
+              data: { status: 'PURCHASED' },
+            });
+          }
+          return {
+            rewarded: false,
+            reason: `${deliveryCount} deliveries. Next reward at ${(referral.rewardCycles + 1) * threshold} deliveries.`,
+            currentCount: deliveryCount,
+            threshold,
+            nextRewardAt: (referral.rewardCycles + 1) * threshold,
+          };
+        }
+        
+        // Credit reward for the new cycle
+        return await this._creditDeliveryReferralReward(referral, rewardAmount, deliveryCount, threshold, expectedCycles);
       }
     } catch (error) {
       console.error('Delivery referral reward processing error:', error.message);
       return null;
+    }
+  }
+
+  /**
+   * Credit delivery referral reward to referrer's wallet
+   * @param {Object} referral - Referral record
+   * @param {number} rewardAmount - Amount to credit
+   * @param {number} deliveryCount - Total deliveries completed
+   * @param {number} threshold - Deliveries required per cycle
+   * @param {number} newCycle - The cycle number being rewarded (1 for first, 2 for second, etc.)
+   */
+  static async _creditDeliveryReferralReward(referral, rewardAmount, deliveryCount, threshold, newCycle) {
+    const referrerPartner = referral.referrer?.deliveryPartner;
+    
+    if (referrerPartner) {
+      // Credit to PartnerWallet (withdrawable via settlement)
+      await prisma.partnerWallet.upsert({
+        where: { partnerId: referrerPartner.id },
+        create: {
+          partnerId: referrerPartner.id,
+          totalEarned: rewardAmount,
+        },
+        update: {
+          totalEarned: { increment: rewardAmount },
+        },
+      });
+
+      // Update referral: mark PAID, accumulate rewards, update cycle count
+      await prisma.referral.update({
+        where: { id: referral.id },
+        data: {
+          status: 'PAID',
+          rewardAmount: { increment: rewardAmount }, // Accumulate total rewards
+          rewardCycles: newCycle,
+          processedAt: new Date(),
+        },
+      });
+
+      // Notify referrer
+      try {
+        const { NotificationService } = await import('@/services/notification.service');
+        NotificationService.send({
+          userId: referral.referrerId,
+          type: 'IN_APP',
+          title: '🎉 Delivery Referral Reward!',
+          message: `You earned ₹${rewardAmount} for referring a delivery partner who completed ${deliveryCount} deliveries! (Cycle ${newCycle}) Added to your earnings wallet.`,
+        }).catch(() => {});
+      } catch {}
+
+      console.log(`Delivery referral reward: ₹${rewardAmount} paid to ${referral.referrer?.name} (PartnerWallet). Cycle ${newCycle}. Referred partner completed ${deliveryCount} deliveries.`);
+
+      return {
+        rewarded: true,
+        referralId: referral.id,
+        referrerId: referral.referrerId,
+        amount: rewardAmount,
+        deliveryCount,
+        threshold,
+        cycle: newCycle,
+      };
+    } else {
+      // Referrer is not a delivery partner — credit to BuyerWallet instead
+      let wallet = await prisma.buyerWallet.findUnique({
+        where: { userId: referral.referrerId },
+      });
+      if (!wallet) {
+        wallet = await prisma.buyerWallet.create({
+          data: { userId: referral.referrerId },
+        });
+      }
+
+      const balanceBefore = wallet.balance;
+      const balanceAfter = balanceBefore + rewardAmount;
+
+      await prisma.$transaction([
+        prisma.buyerWalletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'CREDIT',
+            amount: rewardAmount,
+            referenceType: 'REFERRAL_BONUS',
+            referenceId: referral.id,
+            description: `Delivery referral reward — referred partner completed ${deliveryCount} deliveries (Cycle ${newCycle})`,
+            balanceBefore,
+            balanceAfter,
+          },
+        }),
+        prisma.buyerWallet.update({
+          where: { id: wallet.id },
+          data: { balance: balanceAfter },
+        }),
+        prisma.referral.update({
+          where: { id: referral.id },
+          data: {
+            status: 'PAID',
+            rewardAmount: { increment: rewardAmount }, // Accumulate total rewards
+            rewardCycles: newCycle,
+            processedAt: new Date(),
+          },
+        }),
+      ]);
+
+      try {
+        const { NotificationService } = await import('@/services/notification.service');
+        NotificationService.send({
+          userId: referral.referrerId,
+          type: 'IN_APP',
+          title: '🎉 Delivery Referral Reward!',
+          message: `You earned ₹${rewardAmount} for referring a delivery partner! (Cycle ${newCycle}) Added to your wallet.`,
+        }).catch(() => {});
+      } catch {}
+
+      return {
+        rewarded: true,
+        referralId: referral.id,
+        referrerId: referral.referrerId,
+        amount: rewardAmount,
+        deliveryCount,
+        threshold,
+        cycle: newCycle,
+      };
     }
   }
 }

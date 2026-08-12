@@ -29,6 +29,7 @@ export default function AdminReferralsPage() {
   const [deliveryEnabled, setDeliveryEnabled] = useState(true);
   const [deliveryThreshold, setDeliveryThreshold] = useState('50');
   const [deliveryReward, setDeliveryReward] = useState('500');
+  const [deliveryRewardType, setDeliveryRewardType] = useState('ONE_TIME'); // ONE_TIME or RECURRING
   const [savingDeliverySettings, setSavingDeliverySettings] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -49,6 +50,9 @@ export default function AdminReferralsPage() {
           setDeliveryEnabled(json.data.settings.delivery.enabled);
           setDeliveryThreshold(String(json.data.settings.delivery.ordersThreshold));
           setDeliveryReward(String(json.data.settings.delivery.rewardAmount));
+          if (json.data.settings.delivery.rewardType) {
+            setDeliveryRewardType(json.data.settings.delivery.rewardType);
+          }
         }
       }
     } catch {
@@ -80,6 +84,9 @@ export default function AdminReferralsPage() {
         }
         if (json.settings.DELIVERY_REFERRAL.delivery_referral_reward_amount) {
           setDeliveryReward(json.settings.DELIVERY_REFERRAL.delivery_referral_reward_amount);
+        }
+        if (json.settings.DELIVERY_REFERRAL.delivery_referral_reward_type) {
+          setDeliveryRewardType(json.settings.DELIVERY_REFERRAL.delivery_referral_reward_type);
         }
       }
     } catch {}
@@ -156,6 +163,7 @@ export default function AdminReferralsPage() {
             delivery_referral_enabled: String(deliveryEnabled),
             delivery_referral_orders_threshold: String(deliveryThreshold),
             delivery_referral_reward_amount: String(deliveryReward),
+            delivery_referral_reward_type: String(deliveryRewardType),
           },
         }),
       });
@@ -341,7 +349,7 @@ export default function AdminReferralsPage() {
             <p className="text-xs text-gray-500">Reward delivery partners who refer other delivery partners</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Enabled</label>
             <select
@@ -374,6 +382,17 @@ export default function AdminReferralsPage() {
             />
           </div>
           <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Reward Type</label>
+            <select
+              value={deliveryRewardType}
+              onChange={(e) => setDeliveryRewardType(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            >
+              <option value="ONE_TIME">🎯 One Time</option>
+              <option value="RECURRING">🔄 Recurring</option>
+            </select>
+          </div>
+          <div>
             <button
               onClick={handleSaveDeliverySettings}
               disabled={savingDeliverySettings}
@@ -384,6 +403,20 @@ export default function AdminReferralsPage() {
             </button>
           </div>
         </div>
+        {deliveryRewardType === 'RECURRING' && (
+          <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-xs text-blue-700">
+              🔄 <strong>Recurring Mode:</strong> Referrer earns ₹{deliveryReward || '500'} every {deliveryThreshold || '50'} deliveries their referred partner completes. (50, 100, 150, 200...)
+            </p>
+          </div>
+        )}
+        {deliveryRewardType === 'ONE_TIME' && (
+          <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p className="text-xs text-gray-600">
+              🎯 <strong>One Time Mode:</strong> Referrer earns ₹{deliveryReward || '500'} once when their referred partner completes {deliveryThreshold || '50'} deliveries.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -428,6 +461,9 @@ export default function AdminReferralsPage() {
                 <>
                   <p className="text-sm mt-1"><strong>Deliveries:</strong> {rewardModal.stats?.deliveriesCompleted || 0} / {rewardModal.stats?.requiredForReward || 50}</p>
                   <p className="text-sm mt-1"><strong>Progress:</strong> {rewardModal.stats?.progressPercent || 0}%</p>
+                  {rewardModal.rewardCycles !== undefined && (
+                    <p className="text-sm mt-1"><strong>Cycles Paid:</strong> {rewardModal.rewardCycles}</p>
+                  )}
                 </>
               ) : (
                 <>
@@ -564,6 +600,9 @@ export default function AdminReferralsPage() {
                             <span className="text-xs text-gray-600 font-semibold">{r.stats?.progressPercent || 0}%</span>
                           </div>
                           <p className="text-xs text-gray-400 mt-1">{r.stats?.deliveriesCompleted || 0}/{r.stats?.requiredForReward || 50} deliveries</p>
+                          {r.rewardCycles !== undefined && r.rewardCycles > 0 && (
+                            <p className="text-xs text-purple-500 mt-1 font-medium">🔄 {r.rewardCycles} cycle{r.rewardCycles > 1 ? 's' : ''} paid</p>
+                          )}
                         </div>
                       ) : (
                         <div>

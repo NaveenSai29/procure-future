@@ -58,6 +58,11 @@ export async function GET() {
         freeDeliveryAbove: parseFloat(delivery.freeDeliveryAbove) || 999,
         riderIconUrl: delivery.riderIconUrl || null,
         vehicles: vehicles,
+        deliveryVerification: {
+          deliveryRadiusMeters: parseInt(delivery.deliveryRadiusMeters) || 50,
+          waitTimerMinutes: parseInt(delivery.waitTimerMinutes) || 5,
+          photoProofRequired: delivery.photoProofRequired !== 'false' && delivery.photoProofRequired !== false,
+        },
         bankDetails: {
           bankName: bankDetails.bankName || '',
           accountHolder: bankDetails.accountHolder || '',
@@ -82,6 +87,11 @@ export async function GET() {
         freeDeliveryAbove: 999,
         riderIconUrl: null,
         vehicles: [],
+        deliveryVerification: {
+          deliveryRadiusMeters: 50,
+          waitTimerMinutes: 5,
+          photoProofRequired: true,
+        },
         bankDetails: {
           bankName: '',
           accountHolder: '',

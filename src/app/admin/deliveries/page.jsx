@@ -4,7 +4,7 @@ import {
   Truck, Search, CheckCircle, XCircle, Eye, Phone, Bike, MapPin,
   Clock, Package, User, ChevronLeft, ChevronRight,
   Wallet, Banknote, MessageSquare, Settings2, IndianRupee,
-  Weight, Ruler, Gauge, Sliders, Shield,
+  Weight, Ruler, Gauge, Sliders, Shield, Camera, Navigation,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,6 +22,8 @@ const STATUS_TABS = [
   { key: 'PICKED_UP', label: 'In Transit', color: '#F59E0B' },
   { key: 'DELIVERED', label: 'Completed', color: '#10B981' },
   { key: 'REJECTED', label: 'Rejected', color: '#EF4444' },
+  { key: 'RETURNING', label: 'Returning', color: '#F59E0B' },
+  { key: 'RETURNED', label: 'Returned', color: '#EF4444' },
 ];
 
 const STATUS_STYLE = {
@@ -30,6 +32,8 @@ const STATUS_STYLE = {
   PICKED_UP: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' },
   DELIVERED: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
   REJECTED: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500' },
+  RETURNING: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', dot: 'bg-amber-500' },
+  RETURNED: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500' },
 };
 
 export default function AdminDeliveriesPage() {
@@ -346,6 +350,26 @@ export default function AdminDeliveriesPage() {
             </div>
           </div>
 
+          {/* Verification Settings */}
+          <div className="p-4 bg-cyan-50 rounded-xl border border-cyan-200 mb-4">
+            <p className="text-sm font-bold text-cyan-800 mb-2">🛡️ Delivery Verification</p>
+            <p className="text-xs text-cyan-600 mb-3">GPS proximity, wait timer, and photo proof settings</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg p-3 border border-cyan-200">
+                <p className="text-xs text-gray-500">Radius</p>
+                <p className="text-lg font-bold">{deliverySettings?.deliveryRadiusMeters || 50}m</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-cyan-200">
+                <p className="text-xs text-gray-500">Wait Timer</p>
+                <p className="text-lg font-bold">{deliverySettings?.waitTimerMinutes || 5} min</p>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-cyan-200">
+                <p className="text-xs text-gray-500">Photo Proof</p>
+                <p className="text-lg font-bold">{deliverySettings?.photoProofRequired !== false ? 'ON' : 'OFF'}</p>
+              </div>
+            </div>
+          </div>
+
           {deliverySettings && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div className="p-3 bg-gray-50 rounded-xl">
@@ -490,6 +514,60 @@ export default function AdminDeliveriesPage() {
                   <p className="text-2xl font-bold text-amber-700">₹{selectedDelivery.order?.totalAmount}</p>
                 </div>
               )}
+
+              {/* Return Information */}
+              {(selectedDelivery.status === 'RETURNING' || selectedDelivery.status === 'RETURNED') && (
+                <div className="bg-red-50 rounded-xl p-4 border border-red-200">
+                  <p className="text-sm font-bold text-red-800 mb-2">🔄 Return Information</p>
+                  <div className="space-y-2 text-sm">
+                    {selectedDelivery.returnReason && (
+                      <div className="flex justify-between"><span className="text-gray-600">Reason</span><span className="font-medium">{selectedDelivery.returnReason}</span></div>
+                    )}
+                    {selectedDelivery.returnStartedAt && (
+                      <div className="flex justify-between"><span className="text-gray-600">Started At</span><span className="font-medium">{new Date(selectedDelivery.returnStartedAt).toLocaleString('en-IN')}</span></div>
+                    )}
+                    {selectedDelivery.returnCompletedAt && (
+                      <div className="flex justify-between"><span className="text-gray-600">Completed At</span><span className="font-medium">{new Date(selectedDelivery.returnCompletedAt).toLocaleString('en-IN')}</span></div>
+                    )}
+                    {selectedDelivery.returnLat && selectedDelivery.returnLng && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">GPS</span>
+                        <a href={`https://maps.google.com/?q=${selectedDelivery.returnLat},${selectedDelivery.returnLng}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
+                          <Navigation className="h-3 w-3" /> View Map
+                        </a>
+                      </div>
+                    )}
+                    {selectedDelivery.returnPhoto && (
+                      <div className="mt-2">
+                        <span className="text-gray-600 block mb-1">Return Photo</span>
+                        <img src={selectedDelivery.returnPhoto} alt="Return proof" className="w-full h-48 object-cover rounded-lg border" />
+                      </div>
+                    )}
+                    {selectedDelivery.returnNote && (
+                      <div className="flex justify-between"><span className="text-gray-600">Note</span><span className="font-medium">{selectedDelivery.returnNote}</span></div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Delivery Proof Photo */}
+              {selectedDelivery.proofImage && (
+                <div className="bg-gray-50 rounded-xl p-4 border">
+                  <p className="text-sm font-bold mb-2"><Camera className="h-4 w-4 inline" /> Delivery Proof</p>
+                  <img src={selectedDelivery.proofImage} alt="Delivery proof" className="w-full h-48 object-cover rounded-lg border" />
+                </div>
+              )}
+
+              {/* Partner GPS Location */}
+              {selectedDelivery.partner?.currentLat && selectedDelivery.partner?.currentLng && (
+                <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                  <p className="text-sm font-bold text-blue-800 mb-2"><MapPin className="h-4 w-4 inline" /> Partner Location</p>
+                  <a href={`https://maps.google.com/?q=${selectedDelivery.partner.currentLat},${selectedDelivery.partner.currentLng}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm flex items-center gap-1">
+                    <Navigation className="h-3 w-3" /> View on Map
+                  </a>
+                </div>
+              )}
+
               <button onClick={() => setSelectedDelivery(null)} className="w-full py-3 bg-gray-100 rounded-xl font-medium">Close</button>
             </div>
           </div>

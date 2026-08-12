@@ -6,7 +6,7 @@ import {
   Zap, Save, RefreshCw,
   Globe, Mail, Phone,
   RotateCcw, Wallet, Banknote, Building, Percent,
-  Truck, CloudRain, Clock, MapPin, Gauge, DollarSign
+  Truck, CloudRain, Clock, MapPin, Gauge, DollarSign, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -37,6 +37,9 @@ export default function AdminSettingsPage() {
     codCharge: 30, minDeliveryFee: 20,
     riderIconUrl: '',
     surgeEnabled: false, rainSurgeMultiplier: 1.5, autoWeatherEnabled: true, peakHours: [],
+    deliveryRadiusMeters: 50,
+    waitTimerMinutes: 5,
+    photoProofRequired: true,
   });
 
   const [paymentForm, setPaymentForm] = useState({
@@ -104,6 +107,9 @@ export default function AdminSettingsPage() {
           rainSurgeMultiplier: d.rainSurgeMultiplier ?? prev.rainSurgeMultiplier,
           autoWeatherEnabled: d.autoWeatherEnabled ?? prev.autoWeatherEnabled,
           peakHours: d.peakHours || prev.peakHours,
+          deliveryRadiusMeters: d.deliveryRadiusMeters ?? prev.deliveryRadiusMeters ?? 50,
+          waitTimerMinutes: d.waitTimerMinutes ?? prev.waitTimerMinutes ?? 5,
+          photoProofRequired: d.photoProofRequired ?? prev.photoProofRequired ?? true,
         }));
       }
       if (data.platform) {
@@ -310,6 +316,41 @@ export default function AdminSettingsPage() {
 
           <button onClick={() => { setDeliveryForm(prev => ({ ...prev, vehicles: [...prev.vehicles, { type: 'New Vehicle', maxWeight: 100, distanceSlabs: [{ upToKm: 5, perKmRate: 25 }, { upToKm: 10, perKmRate: 35 }, { upToKm: 20, perKmRate: 50 }, { upToKm: 999, perKmRate: 70 }] }] })); }} className="w-full py-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-600 hover:bg-blue-50 font-medium text-sm">+ Add Vehicle Type</button>
 
+          {/* VERIFICATION SETTINGS */}
+          <div className="bg-white rounded-xl border shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-cyan-100 rounded-lg"><ShieldCheck className="h-5 w-5 text-cyan-600" /></div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Delivery Verification</h3>
+                <p className="text-xs text-gray-500">GPS proximity, wait timer, and photo proof settings</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="text-sm font-medium">Delivery Radius (meters)</label>
+                <input type="number" value={deliveryForm.deliveryRadiusMeters} onChange={e => setDeliveryForm(prev => ({ ...prev, deliveryRadiusMeters: parseInt(e.target.value) || 50 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold" min="10" max="500" />
+                <p className="text-xs text-gray-400 mt-1">Partner must be within this distance to swipe deliver</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Wait Timer (minutes)</label>
+                <input type="number" value={deliveryForm.waitTimerMinutes} onChange={e => setDeliveryForm(prev => ({ ...prev, waitTimerMinutes: parseInt(e.target.value) || 5 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold" min="1" max="30" />
+                <p className="text-xs text-gray-400 mt-1">Customer wait time before partner can proceed</p>
+              </div>
+              <div className="flex items-end">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 w-full">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-blue-700 font-medium">Photo Proof Required</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={deliveryForm.photoProofRequired} onChange={e => setDeliveryForm(prev => ({ ...prev, photoProofRequired: e.target.checked }))} />
+                      <span className="text-xs font-medium">{deliveryForm.photoProofRequired ? 'ON' : 'OFF'}</span>
+                    </label>
+                  </div>
+                  <p className="text-xs text-blue-500 mt-1">Partner must capture location photo before delivery</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white rounded-xl border shadow-sm p-6">
               <div className="flex items-center gap-3 mb-4"><div className="p-2 bg-blue-100 rounded-lg"><MapPin className="h-5 w-5 text-blue-600" /></div><h3 className="font-semibold text-gray-900">Distance Limits</h3></div>
@@ -399,6 +440,9 @@ export default function AdminSettingsPage() {
               surgeEnabled: deliveryForm.surgeEnabled, rainSurgeMultiplier: deliveryForm.rainSurgeMultiplier,
               autoWeatherEnabled: deliveryForm.autoWeatherEnabled, peakHours: deliveryForm.peakHours,
               riderIconUrl: deliveryForm.riderIconUrl,
+              deliveryRadiusMeters: parseInt(deliveryForm.deliveryRadiusMeters) || 50,
+              waitTimerMinutes: parseInt(deliveryForm.waitTimerMinutes) || 5,
+              photoProofRequired: deliveryForm.photoProofRequired,
             })} disabled={saving} className="px-8 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2 font-semibold shadow-lg"><Save className="h-5 w-5" />{saving ? 'Saving...' : 'Save Delivery Settings'}</button>
           </div>
         </div>

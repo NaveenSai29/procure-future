@@ -7,6 +7,43 @@ function generateOTP() {
   return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+// Restore stock when order is returned
+async function restoreStock(orderId) {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { product: true },
+    });
+
+    if (!order?.product) return;
+
+    const quantity = order.quantity || 1;
+
+    // Restore product stock
+    await prisma.product.update({
+      where: { id: order.productId },
+      data: {
+        stock: { increment: quantity },
+      },
+    });
+
+    // Create inventory movement log
+    await prisma.inventoryMovement.create({
+      data: {
+        productId: order.productId,
+        type: 'RETURN',
+        quantity,
+        reason: 'Order returned — Customer unavailable',
+        orderId: orderId,
+      },
+    });
+
+    console.log(`✅ Stock restored: +${quantity} units for product ${order.productId}`);
+  } catch (error) {
+    console.error('Stock restore error:', error.message);
+  }
+}
+
 export async function GET(request, { params }) {
   try {
     const session = await getSessionUser();
@@ -88,7 +125,7 @@ export async function PATCH(request, { params }) {
 
     const { id } = await params;
     const body = await request.json();
-    const { action, otp, notes, signatureImage, proofImage } = body;
+    const { action, otp, notes, signatureImage, proofImage, returnLat, returnLng, deliveryLat, deliveryLng, leaveAtDoor, codPaymentMethod } = body;
 
     // Get delivery partner profile
     const user = await prisma.user.findUnique({
@@ -182,9 +219,47 @@ export async function PATCH(request, { params }) {
           signatureImage: signatureImage || delivery.signatureImage,
           proofImage: proofImage || delivery.proofImage,
           commissionRate: deliveryCommRate,
+          ...(deliveryLat && { deliveryLat }),
+          ...(deliveryLng && { deliveryLng }),
+          leaveAtDoor: leaveAtDoor || !!proofImage,
+          ...(codPaymentMethod && { codPaymentMethod }),
         };
         orderUpdate = { status: 'DELIVERED', supplierCommissionRate: supplierCommRate };
         responseMessage = 'Order delivered successfully';
+        break;
+
+      case 'START_RETURN':
+        if (delivery.status !== 'PICKED_UP') {
+          return errorResponse('Delivery is not in PICKED_UP status', 400);
+        }
+        updateData = {
+          status: 'RETURNING',
+          returnStartedAt: new Date(),
+          returnReason: notes || 'Customer not available',
+          returnStatus: 'RETURNING',
+        };
+        orderUpdate = { status: 'RETURNING' };
+        responseMessage = 'Return to supplier started';
+        break;
+
+      case 'COMPLETE_RETURN':
+        if (delivery.status !== 'RETURNING') {
+          return errorResponse('Delivery is not in RETURNING status', 400);
+        }
+        updateData = {
+          status: 'RETURNED',
+          returnCompletedAt: new Date(),
+          returnPhoto: proofImage || delivery.returnPhoto,
+          returnNote: notes || delivery.returnNote,
+          returnStatus: 'HANDED_OVER',
+          ...(returnLat && { returnLat }),
+          ...(returnLng && { returnLng }),
+        };
+        orderUpdate = {
+          status: 'RETURNED',
+          returnedAt: new Date(),
+        };
+        responseMessage = 'Order returned to supplier';
         break;
 
       case 'REJECT':
@@ -196,7 +271,7 @@ export async function PATCH(request, { params }) {
         break;
 
       default:
-        return errorResponse('Invalid action. Valid actions: ACCEPT, PICKUP, DELIVER, REJECT', 400);
+        return errorResponse('Invalid action. Valid actions: ACCEPT, PICKUP, DELIVER, START_RETURN, COMPLETE_RETURN, REJECT', 400);
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -237,6 +312,8 @@ export async function PATCH(request, { params }) {
         const orderDeliveryFee = delivery.order.deliveryFee || 0;
         const orderTotalAmount = delivery.order.totalAmount || 0;
         const isCOD = delivery.order.paymentMethod === 'COD';
+        const isCODWithCash = isCOD && codPaymentMethod !== 'UPI';
+        const isCODWithUPI = isCOD && codPaymentMethod === 'UPI';
         const supplierId = delivery.order.product?.supplierId;
 
         // Calculate net earning after delivery commission
@@ -252,14 +329,17 @@ export async function PATCH(request, { params }) {
           create: {
             partnerId: user.deliveryPartner.id,
             totalEarned: txNetEarning,
-            codCollected: isCOD ? orderTotalAmount : 0,
-            codPending: isCOD ? orderTotalAmount : 0,
+            codCollected: isCODWithCash ? orderTotalAmount : 0,
+            codPending: isCODWithCash ? orderTotalAmount : 0,
           },
           update: {
             totalEarned: { increment: txNetEarning },
-            ...(isCOD ? {
+            ...(isCODWithCash ? {
               codCollected: { increment: orderTotalAmount },
               codPending: { increment: orderTotalAmount },
+            } : {}),
+            ...(isCODWithUPI ? {
+              codCollected: { increment: orderTotalAmount },
             } : {}),
           },
         });
@@ -310,23 +390,43 @@ export async function PATCH(request, { params }) {
         const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
         if (isCOD && supplierId) {
-          // COD ORDER: Partner collected full amount from buyer
+          // COD ORDER: Handle Cash vs UPI differently
           
-          // Create DELIVERY_PARTNER settlement for full COD amount collected
-          await tx.settlement.create({
-            data: {
-              supplierId: supplierId,
-              partnerId: user.deliveryPartner.id,
-              amount: orderTotalAmount,
-              status: 'PENDING',
-              settlementType: 'COD_COLLECTION',
-              settlementFor: 'DELIVERY_PARTNER',
-              referenceId: delivery.orderId,
-              periodStart: periodStart,
-              periodEnd: periodEnd,
-              notes: `COD ₹${orderTotalAmount.toLocaleString('en-IN')} collected from buyer. Awaiting deposit.`,
-            },
-          });
+          if (isCODWithCash) {
+            // CASH: Partner collected cash — needs to deposit later
+            await tx.settlement.create({
+              data: {
+                supplierId: supplierId,
+                partnerId: user.deliveryPartner.id,
+                amount: orderTotalAmount,
+                status: 'PENDING',
+                settlementType: 'COD_COLLECTION',
+                settlementFor: 'DELIVERY_PARTNER',
+                referenceId: delivery.orderId,
+                periodStart: periodStart,
+                periodEnd: periodEnd,
+                notes: `COD ₹${orderTotalAmount.toLocaleString('en-IN')} collected as CASH from buyer. Awaiting deposit.`,
+              },
+            });
+          }
+
+          if (isCODWithUPI) {
+            // UPI: Money already with PROCURE — no pending deposit
+            await tx.settlement.create({
+              data: {
+                supplierId: supplierId,
+                partnerId: user.deliveryPartner.id,
+                amount: orderTotalAmount,
+                status: 'PROCESSED',
+                settlementType: 'COD_COLLECTION',
+                settlementFor: 'DELIVERY_PARTNER',
+                referenceId: delivery.orderId,
+                periodStart: periodStart,
+                periodEnd: periodEnd,
+                notes: `COD ₹${orderTotalAmount.toLocaleString('en-IN')} collected via UPI QR — money received directly by PROCURE. No deposit needed.`,
+              },
+            });
+          }
 
           // Create SUPPLIER settlement for supplier's share (net after commission)
           await tx.settlement.create({
@@ -361,6 +461,38 @@ export async function PATCH(request, { params }) {
               },
             });
           }
+        }
+      }
+
+      if (action === 'COMPLETE_RETURN') {
+        // Restore stock outside transaction
+        // Note: Stock restore happens after transaction to avoid deadlocks
+        setTimeout(() => {
+          restoreStock(delivery.orderId).catch(err => {
+            console.error('Stock restore failed:', err.message);
+          });
+        }, 100);
+
+        // Notify admin about return
+        try {
+          const { NotificationService } = await import('@/services/notification.service');
+          const adminUsers = await tx.userRole.findMany({
+            where: {
+              role: { name: { in: ['SUPER_ADMIN', 'ADMIN'] } },
+            },
+            select: { userId: true },
+          });
+          
+          for (const admin of adminUsers) {
+            NotificationService.send({
+              userId: admin.userId,
+              type: 'IN_APP',
+              title: '🔄 Order Returned',
+              message: `Order #${delivery.orderId.slice(0, 8).toUpperCase()} was returned to supplier. Reason: ${delivery.returnReason || 'Customer not available'}`,
+            }).catch(() => {});
+          }
+        } catch (notifyErr) {
+          console.error('Admin notification error:', notifyErr.message);
         }
       }
 
