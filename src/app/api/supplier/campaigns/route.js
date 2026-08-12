@@ -43,3 +43,60 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// PATCH - Update campaign
+export async function PATCH(request) {
+  try {
+    const user = await getAuthUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const supplierStaff = await prisma.supplierStaff.findFirst({
+      where: { userId: user.id }
+    });
+    if (!supplierStaff) return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
+
+    const body = await request.json();
+    const { id, ...data } = body;
+
+    if (!id) return NextResponse.json({ error: 'Campaign ID required' }, { status: 400 });
+
+    // Verify ownership
+    const existing = await prisma.campaign.findUnique({ where: { id } });
+    if (!existing || existing.supplierId !== supplierStaff.supplierId) {
+      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+
+    const campaign = await MarketingService.updateCampaign(id, data);
+    return NextResponse.json(campaign);
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// DELETE - Delete campaign
+export async function DELETE(request) {
+  try {
+    const user = await getAuthUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const supplierStaff = await prisma.supplierStaff.findFirst({
+      where: { userId: user.id }
+    });
+    if (!supplierStaff) return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) return NextResponse.json({ error: 'Campaign ID required' }, { status: 400 });
+
+    const existing = await prisma.campaign.findUnique({ where: { id } });
+    if (!existing || existing.supplierId !== supplierStaff.supplierId) {
+      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+
+    await prisma.campaign.delete({ where: { id } });
+    return NextResponse.json({ success: true, message: 'Campaign deleted' });
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

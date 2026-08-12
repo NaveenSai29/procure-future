@@ -94,8 +94,7 @@ export default function ReturnDetailPage() {
         <div className="bg-background rounded-xl border p-6 space-y-4">
           <h2 className="font-semibold text-lg flex items-center gap-2"><User className="h-5 w-5" />Buyer Information</h2>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium">{returnReq.buyer?.name}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{returnReq.buyer?.email}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium">{returnReq.buyer?.name?.split(' ')[0]}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Reason</span><span className="text-red-600">{returnReq.reason}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Type</span><span>{returnReq.returnType}</span></div>
           </div>

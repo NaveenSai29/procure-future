@@ -229,7 +229,7 @@ export default function SupplierOrdersPage() {
                         <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString('en-IN')}</p>
                       </td>
                       <td className="px-4 py-3"><p className="text-sm font-medium text-gray-900">{order.product?.name || 'Product'}</p><p className="text-xs text-gray-500">Qty: {order.quantity}</p></td>
-                      <td className="px-4 py-3"><p className="text-sm text-gray-900">{order.buyer?.name || 'Buyer'}</p></td>
+                      <td className="px-4 py-3"><p className="text-sm text-gray-900">{order.buyer?.name?.split(' ')[0] || 'Buyer'}</p></td>
                       <td className="px-4 py-3 text-right">
                         <p className="text-sm font-bold">₹{(order.netAmount ?? order.totalAmount)?.toLocaleString('en-IN')}</p>
                         {order.netAmount !== undefined && order.netAmount !== order.totalAmount && (
@@ -329,7 +329,7 @@ export default function SupplierOrdersPage() {
             <div className="bg-gray-50 rounded-xl p-4 mb-4">
               <p className="text-sm"><strong>Order:</strong> {formatOrderId(declineModal.id)}</p>
               <p className="text-sm mt-1"><strong>Product:</strong> {declineModal.product?.name}</p>
-              <p className="text-sm mt-1"><strong>Buyer:</strong> {declineModal.buyer?.name}</p>
+              <p className="text-sm mt-1"><strong>Buyer:</strong> {declineModal.buyer?.name?.split(' ')[0]}</p>
               <p className="text-sm mt-1"><strong>Amount:</strong> ₹{(declineModal.netAmount ?? declineModal.totalAmount)?.toLocaleString('en-IN')}</p>
             </div>
             <div className="space-y-3">

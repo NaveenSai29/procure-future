@@ -116,6 +116,7 @@ export async function PATCH(request, { params }) {
             product: {
               select: {
                 supplierId: true,
+                name: true,
               },
             },
           },
@@ -268,6 +269,39 @@ export async function PATCH(request, { params }) {
           await TxCommissionService.processOrderCommission(delivery.orderId);
         } catch (err) {
           console.error('Commission processing error:', err.message);
+        }
+
+        // Create supplier invoice
+        if (supplierId) {
+          try {
+            const invoiceNumber = `INV-${delivery.orderId.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+            await tx.invoice.create({
+              data: {
+                supplierId,
+                orderId: delivery.orderId,
+                invoiceNumber,
+                invoiceType: 'TAX_INVOICE',
+                amount: orderTotalAmount,
+                taxAmount: supplierCommissionAmount,
+                totalAmount: supplierNetAmount,
+                status: 'PAID',
+                items: {
+                  create: {
+                    description: delivery.order.product?.name || 'Product',
+                    productId: delivery.order.productId,
+                    quantity: delivery.order.quantity || 1,
+                    unitPrice: delivery.order.price || orderTotalAmount,
+                    taxRate: txSupplierCommRate,
+                    taxAmount: supplierCommissionAmount,
+                    totalAmount: supplierNetAmount,
+                  },
+                },
+              },
+            });
+            console.log(`📄 Supplier invoice created: ${invoiceNumber} — Net: ₹${supplierNetAmount} (${txSupplierCommRate}% commission)`);
+          } catch (invErr) {
+            console.error('Invoice creation error:', invErr.message);
+          }
         }
 
         // ============ SETTLEMENT CREATION ============

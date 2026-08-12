@@ -120,6 +120,9 @@ export default function Sidebar() {
   const isActive = (href) => {
     if (href === '/dashboard') return pathname === '/dashboard' || pathname === '/dashboard/supplier';
     if (href === '/dashboard/warehouse') return pathname.startsWith('/dashboard/warehouse');
+    // Exact match for pages that have sub-pages (like settings)
+    if (href === '/dashboard/supplier/settings') return pathname === '/dashboard/supplier/settings';
+    if (href === '/dashboard/supplier/marketing') return pathname === '/dashboard/supplier/marketing';
     return pathname.startsWith(href);
   };
 
@@ -143,7 +146,7 @@ export default function Sidebar() {
                 return (
                   <Link key={href} href={href}
                     className={cn("flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors relative",
-                      active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      active ? "bg-orange-50 text-orange-600 border-l-2 border-orange-500" : "text-muted-foreground hover:bg-accent hover:text-foreground"
                     )}
                     title={collapsed ? title : undefined}>
                     <Icon className="h-5 w-5 shrink-0" />

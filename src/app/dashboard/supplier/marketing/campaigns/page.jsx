@@ -50,12 +50,30 @@ export default function CampaignsPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Cancel this campaign?')) return;
+    if (!confirm('Delete this campaign?')) return;
     try {
-      await fetch('/api/supplier/campaigns/' + id, { method: 'DELETE' });
-      toast.success('Campaign cancelled');
+      await fetch(`/api/supplier/campaigns?id=${id}`, { method: 'DELETE' });
+      toast.success('Campaign deleted');
       fetchCampaigns();
-    } catch { toast.error('Failed to cancel campaign'); }
+    } catch { toast.error('Failed to delete'); }
+  };
+
+  const handleSend = async (id) => {
+    if (!confirm('Send this campaign now to all your customers?')) return;
+    try {
+      const res = await fetch(`/api/supplier/campaigns/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Sent to ${data.sentCount} customers!`);
+        fetchCampaigns();
+      } else {
+        toast.error(data.message || 'Failed to send');
+      }
+    } catch { toast.error('Failed to send campaign'); }
   };
 
   const resetForm = () => {
@@ -130,6 +148,11 @@ export default function CampaignsPage() {
                 >
                   <Edit className="h-4 w-4 text-gray-400" />
                 </button>
+                  {campaign.status !== 'SENT' && (
+                  <button onClick={() => handleSend(campaign.id)} className="p-1.5 hover:bg-green-50 rounded" title="Send Now">
+                    <Send className="h-4 w-4 text-green-500" />
+                  </button>
+                )}
                 <button onClick={() => handleDelete(campaign.id)} className="p-1.5 hover:bg-red-50 rounded">
                   <Trash2 className="h-4 w-4 text-red-400" />
                 </button>

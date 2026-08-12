@@ -17,6 +17,16 @@ export default function SupplierMessagesPage() {
 
   useEffect(() => { loadData(); }, []);
   useEffect(() => { if (selectedBuyer) fetchMessages(selectedBuyer.buyerId); }, [selectedBuyer]);
+
+  // Auto-refresh messages every 10 seconds
+  useEffect(() => {
+    if (!selectedBuyer) return;
+    const interval = setInterval(() => {
+      fetchMessages(selectedBuyer.buyerId);
+      loadData();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [selectedBuyer]);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const loadData = async () => {
@@ -63,8 +73,7 @@ export default function SupplierMessagesPage() {
     const startConversation = (customer) => {
     const buyerId = customer.buyerId || customer.id;
     const buyerName = customer.buyer?.name || customer.name || 'Customer';
-    const buyerEmail = customer.buyer?.email || customer.email || '';
-    setSelectedBuyer({ buyerId, buyer: { name: buyerName, email: buyerEmail }, unreadCount: 0 });
+    setSelectedBuyer({ buyerId, buyer: { name: buyerName }, unreadCount: 0 });
     setActiveTab('messages');
   };
 
@@ -74,7 +83,7 @@ export default function SupplierMessagesPage() {
 
   const displayList = activeTab === 'messages' ? conversations : newCustomers.map(c => ({
     buyerId: c.id,
-    buyer: { name: c.name, email: c.email },
+    buyer: { name: c.name?.split(' ')[0] },
     totalMessages: 0,
     lastMessageAt: c.lastOrder,
     unreadCount: 0,
@@ -82,8 +91,7 @@ export default function SupplierMessagesPage() {
   }));
 
   const filtered = displayList.filter(c =>
-    c.buyer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.buyer?.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    c.buyer?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -131,7 +139,7 @@ export default function SupplierMessagesPage() {
                         {conv.lastMessageAt ? new Date(conv.lastMessageAt).toLocaleDateString() : ''}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 truncate">{conv.buyer?.email}</p>
+                    <p className="text-xs text-gray-400 truncate">{conv.totalMessages > 0 ? `${conv.totalMessages} messages` : 'No messages yet'}</p>
                   </div>
                   {conv.unreadCount > 0 && <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">{conv.unreadCount}</span>}
                   {conv.isNew && <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">New</span>}
@@ -150,7 +158,7 @@ export default function SupplierMessagesPage() {
             <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center"><User className="h-5 w-5 text-blue-600" /></div>
             <div>
               <p className="font-medium text-gray-900">{selectedBuyer.buyer?.name || 'Buyer'}</p>
-              <p className="text-xs text-gray-500">{selectedBuyer.buyer?.email}</p>
+              <p className="text-xs text-gray-400">Customer</p>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">

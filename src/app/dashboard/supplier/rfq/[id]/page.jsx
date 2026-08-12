@@ -157,7 +157,7 @@ export default function SupplierRFQDetailPage() {
               <User className="h-6 w-6 text-orange-500" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-semibold text-gray-900">{rfq.buyer?.name || "Buyer"}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{rfq.buyer?.name?.split(' ')[0] || "Buyer"}</h2>
               <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
                 <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />{new Date(rfq.createdAt).toLocaleDateString()}</span>
                 {rfq.deadline && (

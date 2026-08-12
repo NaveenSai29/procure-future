@@ -33,7 +33,7 @@ export default function StaffManagementPage() {
       const [staffRes, rolesRes, branchesRes] = await Promise.all([
         fetch('/api/supplier/staff'),
         fetch('/api/supplier/roles'),
-        fetch('/api/warehouses') // Using warehouses as branches list
+        fetch('/api/supplier/branches')
       ]);
 
       const [staffData, rolesData, branchesData] = await Promise.all([
@@ -42,7 +42,7 @@ export default function StaffManagementPage() {
 
       setStaff(staffData.staff || []);
       setRoles(rolesData || []);
-      setBranches(branchesData.data || []);
+      setBranches(branchesData.branches || []);
     } catch (error) {
       console.error('Fetch error:', error);
       toast.error('Failed to load staff data');
@@ -326,7 +326,7 @@ export default function StaffManagementPage() {
                 >
                   <option value="">All Branches</option>
                   {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
+                    <option key={b.id} value={b.id}>{b.branchName}</option>
                   ))}
                 </select>
               </div>

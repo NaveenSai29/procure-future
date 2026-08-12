@@ -86,7 +86,7 @@ export default function ReturnsPage() {
                   <div>
                     <p className="font-semibold">{r.order?.product?.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      Buyer: {r.buyer?.name} • Qty: {r.order?.quantity} • ₹{r.order?.totalAmount}
+                      Buyer: {r.buyer?.name?.split(' ')[0]} • Qty: {r.order?.quantity} • ₹{r.order?.totalAmount}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">Reason: {r.reason}</p>
                   </div>

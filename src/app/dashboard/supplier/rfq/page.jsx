@@ -162,7 +162,7 @@ export default function SupplierRFQPage() {
 
                 <div className="flex items-center gap-4 text-xs text-gray-400">
                   <span className="flex items-center gap-1">
-                    <Building2 className="h-3 w-3" /> {rfq.buyer?.name}
+                    <Building2 className="h-3 w-3" /> {rfq.buyer?.name?.split(' ')[0]}
                   </span>
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" /> {new Date(rfq.createdAt).toLocaleDateString()}

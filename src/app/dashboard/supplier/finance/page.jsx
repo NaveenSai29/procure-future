@@ -4,23 +4,50 @@ import { useState, useEffect } from 'react';
 import {
   Wallet, TrendingUp, FileText, ArrowDownToLine, ArrowUpFromLine,
   Download, Filter, Calendar, IndianRupee, CreditCard, Building2,
-  RefreshCw, AlertCircle, CheckCircle2, Clock, XCircle, ChevronRight
+  RefreshCw, AlertCircle, CheckCircle2, Clock, XCircle, ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SupplierFinancePage() {
   const [overview, setOverview] = useState(null);
   const [invoices, setInvoices] = useState([]);
+  const [allInvoices, setAllInvoices] = useState([]);
   const [settlements, setSettlements] = useState([]);
+  const [allSettlements, setAllSettlements] = useState([]);
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [activeTab, setActiveTab] = useState('OVERVIEW');
   const [loading, setLoading] = useState(true);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [loadingSettlements, setLoadingSettlements] = useState(false);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [commissionRate, setCommissionRate] = useState(null);
+  const [bankAccounts, setBankAccounts] = useState([]);
 
   useEffect(() => {
     fetchFinanceData();
+    fetchCommissionRate();
+    fetchBankAccounts();
   }, []);
+
+  const fetchCommissionRate = async () => {
+    try {
+      const res = await fetch('/api/admin/commission');
+      const data = await res.json();
+      if (data.success || data.supplierRate) {
+        setCommissionRate(data.supplierRate || data.rate || 5);
+      }
+    } catch {}
+  };
+
+  const fetchBankAccounts = async () => {
+    try {
+      const res = await fetch('/api/supplier/bank-accounts');
+      const data = await res.json();
+      setBankAccounts(data.accounts || []);
+    } catch {}
+  };
 
   const fetchFinanceData = async () => {
     try {
@@ -52,43 +79,48 @@ export default function SupplierFinancePage() {
     }
   };
 
+  const fetchAllInvoices = async () => {
+    setLoadingInvoices(true);
+    try {
+      const res = await fetch('/api/supplier/finance/invoices?limit=50');
+      const data = await res.json();
+      setAllInvoices(data.invoices || []);
+    } catch { toast.error('Failed to load invoices'); }
+    finally { setLoadingInvoices(false); }
+  };
+
+  const fetchAllSettlements = async () => {
+    setLoadingSettlements(true);
+    try {
+      const res = await fetch('/api/supplier/finance/settlements?limit=50');
+      const data = await res.json();
+      setAllSettlements(data.settlements || []);
+    } catch { toast.error('Failed to load settlements'); }
+    finally { setLoadingSettlements(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'INVOICES' && allInvoices.length === 0) fetchAllInvoices();
+    if (activeTab === 'SETTLEMENTS' && allSettlements.length === 0) fetchAllSettlements();
+  }, [activeTab]);
+
   const generateReport = async () => {
     try {
       const params = new URLSearchParams({
-        report: 'true',
+        report: 'revenue',
+        format: 'csv',
         ...(dateRange.start && { startDate: dateRange.start }),
         ...(dateRange.end && { endDate: dateRange.end })
       });
-
-      const res = await fetch(`/api/supplier/finance?${params}`);
-      const data = await res.json();
-
-      // Convert to CSV
-      let csv = 'Category,Amount\n';
-      csv += `Total Revenue,${data.revenue?.total || 0}\n`;
-      csv += `Total Orders,${data.revenue?.orderCount || 0}\n`;
-      csv += `Invoices Total,${data.invoices?.total || 0}\n`;
-      csv += `Invoice Count,${data.invoices?.count || 0}\n`;
-      csv += `Tax Amount,${data.invoices?.tax || 0}\n`;
-      csv += `Wallet Balance,${data.wallet?.balance || 0}\n`;
-      csv += `Total Earned,${data.wallet?.totalEarned || 0}\n`;
-      csv += `Total Withdrawn,${data.wallet?.totalWithdrawn || 0}\n`;
-      csv += `Pending Settlement,${data.settlements?.pending || 0}\n`;
-      csv += `Total Refunded,${data.returns?.totalRefunded || 0}\n`;
-      csv += `\n`;
-      csv += 'Transaction Type,Amount,Reference,Date\n';
-      (data.recentTransactions || []).forEach(tx => {
-        csv += `${tx.type},${tx.amount},${tx.referenceType},${new Date(tx.createdAt).toLocaleDateString()}\n`;
-      });
-
-      const blob = new Blob([csv], { type: 'text/csv' });
+      const res = await fetch(`/api/supplier/reports?${params}`);
+      if (!res.ok) throw new Error('Failed');
+      const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `financial-report-${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `finance-report-${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-
       toast.success('Report downloaded as CSV');
     } catch (error) {
       toast.error('Failed to generate report');
@@ -104,11 +136,10 @@ export default function SupplierFinancePage() {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
+    if (!dateString) return '-';
+    const d = new Date(dateString);
+    if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '-';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
   const getStatusColor = (status) => {
@@ -148,6 +179,9 @@ export default function SupplierFinancePage() {
     );
   }
 
+  const hasBankAccount = bankAccounts.length > 0;
+  const netRevenue = overview?.revenue?.total ? overview.revenue.total * (1 - (commissionRate || 5) / 100) : 0;
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -161,9 +195,23 @@ export default function SupplierFinancePage() {
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
         >
           <Download className="h-4 w-4" />
-          Download Report
+          Export CSV
         </button>
       </div>
+
+      {/* Bank Account Warning */}
+      {!hasBankAccount && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="font-semibold text-yellow-800">No bank account added</p>
+            <p className="text-sm text-yellow-700">Add a bank account to receive settlement payouts.</p>
+          </div>
+          <a href="/dashboard/supplier/settings/bank" className="px-4 py-2 bg-yellow-600 text-white rounded-lg text-sm font-medium hover:bg-yellow-700">
+            Add Bank
+          </a>
+        </div>
+      )}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -185,14 +233,14 @@ export default function SupplierFinancePage() {
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 rounded-lg">
-              <FileText className="h-5 w-5 text-blue-600" />
+              <TrendingUp className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Invoices</p>
+              <p className="text-sm text-gray-500">Net Earnings</p>
               <p className="text-xl font-bold text-gray-900">
-                {formatCurrency(overview?.invoices?.total)}
+                {formatCurrency(netRevenue)}
               </p>
-              <p className="text-xs text-gray-400">{overview?.invoices?.count || 0} invoices</p>
+              <p className="text-xs text-gray-400">After {commissionRate || 5}% commission</p>
             </div>
           </div>
         </div>
@@ -207,7 +255,7 @@ export default function SupplierFinancePage() {
               <p className="text-xl font-bold text-gray-900">
                 {formatCurrency(wallet?.balance)}
               </p>
-              <p className="text-xs text-gray-400">Earned: {formatCurrency(wallet?.totalEarned)}</p>
+              <p className="text-xs text-gray-400">Withdrawn: {formatCurrency(wallet?.totalWithdrawn)}</p>
             </div>
           </div>
         </div>
@@ -222,6 +270,9 @@ export default function SupplierFinancePage() {
               <p className="text-xl font-bold text-gray-900">
                 {formatCurrency(overview?.settlements?.pending)}
               </p>
+              {bankAccounts.length > 0 && bankAccounts[0].pennyDropVerified && (
+                <p className="text-xs text-green-600">✓ Bank verified</p>
+              )}
             </div>
           </div>
         </div>
@@ -245,28 +296,7 @@ export default function SupplierFinancePage() {
         ))}
       </div>
 
-      {/* Date Filter */}
-      <div className="flex items-center gap-3 mb-6 bg-white p-3 rounded-lg border">
-        <Calendar className="h-4 w-4 text-gray-400" />
-        <input
-          type="date"
-          value={dateRange.start}
-          onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-          className="px-3 py-1.5 border rounded text-sm"
-        />
-        <span className="text-gray-400">to</span>
-        <input
-          type="date"
-          value={dateRange.end}
-          onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-          className="px-3 py-1.5 border rounded text-sm"
-        />
-        <button className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded text-sm hover:bg-gray-200">
-          <Filter className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Content based on active tab */}
+      {/* Overview Tab */}
       {activeTab === 'OVERVIEW' && (
         <div className="space-y-6">
           {/* Recent Invoices */}
@@ -286,15 +316,17 @@ export default function SupplierFinancePage() {
                   <tr>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice #</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Tax</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {invoices.map(invoice => (
-                    <tr key={invoice.id} className="hover:bg-gray-50">
+                    <tr key={invoice.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => window.open(`/api/supplier/finance/invoices/${invoice.id}`, '_blank')} title="Click to view invoice">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{invoice.invoiceNumber}</td>
                       <td className="px-4 py-3 text-sm">{formatCurrency(invoice.totalAmount)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(invoice.taxAmount)}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 text-xs rounded-full font-medium ${getStatusColor(invoice.status)}`}>
                           {invoice.status}
@@ -304,9 +336,7 @@ export default function SupplierFinancePage() {
                     </tr>
                   ))}
                   {invoices.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">No invoices yet</td>
-                    </tr>
+                    <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No invoices yet</td></tr>
                   )}
                 </tbody>
               </table>
@@ -338,7 +368,7 @@ export default function SupplierFinancePage() {
                   {settlements.map(settlement => (
                     <tr key={settlement.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium">{formatCurrency(settlement.amount)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{settlement.settlementType}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500 capitalize">{settlement.settlementType?.replace('_', ' ').toLowerCase()}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 text-xs rounded-full font-medium ${getStatusColor(settlement.status)}`}>
                           {settlement.status}
@@ -348,9 +378,7 @@ export default function SupplierFinancePage() {
                     </tr>
                   ))}
                   {settlements.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">No settlements yet</td>
-                    </tr>
+                    <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-500">No settlements yet</td></tr>
                   )}
                 </tbody>
               </table>
@@ -359,6 +387,95 @@ export default function SupplierFinancePage() {
         </div>
       )}
 
+      {/* Invoices Tab */}
+      {activeTab === 'INVOICES' && (
+        <div className="bg-white rounded-xl border shadow-sm">
+          <div className="p-4 border-b flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900">All Invoices</h3>
+            {loadingInvoices && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Invoice #</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Tax</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {allInvoices.map(invoice => (
+                    <tr key={invoice.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => window.open(`/api/supplier/finance/invoices/${invoice.id}`, '_blank')} title="Click to view invoice">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{invoice.invoiceNumber}</td>
+                    <td className="px-4 py-3 text-sm">{formatCurrency(invoice.totalAmount)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(invoice.taxAmount)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${getStatusColor(invoice.status)}`}>
+                        {invoice.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{formatDate(invoice.createdAt)}</td>
+                  </tr>
+                ))}
+                {allInvoices.length === 0 && (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                    {loadingInvoices ? 'Loading...' : 'No invoices yet'}
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Settlements Tab */}
+      {activeTab === 'SETTLEMENTS' && (
+        <div className="bg-white rounded-xl border shadow-sm">
+          <div className="p-4 border-b flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900">All Settlements</h3>
+            {loadingSettlements && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Type</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Period</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {allSettlements.map(settlement => (
+                  <tr key={settlement.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium">{formatCurrency(settlement.amount)}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 capitalize">{settlement.settlementType?.replace('_', ' ').toLowerCase()}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${getStatusColor(settlement.status)}`}>
+                        {settlement.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">
+                      {formatDate(settlement.periodStart)} - {formatDate(settlement.periodEnd)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{formatDate(settlement.createdAt)}</td>
+                  </tr>
+                ))}
+                {allSettlements.length === 0 && (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                    {loadingSettlements ? 'Loading...' : 'No settlements yet'}
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Wallet Tab */}
       {activeTab === 'WALLET' && (
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-6 text-white">
@@ -370,13 +487,42 @@ export default function SupplierFinancePage() {
                   <span>Total Earned: {formatCurrency(wallet?.totalEarned)}</span>
                   <span>Total Withdrawn: {formatCurrency(wallet?.totalWithdrawn)}</span>
                 </div>
+                {commissionRate && (
+                  <p className="text-xs text-blue-200 mt-2">Commission rate: {commissionRate}%</p>
+                )}
               </div>
               <Wallet className="h-16 w-16 opacity-50" />
             </div>
           </div>
+
+          {/* Bank Account Info */}
+          <div className="bg-white rounded-xl border p-5">
+            <h3 className="font-semibold text-gray-900 mb-3">Bank Account</h3>
+            {hasBankAccount ? (
+              <div className="space-y-2">
+                {bankAccounts.slice(0, 1).map(acc => (
+                  <div key={acc.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                    <Building2 className="h-5 w-5 text-gray-500" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{acc.bankName} - {acc.accountNumber?.slice(-4).padStart(acc.accountNumber?.length, '*')}</p>
+                      <p className="text-xs text-gray-500">{acc.accountHolder} · IFSC: {acc.ifscCode}</p>
+                    </div>
+                    {acc.pennyDropVerified ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <Clock className="h-5 w-5 text-yellow-500" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No bank account added. <a href="/dashboard/supplier/settings/bank" className="text-blue-600 hover:underline">Add now</a></p>
+            )}
+          </div>
         </div>
       )}
 
+      {/* Transactions Tab */}
       {activeTab === 'TRANSACTIONS' && (
         <div className="bg-white rounded-xl border shadow-sm">
           <div className="overflow-x-auto">
@@ -408,9 +554,7 @@ export default function SupplierFinancePage() {
                   </tr>
                 ))}
                 {transactions.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No transactions yet</td>
-                  </tr>
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No transactions yet</td></tr>
                 )}
               </tbody>
             </table>

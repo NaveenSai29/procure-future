@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  Ticket, Percent, Megaphone, ArrowRight,
+  Ticket, Percent, ArrowRight,
   BarChart3
 } from 'lucide-react';
 
@@ -44,14 +44,6 @@ export default function MarketingHubPage() {
       color: 'bg-green-50 text-green-600',
       stats: analytics ? `${analytics.activeOffers || 0} active` : null
     },
-    {
-      title: 'Campaigns',
-      description: 'Email and SMS campaigns for your customers',
-      icon: Megaphone,
-      href: '/dashboard/supplier/marketing/campaigns',
-      color: 'bg-purple-50 text-purple-600',
-      stats: analytics ? `${analytics.activeCampaigns || 0} active` : null
-    },
   ];
 
   return (
@@ -63,7 +55,7 @@ export default function MarketingHubPage() {
 
       {/* Quick Stats */}
       {analytics && (
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 gap-4 mb-8">
           <div className="bg-white p-4 rounded-xl border">
             <p className="text-sm text-gray-500">Active Coupons</p>
             <p className="text-2xl font-bold text-blue-600">{analytics.activeCoupons || 0}</p>
@@ -72,15 +64,11 @@ export default function MarketingHubPage() {
             <p className="text-sm text-gray-500">Active Offers</p>
             <p className="text-2xl font-bold text-green-600">{analytics.activeOffers || 0}</p>
           </div>
-          <div className="bg-white p-4 rounded-xl border">
-            <p className="text-sm text-gray-500">Active Campaigns</p>
-            <p className="text-2xl font-bold text-purple-600">{analytics.activeCampaigns || 0}</p>
-          </div>
         </div>
       )}
 
       {/* Marketing Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {marketingCards.map(card => (
           <Link
             key={card.title}
