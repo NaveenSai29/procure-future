@@ -1,7 +1,7 @@
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
-import { sendEmail } from "@/services/email.service";
+import { EmailService } from "@/services/email.service";
 
 export async function PATCH(request) {
   try {
@@ -50,7 +50,7 @@ export async function PATCH(request) {
       // Send verification email to new email address
       try {
         const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/verify-email-change?token=${token}`;
-        await sendEmail({
+        await EmailService.sendEmail({
           to: email.trim().toLowerCase(),
           subject: "Verify your new email address - PROCURE",
           html: `
