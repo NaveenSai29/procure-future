@@ -11,15 +11,15 @@ const sendOtpSchema = z.object({
 
 // Send SMS via Fast2SMS
 async function sendSMS(mobile, otp) {
-  const isProduction = process.env.NODE_ENV === 'production';
+  const smsEnabled = process.env.SMS_ENABLED === 'true';
   
-  // In development, just log to console
-  if (!isProduction) {
+  // When SMS disabled, just log to console
+  if (!smsEnabled) {
     console.log(`📱 OTP for ${mobile}: ${otp}`);
     return true;
   }
 
-  // Production: Send via Fast2SMS
+  // SMS enabled: Send via Fast2SMS
   try {
     const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
       method: 'POST',
@@ -194,17 +194,17 @@ export async function POST(request) {
       },
     });
 
-    // Send SMS via Fast2SMS (dev: console log, prod: real SMS)
+    // Send SMS via Fast2SMS (SMS_ENABLED=true means real SMS, false means console log)
     const smsSent = await sendSMS(mobile, otp);
 
-    if (!smsSent && process.env.NODE_ENV === 'production') {
+    if (!smsSent && process.env.SMS_ENABLED === 'true') {
       return errorResponse('Failed to send OTP. Please try again later.', 500);
     }
 
     return successResponse({
       message: smsSent ? 'OTP sent successfully' : 'OTP logged (dev mode)',
-      // Return OTP in response only in development
-      ...(process.env.NODE_ENV !== 'production' && { otp }),
+      // Return OTP in response only when SMS is disabled
+      ...(process.env.SMS_ENABLED !== 'true' && { otp }),
     });
   } catch (error) {
     console.error('Send OTP error:', error);

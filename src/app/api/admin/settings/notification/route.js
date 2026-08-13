@@ -15,7 +15,7 @@ export async function GET() {
         configured: !!process.env.SMTP_USER
       },
       sms: {
-        enabled: process.env.NEXT_PUBLIC_ENABLE_SMS === 'true',
+        enabled: process.env.SMS_ENABLED === 'true',
         provider: 'Custom',
         configured: !!process.env.SMS_API_KEY
       },
