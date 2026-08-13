@@ -10,31 +10,27 @@ export default function DeliveryChatsPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [activeTab, setActiveTab] = useState('OPEN');
   const chatEndRef = useRef(null);
   const pollRef = useRef(null);
 
-  // Initial load + poll conversations every 10 seconds
   useEffect(() => {
     fetchConversations();
     const convPoll = setInterval(() => fetchConversations(true), 10000);
     return () => clearInterval(convPoll);
   }, []);
 
-  // Poll messages every 3 seconds when chat is open
   useEffect(() => {
     if (selectedPartner) {
       pollRef.current = setInterval(() => {
-        fetchMessages(selectedPartner.id, true);
-        // Also refresh conversation list to update unread counts
+        fetchMessagesByStatus(selectedPartner.id, activeTab, true);
         fetchConversations(true);
       }, 3000);
     } else {
       clearInterval(pollRef.current);
     }
     return () => clearInterval(pollRef.current);
-  }, [selectedPartner]);
-
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  }, [selectedPartner, activeTab]);
 
   const fetchConversations = async (silent = false) => {
     try {
@@ -45,21 +41,25 @@ export default function DeliveryChatsPage() {
     finally { if (!silent) setLoading(false); }
   };
 
-  const fetchMessages = async (partnerId, silent = false) => {
+  const fetchMessagesByStatus = async (partnerId, status, silent = false) => {
     try {
-      const res = await fetch(`/api/admin/delivery-chats?partnerId=${partnerId}`);
+      const res = await fetch(`/api/admin/delivery-chats?partnerId=${partnerId}&status=${status}`);
       const data = await res.json();
-      if (data.success) setMessages(data.data || []);
+      if (data.success) {
+        setMessages(data.data || []);
+        // DON'T auto-scroll on polling — user might be reading old messages
+      }
     } catch (e) { if (!silent) toast.error('Failed to load messages'); }
   };
 
-  const openChat = async (partner) => {
+    const openChat = async (partner) => {
     setSelectedPartner(partner);
-    await fetchMessages(partner.id);
-    // Mark messages as read
+    setActiveTab('OPEN');
+    await fetchMessagesByStatus(partner.id, 'OPEN');
     markAsRead(partner.id);
-    // Update local unread count immediately
     setConversations(prev => prev.map(c => c.id === partner.id ? { ...c, unreadCount: 0 } : c));
+    // Scroll to bottom when opening chat — show latest message
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'auto' }), 400);
   };
 
   const markAsRead = async (partnerId) => {
@@ -80,6 +80,10 @@ export default function DeliveryChatsPage() {
 
     const tempMsg = { id: Date.now().toString(), message: text, senderType: 'ADMIN', createdAt: new Date().toISOString() };
     setMessages(prev => [...prev, tempMsg]);
+    // Scroll to bottom only when sending message
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    // Scroll to bottom only when sending message
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
 
     try {
       await fetch('/api/admin/delivery-chats', {
@@ -87,9 +91,31 @@ export default function DeliveryChatsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partnerId: selectedPartner.id, message: text }),
       });
-      setTimeout(() => fetchMessages(selectedPartner.id, true), 300);
+      setTimeout(() => fetchMessagesByStatus(selectedPartner.id, 'OPEN', true), 300);
     } catch (e) { toast.error('Failed to send'); }
     finally { setSending(false); }
+  };
+
+  const handleResolve = async () => {
+    if (!confirm('Mark this conversation as resolved?')) return;
+    try {
+      const res = await fetch('/api/admin/delivery-chats', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnerId: selectedPartner.id, action: 'RESOLVE' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Conversation resolved');
+        fetchConversations();
+        setActiveTab('RESOLVED');
+        fetchMessagesByStatus(selectedPartner.id, 'RESOLVED');
+      } else {
+        toast.error(data.message || 'Failed');
+      }
+    } catch (e) {
+      toast.error('Failed to resolve');
+    }
   };
 
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
@@ -190,24 +216,69 @@ export default function DeliveryChatsPage() {
                   <Phone className="h-3 w-3" /> {selectedPartner.user?.mobile || 'N/A'}
                 </p>
               </div>
+              {activeTab === 'OPEN' && messages.length > 0 && (
+                <button
+                  onClick={handleResolve}
+                  className="px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition-colors"
+                  title="Mark as Resolved"
+                >
+                  ✓ Resolve
+                </button>
+              )}
               <a href={`tel:${selectedPartner.user?.mobile}`} className="p-2 hover:bg-green-50 rounded-lg text-green-600" title="Call partner">
                 <Phone className="h-4 w-4" />
               </a>
             </div>
 
+            {/* Tabs */}
+            <div className="flex gap-2 px-4 py-2 bg-white border-b">
+              <button
+                onClick={() => { 
+                  setActiveTab('OPEN'); 
+                  fetchMessagesByStatus(selectedPartner.id, 'OPEN').then(() => {
+                    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'auto' }), 400);
+                  });
+                }}
+                className={`px-4 py-1.5 text-xs rounded-full font-medium transition-colors ${activeTab === 'OPEN' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                🔵 Current Conversation
+              </button>
+              <button
+                onClick={() => { 
+                  setActiveTab('RESOLVED'); 
+                  fetchMessagesByStatus(selectedPartner.id, 'RESOLVED').then(() => {
+                    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'auto' }), 400);
+                  });
+                }}
+                className={`px-4 py-1.5 text-xs rounded-full font-medium transition-colors ${activeTab === 'RESOLVED' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                ✓ Past Conversations
+              </button>
+            </div>
+
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.length === 0 ? (
+              {messages.length === 0 && activeTab === 'OPEN' ? (
                 <div className="flex items-center justify-center h-full text-gray-400">
                   <div className="text-center">
                     <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                    <p className="text-sm">No messages yet</p>
-                    <p className="text-xs">Send the first message below</p>
+                    <p className="text-sm">No active conversation</p>
+                    <p className="text-xs mt-1">Wait for the partner to send a message</p>
+                  </div>
+                </div>
+              ) : messages.length === 0 && activeTab === 'RESOLVED' ? (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  <div className="text-center">
+                    <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">No past conversations</p>
                   </div>
                 </div>
               ) : (
                 messages.map(m => (
                   <div key={m.id} className={`flex ${m.senderType === 'ADMIN' ? 'justify-end' : 'justify-start'}`}>
+                    {m.senderId === 'SYSTEM_BOT' && (
+                      <span className="text-[10px] text-purple-500 mr-1 self-end">🤖</span>
+                    )}
                     <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm ${
                       m.senderType === 'ADMIN'
                         ? 'bg-orange-500 text-white rounded-br-md'
@@ -215,7 +286,7 @@ export default function DeliveryChatsPage() {
                     }`}>
                       <p className="whitespace-pre-wrap break-words">{m.message}</p>
                       <p className={`text-[10px] mt-1 ${m.senderType === 'ADMIN' ? 'text-orange-100' : 'text-gray-400'}`}>
-                        {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(m.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} • {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
                   </div>
@@ -224,29 +295,31 @@ export default function DeliveryChatsPage() {
               <div ref={chatEndRef} />
             </div>
 
-            {/* Input */}
-            <div className="p-4 bg-white border-t flex gap-3">
-              <input
-                type="text"
-                placeholder="Type your message..."
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                className="flex-1 px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                disabled={sending}
-              />
-              <button
-                onClick={sendMessage}
-                disabled={!input.trim() || sending}
-                className="px-4 py-2.5 bg-orange-500 text-white rounded-xl hover:bg-orange-600 disabled:opacity-40 transition-colors"
-              >
-                {sending ? (
-                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
-            </div>
+            {/* Input — only for OPEN tab WITH messages */}
+            {activeTab === 'OPEN' && messages.length > 0 && (
+              <div className="p-4 bg-white border-t flex gap-3">
+                <input
+                  type="text"
+                  placeholder="Type your message..."
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                  className="flex-1 px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                  disabled={sending}
+                />
+                <button
+                  onClick={sendMessage}
+                  disabled={!input.trim() || sending}
+                  className="px-4 py-2.5 bg-orange-500 text-white rounded-xl hover:bg-orange-600 disabled:opacity-40 transition-colors"
+                >
+                  {sending ? (
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-400">

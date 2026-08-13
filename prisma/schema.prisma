@@ -825,17 +825,23 @@ model Delivery {
 }
 
 model DeliveryChat {
-  id          String   @id @default(uuid())
-  partnerId   String
-  senderId    String
-  senderType  String   // ADMIN or PARTNER
-  message     String
-  isRead      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+    id              String    @id @default(uuid())
+    partnerId       String
+    senderId        String
+    senderType      String    // ADMIN, PARTNER, or SYSTEM
+    message         String
+    flowType        String?
+    conversationId  String?
+    isRead          Boolean   @default(false)
+    status          String    @default("OPEN") // OPEN or RESOLVED
+    resolvedAt      DateTime?
+    createdAt       DateTime  @default(now())
 
   partner     DeliveryPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   @@index([partnerId])
+  @@index([status])
+  @@index([conversationId])
 }
 
 model PartnerWallet {
