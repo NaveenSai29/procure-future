@@ -691,6 +691,7 @@ model Order {
     supplierCommissionRate Float                @default(0)
     status        String               @default("PENDING")
     notes         String?
+    deliveryInstructions String?
     createdAt     DateTime             @default(now())
     updatedAt     DateTime             @updatedAt
 
@@ -805,6 +806,8 @@ model Delivery {
     deliveryLng   Float?
     leaveAtDoor   Boolean  @default(false)
     codPaymentMethod String?  // CASH or UPI (for COD orders)
+    assignedAt      DateTime?
+    expiresAt       DateTime?
     returnStartedAt    DateTime?
     returnCompletedAt  DateTime?
     returnReason       String?
@@ -818,6 +821,7 @@ model Delivery {
 
   order          Order           @relation(fields: [orderId], references: [id])
   partner        DeliveryPartner @relation(fields: [partnerId], references: [id])
+  chatMessages   DeliveryChatMessage[]
 }
 
 model DeliveryChat {
@@ -1936,4 +1940,19 @@ model OrderSLA {
   
   @@index([status])
   @@index([supplierId])
+}
+
+model DeliveryChatMessage {
+  id          String   @id @default(uuid())
+  deliveryId  String
+  senderId    String
+  senderType  String
+  message     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  
+  delivery    Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  
+  @@index([deliveryId])
+  @@index([senderId])
 }

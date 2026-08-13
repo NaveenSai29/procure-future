@@ -223,12 +223,13 @@ export class NotificationService {
       }
 
       const messages = [{
-        to: user.expoPushToken,
-        sound: 'default',
-        title,
-        body: message,
-        data: data || {},
-      }];
+          to: user.expoPushToken,
+          sound: 'default',
+          title,
+          body: message,
+          data: data || {},
+          categoryId: data?.type === 'NEW_ORDER_BROADCAST' ? 'new_order' : undefined,
+        }];
 
       const chunks = expo.chunkPushNotifications(messages);
       for (const chunk of chunks) {

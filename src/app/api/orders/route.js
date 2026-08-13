@@ -214,6 +214,7 @@ export async function POST(request) {
       deliveryFee = 0, platformFee = 0, gstAmount = 0,
       couponDiscount = 0, walletDeduction = 0,
       razorpayPaymentId = null,
+      deliveryInstructions = null,
     } = body;
 
     // ─── MULTI-ITEM ORDER ───
@@ -282,6 +283,7 @@ export async function POST(request) {
             walletDeduction: perItemWallet,
             paymentMethod: (paymentMethod || 'ONLINE').toUpperCase(),
             razorpayPaymentId: razorpayPaymentId || null,
+            deliveryInstructions: deliveryInstructions || null,
             status: "PENDING",
           },
         });
@@ -417,6 +419,7 @@ export async function POST(request) {
         walletDeduction,
         paymentMethod: (paymentMethod || 'ONLINE').toUpperCase(),
         razorpayPaymentId: razorpayPaymentId || null,
+        deliveryInstructions: deliveryInstructions || null,
         status: "PENDING",
       },
     });

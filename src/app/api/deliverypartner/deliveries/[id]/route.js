@@ -473,6 +473,43 @@ export async function PATCH(request, { params }) {
           });
         }, 100);
 
+        // Credit return fee to partner
+        const returnFeeSetting = await prisma.systemSetting.findFirst({
+          where: { category: 'DELIVERY', key: 'returnFeePercent' },
+        });
+        const returnFeePercent = returnFeeSetting ? parseFloat(returnFeeSetting.value) : 100;
+        
+        const originalDeliveryFee = delivery.order.deliveryFee || 0;
+        const { CommissionService: ReturnCommissionService } = await import('@/services/commission.service');
+        const { netEarning: returnNetEarning } = await ReturnCommissionService.calculateDeliveryNetEarning(originalDeliveryFee);
+        const returnFeeAmount = Math.round((returnNetEarning * returnFeePercent) / 100 * 100) / 100;
+
+        if (returnFeeAmount > 0) {
+          await prisma.partnerWallet.upsert({
+            where: { partnerId: user.deliveryPartner.id },
+            create: { partnerId: user.deliveryPartner.id, totalEarned: returnFeeAmount },
+            update: { totalEarned: { increment: returnFeeAmount } },
+          });
+
+          const now = new Date();
+          const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+          await prisma.settlement.create({
+            data: {
+              partnerId: user.deliveryPartner.id,
+              amount: returnFeeAmount,
+              status: 'PENDING',
+              settlementType: 'RETURN_TRIP',
+              settlementFor: 'DELIVERY_PARTNER',
+              referenceId: delivery.orderId,
+              periodStart,
+              periodEnd,
+              notes: `Return trip — ${returnFeePercent}% of delivery fee (₹${originalDeliveryFee}) = ₹${returnFeeAmount}`,
+            },
+          });
+        }
+
         // Notify admin about return
         try {
           const { NotificationService } = await import('@/services/notification.service');
@@ -488,7 +525,7 @@ export async function PATCH(request, { params }) {
               userId: admin.userId,
               type: 'IN_APP',
               title: '🔄 Order Returned',
-              message: `Order #${delivery.orderId.slice(0, 8).toUpperCase()} was returned to supplier. Reason: ${delivery.returnReason || 'Customer not available'}`,
+              message: `Order #${delivery.orderId.slice(0, 8).toUpperCase()} returned. Partner earned ₹${returnFeeAmount} (${returnFeePercent}% of delivery fee). Reason: ${delivery.returnReason || 'Customer not available'}`,
             }).catch(() => {});
           }
         } catch (notifyErr) {

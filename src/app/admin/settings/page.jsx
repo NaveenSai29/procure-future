@@ -40,6 +40,7 @@ export default function AdminSettingsPage() {
     deliveryRadiusMeters: 50,
     waitTimerMinutes: 5,
     photoProofRequired: true,
+    returnFeePercent: 100,
   });
 
   const [paymentForm, setPaymentForm] = useState({
@@ -110,6 +111,7 @@ export default function AdminSettingsPage() {
           deliveryRadiusMeters: d.deliveryRadiusMeters ?? prev.deliveryRadiusMeters ?? 50,
           waitTimerMinutes: d.waitTimerMinutes ?? prev.waitTimerMinutes ?? 5,
           photoProofRequired: d.photoProofRequired ?? prev.photoProofRequired ?? true,
+          returnFeePercent: d.returnFeePercent ?? prev.returnFeePercent ?? 100,
         }));
       }
       if (data.platform) {
@@ -325,7 +327,7 @@ export default function AdminSettingsPage() {
                 <p className="text-xs text-gray-500">GPS proximity, wait timer, and photo proof settings</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
                 <label className="text-sm font-medium">Delivery Radius (meters)</label>
                 <input type="number" value={deliveryForm.deliveryRadiusMeters} onChange={e => setDeliveryForm(prev => ({ ...prev, deliveryRadiusMeters: parseInt(e.target.value) || 50 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold" min="10" max="500" />
@@ -347,6 +349,11 @@ export default function AdminSettingsPage() {
                   </div>
                   <p className="text-xs text-blue-500 mt-1">Partner must capture location photo before delivery</p>
                 </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Return Fee (%)</label>
+                <input type="number" value={deliveryForm.returnFeePercent} onChange={e => setDeliveryForm(prev => ({ ...prev, returnFeePercent: parseInt(e.target.value) || 0 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold" min="0" max="100" />
+                <p className="text-xs text-gray-400 mt-1">% of delivery fee paid to partner on return (based on original distance)</p>
               </div>
             </div>
           </div>
@@ -443,6 +450,7 @@ export default function AdminSettingsPage() {
               deliveryRadiusMeters: parseInt(deliveryForm.deliveryRadiusMeters) || 50,
               waitTimerMinutes: parseInt(deliveryForm.waitTimerMinutes) || 5,
               photoProofRequired: deliveryForm.photoProofRequired,
+              returnFeePercent: parseInt(deliveryForm.returnFeePercent) || 100,
             })} disabled={saving} className="px-8 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2 font-semibold shadow-lg"><Save className="h-5 w-5" />{saving ? 'Saving...' : 'Save Delivery Settings'}</button>
           </div>
         </div>

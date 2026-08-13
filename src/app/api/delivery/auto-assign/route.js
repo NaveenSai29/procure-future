@@ -209,11 +209,14 @@ export async function POST(request) {
 
     const bestPartner = partnersWithDistance[0];
 
+    // Swiggy style: Assign to NEAREST partner with 30-second acceptance window
     const delivery = await prisma.delivery.create({
       data: {
         orderId,
         partnerId: bestPartner.id,
         status: 'ASSIGNED',
+        assignedAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 1000), // 30 seconds to accept
       },
       include: {
         order: {
@@ -235,6 +238,27 @@ export async function POST(request) {
       where: { id: orderId },
       data: { status: 'READY_FOR_PICKUP' },
     });
+
+    // Send push notification to assigned partner
+    try {
+      const { NotificationService } = await import('@/services/notification.service');
+      await NotificationService.send({
+        userId: bestPartner.user.id,
+        type: 'PUSH',
+        title: '🛵 New Delivery Order!',
+        message: `₹${order.totalAmount} — Accept now! (30s)`,
+        eventType: 'new_order',
+        data: {
+          deliveryId: delivery.id,
+          orderId: order.id,
+          type: 'NEW_ORDER',
+          amount: order.totalAmount,
+        },
+      });
+      console.log(`Push sent to partner ${bestPartner.user.name}`);
+    } catch (notifyErr) {
+      console.error('Partner notification error:', notifyErr.message);
+    }
 
     if (isCOD && supplier?.pickupSlaHours > 0) {
       const pickupDeadline = new Date(Date.now() + supplier.pickupSlaHours * 60 * 60 * 1000);

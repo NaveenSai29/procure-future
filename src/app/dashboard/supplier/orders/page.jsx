@@ -140,6 +140,8 @@ export default function SupplierOrdersPage() {
     DECLINED: "bg-gray-100 text-gray-800",
     CANCELLED: "bg-red-100 text-red-800",
     EXPIRED: "bg-red-100 text-red-800",
+    RETURNING: "bg-amber-100 text-amber-800",
+    RETURNED: "bg-orange-100 text-orange-800",
   };
 
   const supplierActions = {
@@ -157,7 +159,7 @@ export default function SupplierOrdersPage() {
     READY_FOR_PICKUP: "Mark order as packed and ready for pickup?",
   };
 
-  const statuses = ["PENDING", "ACCEPTED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "DECLINED", "CANCELLED", "EXPIRED"];
+  const statuses = ["PENDING", "ACCEPTED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "DECLINED", "CANCELLED", "EXPIRED", "RETURNING", "RETURNED"];
 
   const filteredOrders = searchTerm
     ? orders.filter((o) => o.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || o.buyer?.name?.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -272,9 +274,14 @@ export default function SupplierOrdersPage() {
                               {action.label}
                             </button>
                           ))}
-                          {!actions.length && order.status !== 'DELIVERED' && order.status !== 'DECLINED' && order.status !== 'CANCELLED' && order.status !== 'EXPIRED' && (
+                          {!actions.length && order.status !== 'DELIVERED' && order.status !== 'DECLINED' && order.status !== 'CANCELLED' && order.status !== 'EXPIRED' && order.status !== 'RETURNED' && order.status !== 'RETURNING' && (
                             <span className="text-xs text-gray-400">
                               {order.status === 'ACCEPTED' ? 'Auto-processing...' : order.status === 'READY_FOR_PICKUP' ? 'Awaiting pickup' : order.status === 'SHIPPED' ? 'In transit' : 'Auto-processing...'}
+                            </span>
+                          )}
+                          {(order.status === 'RETURNED' || order.status === 'RETURNING') && (
+                            <span className="text-xs text-orange-500 font-medium">
+                              {order.status === 'RETURNING' ? 'Returning to supplier...' : 'Returned — stock restored'}
                             </span>
                           )}
                         </div>
