@@ -248,7 +248,7 @@ export default function AdminSidebar() {
         <div className="px-4 pb-4 text-xs text-muted-foreground">
           <p className="flex items-center gap-1">
             <Database className="h-3 w-3" />
-            PROCURE Admin v1.0
+            PROCURE Admin Panel v1.0
           </p>
         </div>
       )}
