@@ -1,6 +1,8 @@
 import { Toaster } from "sonner";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "PROCURE - Enterprise Procurement Platform",
   description: "World-class procurement ecosystem",
