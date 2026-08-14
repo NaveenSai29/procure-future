@@ -59,6 +59,8 @@ export async function GET() {
             paymentMethod: true,
             razorpayPaymentId: true,
             walletDeduction: true,
+            productId: true,
+            quantity: true,
           },
         },
         supplier: {
@@ -94,6 +96,21 @@ export async function GET() {
 
           // Process refund
           await handleAutoRefund(sla.order);
+
+          // Restore stock
+          const inventory = await prisma.warehouseInventory.findFirst({
+            where: { productId: sla.order.productId },
+          });
+          if (inventory && inventory.reservedQty >= sla.order.quantity) {
+            await prisma.warehouseInventory.update({
+              where: { id: inventory.id },
+              data: {
+                availableQty: inventory.availableQty + sla.order.quantity,
+                reservedQty: Math.max(0, inventory.reservedQty - sla.order.quantity),
+              },
+            });
+            console.log(`📦 Stock restored: ${sla.order.quantity} units for order ${sla.orderId.slice(0, 8)}`);
+          }
 
           // Update supplier rating penalty
           if (sla.slaType === 'PROCESSING') {

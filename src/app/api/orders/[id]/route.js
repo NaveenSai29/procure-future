@@ -191,6 +191,20 @@ export async function PATCH(request, { params }) {
       await prisma.orderStatusHistory.create({
         data: { orderId: order.id, fromStatus: order.status, toStatus: 'CANCELLED', changedBy: session.userId, notes: 'Cancelled by buyer' },
       });
+      
+      // Restore stock (was reserved at order placement)
+      const restoreInventory = await prisma.warehouseInventory.findFirst({ where: { productId: order.productId } });
+      if (restoreInventory && restoreInventory.reservedQty >= order.quantity) {
+        await prisma.warehouseInventory.update({
+          where: { id: restoreInventory.id },
+          data: {
+            availableQty: restoreInventory.availableQty + order.quantity,
+            reservedQty: Math.max(0, restoreInventory.reservedQty - order.quantity),
+          },
+        });
+        console.log(`📦 Stock restored: ${order.quantity} units for order ${order.id.slice(0, 8)}`);
+      }
+      
       handleAutoRefund(order, 'cancelled by buyer')
         .then(() => console.log('✅ Auto-refund completed'))
         .catch((err) => console.error('❌ Auto-refund failed:', err.message));
@@ -210,14 +224,48 @@ export async function PATCH(request, { params }) {
     const allowedForward = forwardTransitions[order.status] || [];
     if (!allowedForward.includes(status)) return errorResponse(`Cannot change from ${order.status} to ${status}. Allowed: ${allowedForward.join(", ")}`, 422);
 
-    const inventory = await prisma.warehouseInventory.findFirst({ where: { productId: order.productId } });
-    if (status === "ACCEPTED" && order.status === "PENDING") {
-      if (!inventory || inventory.availableQty < order.quantity) return errorResponse(`Insufficient stock. Available: ${inventory?.availableQty || 0}`, 422);
-      await prisma.warehouseInventory.update({ where: { id: inventory.id }, data: { availableQty: inventory.availableQty - order.quantity, reservedQty: inventory.reservedQty + order.quantity } });
+    // Stock is already reserved at order placement. No deduction needed at ACCEPT.
+    // Only remove from reserved when DELIVERED.
+    if (status === "DELIVERED") {
+      const deliveredInventory = await prisma.warehouseInventory.findFirst({ where: { productId: order.productId } });
+      if (deliveredInventory) {
+        await prisma.warehouseInventory.update({ 
+          where: { id: deliveredInventory.id }, 
+          data: { reservedQty: Math.max(0, deliveredInventory.reservedQty - order.quantity) } 
+        });
+      }
     }
-    if (status === "DELIVERED" && inventory) {
-      await prisma.warehouseInventory.update({ where: { id: inventory.id }, data: { reservedQty: Math.max(0, inventory.reservedQty - order.quantity) } });
+    
+    // Restore stock if order is DECLINED from PENDING (stock was reserved at order placement)
+    if (status === "DECLINED" && order.status === "PENDING") {
+      const restoreInventory = await prisma.warehouseInventory.findFirst({ where: { productId: order.productId } });
+      if (restoreInventory && restoreInventory.reservedQty >= order.quantity) {
+        await prisma.warehouseInventory.update({
+          where: { id: restoreInventory.id },
+          data: {
+            availableQty: restoreInventory.availableQty + order.quantity,
+            reservedQty: Math.max(0, restoreInventory.reservedQty - order.quantity),
+          },
+        });
+        console.log(`📦 Stock restored: ${order.quantity} units for order ${order.id.slice(0, 8)}`);
+      }
     }
+    
+    // Restore stock if order is cancelled after being accepted (stock was reserved)
+    if (['CANCELLED'].includes(status) && ['ACCEPTED', 'PROCESSING', 'READY_FOR_PICKUP'].includes(order.status)) {
+      const restoreInventory = await prisma.warehouseInventory.findFirst({ where: { productId: order.productId } });
+      if (restoreInventory && restoreInventory.reservedQty >= order.quantity) {
+        await prisma.warehouseInventory.update({
+          where: { id: restoreInventory.id },
+          data: {
+            availableQty: restoreInventory.availableQty + order.quantity,
+            reservedQty: Math.max(0, restoreInventory.reservedQty - order.quantity),
+          },
+        });
+        console.log(`📦 Stock restored: ${order.quantity} units for order ${order.id.slice(0, 8)}`);
+      }
+    }
+    
     const updated = await prisma.order.update({ where: { id }, data: { status } });
     const historyData = { orderId: order.id, fromStatus: order.status, toStatus: status, changedBy: session.userId };
     if (status === "DECLINED") historyData.notes = `Declined: ${declineReason}`;

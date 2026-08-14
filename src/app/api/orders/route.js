@@ -144,6 +144,47 @@ async function handleReferralOnPurchase(buyerId) {
   }
 }
 
+// Helper: Check stock and auto-reduce quantity if needed
+async function checkAndReserveStock(productId, requestedQty) {
+  try {
+    const inventory = await prisma.warehouseInventory.findFirst({
+      where: { productId },
+    });
+
+    // No inventory record = unlimited stock
+    if (!inventory) return { success: true, quantity: requestedQty, available: null };
+
+    if (inventory.availableQty <= 0) {
+      return { success: false, quantity: 0, available: 0, message: 'Out of stock' };
+    }
+
+    if (inventory.availableQty < requestedQty) {
+      // Auto-reduce to available quantity
+      return { 
+        success: true, 
+        quantity: inventory.availableQty, 
+        available: inventory.availableQty,
+        adjusted: true,
+        message: `Only ${inventory.availableQty} units available` 
+      };
+    }
+
+    // Reserve stock
+    await prisma.warehouseInventory.update({
+      where: { id: inventory.id },
+      data: {
+        availableQty: inventory.availableQty - requestedQty,
+        reservedQty: inventory.reservedQty + requestedQty,
+      },
+    });
+
+    return { success: true, quantity: requestedQty, available: inventory.availableQty };
+  } catch (err) {
+    console.error('Stock check error:', err.message);
+    return { success: true, quantity: requestedQty, available: null };
+  }
+}
+
 // GET - List orders
 export async function GET(request) {
   try {
@@ -202,7 +243,7 @@ export async function GET(request) {
   }
 }
 
-// POST - Create order with full fee breakdown + wallet deduction
+// POST - Create order with full fee breakdown + wallet deduction + stock validation
 export async function POST(request) {
   try {
     const session = await getSessionUser();
@@ -252,6 +293,8 @@ export async function POST(request) {
 
       // Collect closed shop product IDs
       const closedShopProductIds = [];
+      // Collect stock adjusted items
+      const adjustedItems = [];
 
       for (const item of items) {
         const product = productMap[item.productId];
@@ -264,15 +307,27 @@ export async function POST(request) {
           continue;
         }
 
+        // Check stock and auto-reduce
+        const stockCheck = await checkAndReserveStock(item.productId, item.quantity || 1);
+        if (!stockCheck.success) {
+          adjustedItems.push({ productId: item.productId, name: product.name, message: stockCheck.message });
+          continue;
+        }
+
+        const finalQty = stockCheck.quantity;
+        if (stockCheck.adjusted) {
+          adjustedItems.push({ productId: item.productId, name: product.name, message: stockCheck.message, adjustedQty: finalQty });
+        }
+
         const orderPrice = item.customPrice || product.pricing[0]?.sellingPrice || 0;
-        const itemTotal = orderPrice * (item.quantity || 1);
+        const itemTotal = orderPrice * finalQty;
         const finalAmount = itemTotal + perItemDelivery + perItemPlatform + perItemGst - perItemCoupon - perItemWallet;
 
         const order = await prisma.order.create({
           data: {
             buyerId: session.userId,
             productId: item.productId,
-            quantity: item.quantity || 1,
+            quantity: finalQty,
             price: orderPrice,
             totalAmount: Math.max(0, finalAmount),
             deliveryFee: perItemDelivery,
@@ -300,7 +355,7 @@ export async function POST(request) {
             userId: supplierStaff.userId,
             type: 'IN_APP',
             title: 'New Order Received',
-            message: `Order #${order.id.slice(0, 8)} for "${product.name}" - Qty: ${item.quantity || 1}`,
+            message: `Order #${order.id.slice(0, 8)} for "${product.name}" - Qty: ${finalQty}`,
           }).catch(() => {});
         }
 
@@ -374,7 +429,12 @@ export async function POST(request) {
 
       handleReferralOnPurchase(session.userId).catch(() => {});
 
-      return successResponse({ orders: createdOrders, count: createdOrders.length, skippedClosedShop: closedShopProductIds.length }, 201);
+      return successResponse({ 
+        orders: createdOrders, 
+        count: createdOrders.length, 
+        skippedClosedShop: closedShopProductIds.length,
+        adjustedItems,
+      }, 201);
     }
 
     // ─── SINGLE PRODUCT ORDER ───
@@ -400,15 +460,23 @@ export async function POST(request) {
       return errorResponse("Shop is currently closed. Please try again during business hours.", 400);
     }
 
+    // Check stock and auto-reduce
+    const stockCheck = await checkAndReserveStock(productId, quantity);
+    if (!stockCheck.success) {
+      return errorResponse(stockCheck.message || "Out of stock", 400);
+    }
+
+    const finalQty = stockCheck.quantity;
+
     const orderPrice = product.pricing[0]?.sellingPrice || 0;
-    const itemTotal = orderPrice * quantity;
+    const itemTotal = orderPrice * finalQty;
     const finalAmount = itemTotal + deliveryFee + platformFee + gstAmount - couponDiscount - walletDeduction;
 
     const order = await prisma.order.create({
       data: {
         buyerId: session.userId,
         productId,
-        quantity,
+        quantity: finalQty,
         price: orderPrice,
         totalAmount: Math.max(0, finalAmount),
         deliveryFee,
@@ -450,7 +518,7 @@ export async function POST(request) {
         userId: supplierStaff.userId,
         type: 'IN_APP',
         title: 'New Order Received',
-        message: `Order #${order.id.slice(0, 8)} for "${product.name}" - Qty: ${quantity}`,
+        message: `Order #${order.id.slice(0, 8)} for "${product.name}" - Qty: ${finalQty}`,
       }).catch(() => {});
     }
 
@@ -458,7 +526,9 @@ export async function POST(request) {
       userId: session.userId,
       type: 'IN_APP',
       title: 'Order Placed Successfully',
-      message: `Your order #${order.id.slice(0, 8)} has been placed. Track in My Orders.`,
+      message: stockCheck.adjusted 
+        ? `Your order #${order.id.slice(0, 8)} has been placed. Quantity adjusted to ${finalQty}.` 
+        : `Your order #${order.id.slice(0, 8)} has been placed. Track in My Orders.`,
     }).catch(() => {});
 
     if (buyer?.email) {
@@ -467,7 +537,7 @@ export async function POST(request) {
           buyerName: buyer.name,
           orderId: order.id.slice(0, 8).toUpperCase(),
           totalAmount: finalAmount,
-          items: [{ name: product.name, quantity, price: finalAmount }],
+          items: [{ name: product.name, quantity: finalQty, price: finalAmount }],
         });
         EmailService.sendEmail({
           to: buyer.email,
@@ -483,7 +553,11 @@ export async function POST(request) {
 
     handleReferralOnPurchase(session.userId).catch(() => {});
 
-    return successResponse({ order }, 201);
+    return successResponse({ 
+      order, 
+      adjusted: stockCheck.adjusted || false,
+      message: stockCheck.adjusted ? stockCheck.message : undefined,
+    }, 201);
 
   } catch (error) {
     console.error("Create order error:", error);
