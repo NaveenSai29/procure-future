@@ -5,7 +5,7 @@ import {
   Wallet, TrendingUp, FileText, ArrowDownToLine, ArrowUpFromLine,
   Download, Filter, Calendar, IndianRupee, CreditCard, Building2,
   RefreshCw, AlertCircle, CheckCircle2, Clock, XCircle, ChevronRight,
-  Loader2,
+  Loader2, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -33,7 +33,7 @@ export default function SupplierFinancePage() {
 
   const fetchCommissionRate = async () => {
     try {
-      const res = await fetch('/api/admin/commission');
+      const res = await fetch('/api/supplier/commission');
       const data = await res.json();
       if (data.success || data.supplierRate) {
         setCommissionRate(data.supplierRate || data.rate || 5);
@@ -319,11 +319,12 @@ export default function SupplierFinancePage() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Tax</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {invoices.map(invoice => (
-                    <tr key={invoice.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => window.open(`/api/supplier/finance/invoices/${invoice.id}`, '_blank')} title="Click to view invoice">
+                    <tr key={invoice.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{invoice.invoiceNumber}</td>
                       <td className="px-4 py-3 text-sm">{formatCurrency(invoice.totalAmount)}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(invoice.taxAmount)}</td>
@@ -333,10 +334,20 @@ export default function SupplierFinancePage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">{formatDate(invoice.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => window.open(`/api/supplier/finance/invoices/${invoice.id}`, '_blank')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100 transition"
+                          title="View invoice"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          View
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {invoices.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No invoices yet</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">No invoices yet</td></tr>
                   )}
                 </tbody>
               </table>
@@ -403,11 +414,12 @@ export default function SupplierFinancePage() {
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Tax</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {allInvoices.map(invoice => (
-                    <tr key={invoice.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => window.open(`/api/supplier/finance/invoices/${invoice.id}`, '_blank')} title="Click to view invoice">
+                  <tr key={invoice.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{invoice.invoiceNumber}</td>
                     <td className="px-4 py-3 text-sm">{formatCurrency(invoice.totalAmount)}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{formatCurrency(invoice.taxAmount)}</td>
@@ -417,10 +429,20 @@ export default function SupplierFinancePage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{formatDate(invoice.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => window.open(`/api/supplier/finance/invoices/${invoice.id}`, '_blank')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100 transition"
+                        title="View invoice"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        View
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {allInvoices.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                     {loadingInvoices ? 'Loading...' : 'No invoices yet'}
                   </td></tr>
                 )}
