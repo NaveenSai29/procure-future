@@ -48,6 +48,7 @@ model User {
   returnRequests    ReturnRequest[]  @relation("BuyerReturns")
   notifications     Notification[]
   notificationPrefs NotificationPreference?
+  waitlistEntries   Waitlist[]
   loyaltyPoints     LoyaltyPoint[]
   referralsMade     Referral[]       @relation("Referrer")
   referralsReceived Referral[]       @relation("Referred")
