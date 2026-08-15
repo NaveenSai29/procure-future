@@ -4,6 +4,31 @@ export async function middleware(request) {
   const { pathname } = request.nextUrl;
   const accessToken = request.cookies.get("access_token")?.value;
 
+  // CORS headers for API routes
+  if (pathname.startsWith("/api")) {
+    const response = NextResponse.next();
+    
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept");
+    response.headers.set("Access-Control-Max-Age", "86400");
+    
+    // Handle OPTIONS preflight request
+    if (request.method === "OPTIONS") {
+      return new NextResponse(null, { 
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+          "Access-Control-Max-Age": "86400",
+        },
+      });
+    }
+    
+    return response;
+  }
+
   // Protected route patterns
   const protectedPaths = [
     "/dashboard",
@@ -35,6 +60,6 @@ export async function middleware(request) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.png$).*)",
   ],
 };
