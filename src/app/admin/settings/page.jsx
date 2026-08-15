@@ -6,7 +6,8 @@ import {
   Zap, Save, RefreshCw,
   Globe, Mail, Phone,
   RotateCcw, Wallet, Banknote, Building, Percent,
-  Truck, CloudRain, Clock, MapPin, Gauge, DollarSign, ShieldCheck
+  Truck, CloudRain, Clock, MapPin, Gauge, DollarSign, ShieldCheck,
+  Volume2, VolumeX, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -61,6 +62,9 @@ export default function AdminSettingsPage() {
     rfqAlert: true, paymentReceipt: true, promotionalEmail: false,
     smsProvider: 'TWILIO', smsApiKey: '', senderId: 'PROCURE',
     smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '',
+    newOrderSound: true,
+    soundVolume: 50,
+    soundFileUrl: '',
   });
 
   const [featureForm, setFeatureForm] = useState({
@@ -155,6 +159,27 @@ export default function AdminSettingsPage() {
       if (data.success) {
         setDeliveryForm(prev => ({ ...prev, riderIconUrl: data.url }));
         toast.success('Icon uploaded');
+      } else {
+        toast.error(data.error || 'Upload failed');
+      }
+    } catch {
+      toast.error('Upload failed');
+    }
+  };
+
+  const handleSoundUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entityType', 'SOUND');
+    formData.append('entityId', 'new-order-sound');
+    try {
+      const res = await fetch('/api/admin/media/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setNotifForm(prev => ({ ...prev, soundFileUrl: data.url }));
+        toast.success('Sound uploaded');
       } else {
         toast.error(data.error || 'Upload failed');
       }
@@ -520,6 +545,130 @@ export default function AdminSettingsPage() {
               ))}
             </div>
             {notifForm.emailEnabled && <div className="mb-6 p-4 bg-gray-50 rounded-lg"><h4 className="font-medium text-sm mb-3">SMTP Config</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-3"><input type="text" value={notifForm.smtpHost || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpHost: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="Host" /><input type="number" value={notifForm.smtpPort || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpPort: parseInt(e.target.value) }))} className="px-3 py-2 border rounded-lg" placeholder="Port" /><input type="text" value={notifForm.smtpUser || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpUser: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="User" /><input type="password" value={notifForm.smtpPass || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpPass: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="Password" /></div></div>}
+
+            {/* Supplier Alert Sound Settings */}
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  {notifForm.newOrderSound ? (
+                    <Volume2 className="h-5 w-5 text-blue-600" />
+                  ) : (
+                    <VolumeX className="h-5 w-5 text-gray-400" />
+                  )}
+                  <div>
+                    <p className="font-medium text-sm text-gray-900">Supplier New Order Alert Sound</p>
+                    <p className="text-xs text-gray-500">Play sound when supplier receives a new order</p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={notifForm.newOrderSound} 
+                    onChange={(e) => setNotifForm(prev => ({ ...prev, newOrderSound: e.target.checked }))} 
+                    className="w-5 h-5"
+                  />
+                  <span className="text-sm font-medium">{notifForm.newOrderSound ? 'ON' : 'OFF'}</span>
+                </label>
+              </div>
+
+              {notifForm.newOrderSound && (
+                <div className="space-y-4">
+                  {/* Volume Slider */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-sm font-medium text-gray-700">Volume</label>
+                      <span className="text-sm font-bold text-blue-600">{notifForm.soundVolume || 50}%</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      step="5"
+                      value={notifForm.soundVolume || 50} 
+                      onChange={(e) => setNotifForm(prev => ({ ...prev, soundVolume: parseInt(e.target.value) }))} 
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                    <div className="flex justify-between text-xs text-gray-400 mt-1">
+                      <span>0% (Mute)</span>
+                      <span>50%</span>
+                      <span>100% (Loud)</span>
+                    </div>
+                  </div>
+
+                  {/* Sound File Upload */}
+                  <div className="border-t pt-4">
+                    <label className="text-sm font-medium text-gray-700 block mb-2">Custom Sound File (MP3, WAV, OGG - Max 5MB)</label>
+                    <div className="flex items-center gap-3">
+                      {notifForm.soundFileUrl ? (
+                        <>
+                          <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex-1">
+                            <span className="text-sm text-green-700 font-medium truncate">
+                              {notifForm.soundFileUrl.split('/').pop()}
+                            </span>
+                            <button 
+                              onClick={() => setNotifForm(prev => ({ ...prev, soundFileUrl: '' }))}
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <audio controls src={notifForm.soundFileUrl} className="h-10" />
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 rounded-lg px-3 py-2 flex-1">
+                          <span className="text-sm text-gray-400">No custom sound uploaded — default beep will play</span>
+                        </div>
+                      )}
+                      <label className="px-4 py-2.5 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 text-sm font-medium flex items-center gap-1 whitespace-nowrap">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        Upload Sound
+                        <input type="file" accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg" onChange={handleSoundUpload} className="hidden" />
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Upload a short notification sound. If no custom sound, a default beep will play.</p>
+                  </div>
+
+                  {/* Test Sound Button */}
+                  <div className="border-t pt-4">
+                    <button 
+                      onClick={() => {
+                        if (notifForm.soundFileUrl) {
+                          const audio = new Audio(notifForm.soundFileUrl);
+                          audio.volume = (notifForm.soundVolume || 50) / 100;
+                          audio.play().catch(() => toast.error('Failed to play sound'));
+                        } else {
+                          const AudioContext = window.AudioContext || window.webkitAudioContext;
+                          if (AudioContext) {
+                            const ctx = new AudioContext();
+                            const playBeep = (freq, start, dur) => {
+                              const osc = ctx.createOscillator();
+                              const gain = ctx.createGain();
+                              osc.connect(gain);
+                              gain.connect(ctx.destination);
+                              osc.frequency.value = freq;
+                              osc.type = 'sine';
+                              gain.gain.setValueAtTime((notifForm.soundVolume || 50) / 300, start);
+                              gain.gain.exponentialRampToValueAtTime(0.01, start + dur);
+                              osc.start(start);
+                              osc.stop(start + dur);
+                            };
+                            const now = ctx.currentTime;
+                            playBeep(880, now, 0.2);
+                            playBeep(1100, now + 0.25, 0.3);
+                            setTimeout(() => ctx.close().catch(() => {}), 1000);
+                          }
+                        }
+                      }}
+                      className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 flex items-center gap-2"
+                    >
+                      <Volume2 className="h-4 w-4" />
+                      Test Sound
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <h4 className="font-medium text-sm mb-3">Event Triggers</h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {[{ key: 'orderConfirmation', label: 'Order Confirmation' }, { key: 'shippingUpdate', label: 'Shipping Updates' }, { key: 'deliveryOTP', label: 'Delivery OTP' }, { key: 'rfqAlert', label: 'RFQ Alerts' }, { key: 'paymentReceipt', label: 'Payment Receipts' }, { key: 'promotionalEmail', label: 'Promotional' }].map(item => (

@@ -195,13 +195,25 @@ export async function GET(request) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "10");
     const status = searchParams.get("status") || "";
+    const startDate = searchParams.get("startDate") || "";
+    const endDate = searchParams.get("endDate") || "";
 
     const staff = await prisma.supplierStaff.findFirst({
       where: { userId: session.userId },
     });
 
+    // Build date filter
+    const dateFilter = {};
+    if (startDate) {
+      dateFilter.gte = new Date(startDate + 'T00:00:00.000Z');
+    }
+    if (endDate) {
+      dateFilter.lte = new Date(endDate + 'T23:59:59.999Z');
+    }
+
     const where = {
       ...(status && { status }),
+      ...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
       ...(staff
         ? { product: { supplierId: staff.supplierId } }
         : { buyerId: session.userId }),

@@ -36,6 +36,17 @@ export async function GET() {
       catch { bankDetails[s.key] = s.value; }
     });
 
+    // Get NOTIFICATION settings
+    const notificationSettings = await prisma.systemSetting.findMany({
+      where: { category: 'NOTIFICATION' },
+    });
+
+    const notification = {};
+    notificationSettings.forEach(s => {
+      try { notification[s.key] = JSON.parse(s.value); } 
+      catch { notification[s.key] = s.value; }
+    });
+
     // Parse vehicles from delivery settings
     let vehicles = [];
     try {
@@ -72,6 +83,11 @@ export async function GET() {
           upiId: bankDetails.upiId || '',
           notes: bankDetails.notes || '',
         },
+        notificationSettings: {
+          newOrderSound: notification.newOrderSound !== false && notification.newOrderSound !== 'false',
+          soundVolume: parseInt(notification.soundVolume) || 50,
+          soundFileUrl: notification.soundFileUrl || null,
+        },
       },
     });
   } catch (error) {
@@ -100,6 +116,11 @@ export async function GET() {
           branchName: '',
           upiId: '',
           notes: '',
+        },
+        notificationSettings: {
+          newOrderSound: true,
+          soundVolume: 50,
+          soundFileUrl: null,
         },
       },
     });

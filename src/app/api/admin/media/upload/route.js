@@ -9,8 +9,9 @@ const ALLOWED_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
   'application/pdf',
   'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp3',
 ];
-const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf', '.doc', '.docx'];
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.pdf', '.doc', '.docx', '.mp3', '.wav', '.ogg'];
 
 export async function POST(request) {
   try {
@@ -37,7 +38,7 @@ export async function POST(request) {
     // Validate file type
     if (!ALLOWED_TYPES.includes(file.type) && file.type !== '') {
       return NextResponse.json({ 
-        error: `File type "${file.type}" not allowed. Accepted: JPG, PNG, GIF, WebP, SVG, PDF, DOC, DOCX` 
+        error: `File type "${file.type}" not allowed. Accepted: JPG, PNG, GIF, WebP, SVG, PDF, DOC, DOCX, MP3, WAV, OGG` 
       }, { status: 400 });
     }
 

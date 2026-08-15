@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
-import { Search, X, Eye, Clock } from "lucide-react";
+import { Search, X, Eye, Clock, Download, Calendar } from "lucide-react";
 
 const formatOrderId = (id) => {
   if (!id) return '#N/A';
@@ -27,11 +27,37 @@ export default function SupplierOrdersPage() {
   const [confirmAction, setConfirmAction] = useState(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [declineModal, setDeclineModal] = useState(null);
   const [declineReason, setDeclineReason] = useState("");
   const [customReason, setCustomReason] = useState("");
   const [declineProcessing, setDeclineProcessing] = useState(false);
   const [viewNotes, setViewNotes] = useState(null);
+  const [prevOrderIds, setPrevOrderIds] = useState([]);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundVolume, setSoundVolume] = useState(50);
+  const [soundFileUrl, setSoundFileUrl] = useState(null);
+  const audioCtxRef = useRef(null);
+
+  // Fetch sound settings from public settings API
+  useEffect(() => {
+    const fetchSoundSetting = async () => {
+      try {
+        const res = await fetch('/api/public/settings');
+        const data = await res.json();
+        const notifSettings = data?.data?.notificationSettings || {};
+        setSoundEnabled(notifSettings.newOrderSound !== false);
+        setSoundVolume(parseInt(notifSettings.soundVolume) || 50);
+        setSoundFileUrl(notifSettings.soundFileUrl || null);
+      } catch {
+        setSoundEnabled(true);
+        setSoundVolume(50);
+        setSoundFileUrl(null);
+      }
+    };
+    fetchSoundSetting();
+  }, []);
 
   useEffect(() => { 
     fetchOrders(); 
@@ -39,14 +65,99 @@ export default function SupplierOrdersPage() {
     return () => clearInterval(interval);
   }, [statusFilter]);
 
+  useEffect(() => {
+    fetchOrders();
+  }, [dateFrom, dateTo]);
+
+  // Play default beep sound with volume
+  const playDefaultBeep = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      const audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
+
+      const playBeep = (frequency, startTime, duration) => {
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'sine';
+
+        const volumeLevel = soundVolume / 300;
+        gainNode.gain.setValueAtTime(volumeLevel, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+
+      const now = audioCtx.currentTime;
+      playBeep(880, now, 0.2);
+      playBeep(1100, now + 0.25, 0.3);
+
+      setTimeout(() => {
+        audioCtx.close().catch(() => {});
+      }, 1000);
+    } catch (e) {
+      console.log('Beep error:', e.message);
+    }
+  };
+
+  // Play custom sound file or default beep
+  const playNewOrderSound = () => {
+    try {
+      // If custom sound file is set, play it
+      if (soundFileUrl) {
+        const audio = new Audio(soundFileUrl);
+        audio.volume = soundVolume / 100;
+        audio.play().catch((e) => {
+          console.log('Custom sound play error:', e.message);
+          playDefaultBeep();
+        });
+        return;
+      }
+      
+      // Otherwise play default beep
+      playDefaultBeep();
+    } catch (e) {
+      console.log('Sound play error:', e.message);
+    }
+  };
+
   const fetchOrders = async () => {
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
+      if (dateFrom) params.set("startDate", dateFrom);
+      if (dateTo) params.set("endDate", dateTo);
       params.set("limit", "100");
       const res = await fetch(`/api/orders?${params}`);
       const data = await res.json();
-      if (data.success) setOrders(data.data.orders || []);
+      if (data.success) {
+        const newOrders = data.data.orders || [];
+        
+        // Detect new orders for toast + sound
+        if (prevOrderIds.length > 0) {
+          const existingIds = new Set(prevOrderIds);
+          const freshOrders = newOrders.filter(o => !existingIds.has(o.id));
+          if (freshOrders.length > 0) {
+            toast.success(`🔔 ${freshOrders.length} new order${freshOrders.length > 1 ? 's' : ''} received!`);
+            
+            // Play sound if enabled
+            if (soundEnabled) {
+              playNewOrderSound();
+            }
+          }
+        }
+        
+        setOrders(newOrders);
+        setPrevOrderIds(newOrders.map(o => o.id));
+      }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
@@ -162,8 +273,35 @@ export default function SupplierOrdersPage() {
   const statuses = ["PENDING", "ACCEPTED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "DELIVERED", "DECLINED", "CANCELLED", "EXPIRED", "RETURNING", "RETURNED"];
 
   const filteredOrders = searchTerm
-    ? orders.filter((o) => o.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || o.buyer?.name?.toLowerCase().includes(searchTerm.toLowerCase()))
+    ? orders.filter((o) => o.product?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || o.buyer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || formatOrderId(o.id).includes(searchTerm))
     : orders;
+
+  const handleExportCSV = () => {
+    try {
+      const headers = ['Order ID', 'Product', 'Buyer', 'Quantity', 'Amount', 'Status', 'Date', 'Payment Method'];
+      const rows = filteredOrders.map(o => [
+        formatOrderId(o.id),
+        o.product?.name || 'N/A',
+        o.buyer?.name?.split(' ')[0] || 'N/A',
+        o.quantity,
+        o.netAmount ?? o.totalAmount,
+        o.status,
+        new Date(o.createdAt).toLocaleDateString('en-IN'),
+        o.paymentMethod || 'ONLINE',
+      ]);
+      const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `orders-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Orders exported as CSV');
+    } catch {
+      toast.error('Failed to export CSV');
+    }
+  };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -172,9 +310,15 @@ export default function SupplierOrdersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
           <p className="text-gray-500 mt-1">{orders.length} orders</p>
         </div>
-        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-sm text-blue-700 font-medium">{orders.filter(o => o.status === 'PENDING').length} pending</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-sm text-blue-700 font-medium">{orders.filter(o => o.status === 'PENDING').length} pending</span>
+          </div>
+          <button onClick={handleExportCSV} className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition">
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
         </div>
       </div>
 
@@ -191,10 +335,25 @@ export default function SupplierOrdersPage() {
             {s.replace('_', ' ')} ({orders.filter(o => o.status === s).length})
           </button>
         ))}
-        <div className="relative flex-1 max-w-xs ml-auto">
+      </div>
+
+      {/* Search + Date Filters */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input type="text" placeholder="Search orders..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+          <input type="text" placeholder="Search by order ID, product, buyer..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-gray-400" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />
+          <span className="text-gray-400">to</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="px-3 py-2 border rounded-lg text-sm" />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }} className="p-2 hover:bg-gray-100 rounded-lg">
+              <X className="h-4 w-4 text-gray-400" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -235,7 +394,7 @@ export default function SupplierOrdersPage() {
                       <td className="px-4 py-3 text-right">
                         <p className="text-sm font-bold">₹{(order.netAmount ?? order.totalAmount)?.toLocaleString('en-IN')}</p>
                         {order.netAmount !== undefined && order.netAmount !== order.totalAmount && (
-                          <p className="text-xs text-gray-400">₹{order.totalAmount?.toLocaleString('en-IN')} - {Math.round((1 - order.netAmount / order.totalAmount) * 100)}% fee</p>
+                          <p className="text-xs text-gray-400">₹{order.totalAmount?.toLocaleString('en-IN')} - {Math.round((1 - order.netAmount / order.totalAmount) * 100)}%fee</p>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
