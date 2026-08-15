@@ -68,9 +68,24 @@ export async function POST(request) {
 
     const { mobile, referralCode, userType } = validation.data;
     const isDelivery = userType === 'DELIVERY_PARTNER';
+    const roleName = isDelivery ? 'DELIVERY_PARTNER' : 'BUYER';
 
-    // Find or create user by mobile
-    let user = await prisma.user.findUnique({ where: { mobile } });
+    // Find user by mobile AND role (not just mobile)
+    let user = await prisma.user.findFirst({
+      where: {
+        mobile,
+        roles: {
+          some: {
+            role: {
+              name: roleName,
+            },
+          },
+        },
+      },
+      include: {
+        roles: { include: { role: true } },
+      },
+    });
 
     // Check referral code if provided
     let referrerUser = null;
@@ -85,13 +100,13 @@ export async function POST(request) {
       // Auto-register with appropriate role based on userType
       const createData = {
         name: isDelivery ? 'Delivery Partner' : 'Buyer',
-        email: `${mobile}@procure.${isDelivery ? 'delivery' : 'buyer'}`,
+        email: null, // No fake email - mobile is the primary identifier
         mobile,
         mobileVerified: false,
         referredBy: referrerUser?.id || null,
         roles: {
           create: {
-            role: { connect: { name: isDelivery ? 'DELIVERY_PARTNER' : 'BUYER' } },
+            role: { connect: { name: roleName } },
           },
         },
       };
@@ -101,7 +116,12 @@ export async function POST(request) {
         createData.deliveryPartner = { create: {} };
       }
 
-      user = await prisma.user.create({ data: createData });
+      user = await prisma.user.create({ 
+        data: createData,
+        include: {
+          roles: { include: { role: true } },
+        },
+      });
 
       // Create referral record if referred by someone
       if (referrerUser) {

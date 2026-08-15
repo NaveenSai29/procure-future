@@ -12,56 +12,57 @@ datasource db {
 // ============================================
 
 model User {
-  id             String    @id @default(uuid())
-  email          String    @unique
-  emailVerified  Boolean   @default(false)
-  expoPushToken  String?
-  verificationToken   String?
-  verificationExpires DateTime?
-  newEmail            String?
-  emailChangeToken    String?
-  emailChangeExpires  DateTime?
-  password       String?
-  mobile         String?   @unique
-  mobileVerified Boolean   @default(false)
-  name           String
-  profileImage   String?
-  referralCode   String?   @unique
-  referredBy     String?
-  isActive       Boolean   @default(true)
-  lastLogin      DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  deletedAt      DateTime?
-
-  roles             UserRole[]
-  sessions          Session[]
-  refreshTokens     RefreshToken[]
-  otps              Otp[]
-  buyerProfile      BuyerProfile?
-  buyerWallet       BuyerWallet?
-  supplierStaff     SupplierStaff?
-  deliveryPartner   DeliveryPartner?
-  adminProfile      AdminProfile?
-  orders            Order[]           @relation("UserOrders")
-  rfqs              RFQ[]
-  returnRequests    ReturnRequest[]  @relation("BuyerReturns")
-  notifications     Notification[]
-  notificationPrefs NotificationPreference?
-  waitlistEntries   Waitlist[]
-  loyaltyPoints     LoyaltyPoint[]
-  referralsMade     Referral[]       @relation("Referrer")
-  referralsReceived Referral[]       @relation("Referred")
-  pages           Page[]
-  supportTickets  SupportTicket[]
-  ticketMessages  TicketMessage[]
-  receivedMessages  CustomerMessage[]   @relation("BuyerMessages")
-
-  @@index([email])
-  @@index([mobile])
-  @@index([createdAt])
-  @@index([referralCode])
-}
+    id             String    @id @default(uuid())
+    email          String?   @unique
+    emailVerified  Boolean   @default(false)
+    expoPushToken  String?
+    verificationToken   String?
+    verificationExpires DateTime?
+    newEmail            String?
+    emailChangeToken    String?
+    emailChangeExpires  DateTime?
+    password       String?
+    mobile         String?
+    mobileVerified Boolean   @default(false)
+    name           String
+    profileImage   String?
+    referralCode   String?   @unique
+    referredBy     String?
+    isActive       Boolean   @default(true)
+    lastLogin      DateTime?
+    createdAt      DateTime  @default(now())
+    updatedAt      DateTime  @updatedAt
+    deletedAt      DateTime?
+  
+    roles             UserRole[]
+    sessions          Session[]
+    refreshTokens     RefreshToken[]
+    otps              Otp[]
+    buyerProfile      BuyerProfile?
+    buyerWallet       BuyerWallet?
+    supplierStaff     SupplierStaff?
+    deliveryPartner   DeliveryPartner?
+    adminProfile      AdminProfile?
+    orders            Order[]           @relation("UserOrders")
+    rfqs              RFQ[]
+    returnRequests    ReturnRequest[]  @relation("BuyerReturns")
+    notifications     Notification[]
+    notificationPrefs NotificationPreference?
+    waitlistEntries   Waitlist[]
+    loyaltyPoints     LoyaltyPoint[]
+    referralsMade     Referral[]       @relation("Referrer")
+    referralsReceived Referral[]       @relation("Referred")
+    pages           Page[]
+    supportTickets  SupportTicket[]
+    ticketMessages  TicketMessage[]
+    receivedMessages  CustomerMessage[]   @relation("BuyerMessages")
+  
+    @@index([email])
+    @@index([mobile])
+    @@index([createdAt])
+    @@index([referralCode])
+    @@unique([mobile, email])
+  }
 
 model Role {
   id          String      @id @default(uuid())

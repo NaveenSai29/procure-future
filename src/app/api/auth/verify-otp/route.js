@@ -6,6 +6,7 @@ import { z } from 'zod';
 const verifyOtpSchema = z.object({
   mobile: z.string().regex(/^[6-9]\d{9}$/, 'Invalid mobile number'),
   otp: z.string().length(6, 'OTP must be 6 digits'),
+  userType: z.enum(['BUYER', 'DELIVERY_PARTNER']).optional().default('BUYER'),
 });
 
 export async function POST(request) {
@@ -23,11 +24,22 @@ export async function POST(request) {
       return errorResponse('Invalid input', 400, validation.error.flatten().fieldErrors);
     }
 
-    const { mobile, otp } = validation.data;
+    const { mobile, otp, userType } = validation.data;
+    const isDelivery = userType === 'DELIVERY_PARTNER';
+    const roleName = isDelivery ? 'DELIVERY_PARTNER' : 'BUYER';
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { mobile },
+    // Find user by mobile AND role (not just mobile)
+    const user = await prisma.user.findFirst({
+      where: {
+        mobile,
+        roles: {
+          some: {
+            role: {
+              name: roleName,
+            },
+          },
+        },
+      },
       include: {
         roles: { include: { role: true } },
         deliveryPartner: true,
@@ -85,8 +97,8 @@ export async function POST(request) {
       });
     }
 
-    // Auto-create DeliveryPartner profile if doesn't exist (for OTP users)
-    if (!user.deliveryPartner) {
+    // Auto-create DeliveryPartner profile if doesn't exist (only for DELIVERY_PARTNER role)
+    if (isDelivery && !user.deliveryPartner) {
       await prisma.deliveryPartner.create({
         data: { userId: user.id },
       });
@@ -107,14 +119,24 @@ export async function POST(request) {
       },
     });
 
-    const isNewUser = !user.deliveryPartner?.vehicleNumber;
+    // Re-fetch user after possible DeliveryPartner creation
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: {
+        deliveryPartner: true,
+      },
+    });
+
+    const isNewUser = isDelivery 
+      ? !updatedUser?.deliveryPartner?.vehicleNumber 
+      : !user.mobileVerified;
 
     return successResponse({
       user: {
         id: user.id,
         name: user.name,
         mobile: user.mobile,
-        deliveryPartner: user.deliveryPartner,
+        deliveryPartner: updatedUser?.deliveryPartner || null,
       },
       roles,
       access_token: accessToken,
