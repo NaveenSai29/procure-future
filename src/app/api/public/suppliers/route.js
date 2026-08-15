@@ -1,6 +1,15 @@
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
+// Helper to calculate distance between two coordinates
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // Helper to check if shop is currently open
 function getShopStatus(settings, isActive) {
   if (!isActive) return { isOpen: false, reason: 'offline', nextOpenTime: null, closesIn: null };
@@ -71,6 +80,14 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const supplierId = searchParams.get("supplierId");
+    const buyerLat = parseFloat(searchParams.get("buyerLat"));
+    const buyerLng = parseFloat(searchParams.get("buyerLng"));
+
+    // Get max distance setting
+    const distanceSetting = await prisma.systemSetting.findFirst({
+      where: { category: 'DELIVERY', key: 'maxDistance' },
+    });
+    const maxDistance = distanceSetting ? parseFloat(distanceSetting.value) : 200;
 
     if (supplierId) {
       const supplier = await prisma.supplier.findUnique({
@@ -212,16 +229,30 @@ export async function GET(request) {
       orderBy: { createdAt: 'desc' },
     });
 
-    const formattedSuppliers = suppliers.map(supplier => {
-      const { products, settings, ...rest } = supplier;
-      const categories = [...new Map(
-        products
-          .filter(p => p.category)
-          .map(p => [p.category.id, p.category])
-      ).values()];
-      const shopStatus = getShopStatus(settings, supplier.isActive);
-      return { ...rest, categories, shopStatus };
-    });
+    const formattedSuppliers = suppliers
+      .map(supplier => {
+        const { products, settings, ...rest } = supplier;
+        const categories = [...new Map(
+          products
+            .filter(p => p.category)
+            .map(p => [p.category.id, p.category])
+        ).values()];
+        const shopStatus = getShopStatus(settings, supplier.isActive);
+        const warehouse = supplier.warehouses?.[0];
+        let distance = null;
+        if (buyerLat && buyerLng && warehouse?.latitude && warehouse?.longitude) {
+          distance = haversineDistance(buyerLat, buyerLng, warehouse.latitude, warehouse.longitude);
+        }
+        return { ...rest, categories, shopStatus, distance, isDeliverable: distance !== null ? distance <= maxDistance : null };
+      })
+      .filter(supplier => {
+        // If buyer location provided, only show deliverable suppliers
+        if (buyerLat && buyerLng) {
+          return supplier.isDeliverable === true;
+        }
+        // No location provided, show all
+        return true;
+      });
 
     return NextResponse.json({ success: true, data: formattedSuppliers });
   } catch (error) {

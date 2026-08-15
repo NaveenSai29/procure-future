@@ -95,8 +95,17 @@ export async function GET(request) {
     const supplierId = searchParams.get("supplierId") || "";
     const buyerLat = parseFloat(searchParams.get("buyerLat") || "0");
     const buyerLng = parseFloat(searchParams.get("buyerLng") || "0");
-    const maxDistance = parseFloat(searchParams.get("maxDistance") || "0"); // in km, 0 = no limit
+    const maxDistanceParam = parseFloat(searchParams.get("maxDistance") || "0"); // in km, 0 = no limit
     const hasLocation = buyerLat !== 0 && buyerLng !== 0;
+
+    // Get admin-configured max distance if buyer has location
+    let effectiveMaxDistance = maxDistanceParam;
+    if (hasLocation && effectiveMaxDistance === 0) {
+      const distanceSetting = await prisma.systemSetting.findFirst({
+        where: { category: 'DELIVERY', key: 'maxDistance' },
+      });
+      effectiveMaxDistance = distanceSetting ? parseFloat(distanceSetting.value) : 200;
+    }
 
     const where = {
       isApproved: true,
@@ -223,9 +232,9 @@ export async function GET(request) {
       };
     });
 
-    // Filter by max distance if specified
-    if (maxDistance > 0 && hasLocation) {
-      formattedProducts = formattedProducts.filter(p => p.distance !== null && p.distance <= maxDistance);
+    // Filter by max distance (admin-configured or param override)
+    if (effectiveMaxDistance > 0 && hasLocation) {
+      formattedProducts = formattedProducts.filter(p => p.distance !== null && p.distance <= effectiveMaxDistance);
     }
 
     // Sort

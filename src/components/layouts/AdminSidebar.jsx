@@ -35,6 +35,7 @@ const menuGroups = [
       { title: "Messages", href: "/admin/messages", icon: MessageSquare },
       { title: "Referrals", href: "/admin/referrals", icon: UserPlus },
       { title: "Wallet", href: "/admin/wallet", icon: Wallet },
+      { title: "Waitlist", href: "/admin/waitlist", icon: Users2 },
     ],
   },
   {
