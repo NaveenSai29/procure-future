@@ -28,7 +28,7 @@ export async function PATCH(request) {
     let emailChangePending = false;
 
     // Check if email is being changed
-    if (email && email.trim().toLowerCase() !== currentUser.email.toLowerCase()) {
+    if (email && email.trim().toLowerCase() !== (currentUser.email || '').toLowerCase()) {
       // Check if new email is already taken
       const existingUser = await prisma.user.findUnique({
         where: { email: email.trim().toLowerCase() },
