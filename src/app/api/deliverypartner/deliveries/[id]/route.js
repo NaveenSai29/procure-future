@@ -156,6 +156,13 @@ export async function PATCH(request, { params }) {
                 name: true,
               },
             },
+            buyer: {
+              select: {
+                id: true,
+                name: true,
+                mobile: true,
+              },
+            },
           },
         },
       },
@@ -170,6 +177,7 @@ export async function PATCH(request, { params }) {
     let responseMessage = '';
     let deliveryCommRate = 0;
     let supplierCommRate = 0;
+    let pickupOTP = null;
 
     switch (action) {
       case 'ACCEPT':
@@ -191,7 +199,7 @@ export async function PATCH(request, { params }) {
         });
         const otpThreshold = otpThresholdSetting ? parseFloat(otpThresholdSetting.value) : 0;
         const orderAmountForOTP = delivery.order.totalAmount || 0;
-        const pickupOTP = orderAmountForOTP >= otpThreshold ? generateOTP() : null;
+        pickupOTP = orderAmountForOTP >= otpThreshold ? generateOTP() : null;
         updateData = { status: 'PICKED_UP', otp: pickupOTP };
         orderUpdate = { status: 'SHIPPED' };
         responseMessage = 'Order picked up';
@@ -550,12 +558,25 @@ export async function PATCH(request, { params }) {
       });
     }
 
-    // Return OTP on pickup so partner can see it
-    const responseData = { message: responseMessage, delivery: result };
-    if (action === 'PICKUP') {
-      responseData.otp = result.otp;
+    // Send OTP to BUYER via notification (NOT to partner)
+    if (action === 'PICKUP' && pickupOTP && delivery.order?.buyer?.id) {
+      try {
+        const { NotificationService } = await import('@/services/notification.service');
+        NotificationService.send({
+          userId: delivery.order.buyer.id,
+          type: 'IN_APP',
+          title: '🔐 Delivery OTP',
+          message: `Your delivery OTP is ${pickupOTP}. Share this with the delivery partner at your door.`,
+        }).catch(() => {});
+        console.log(`📱 OTP ${pickupOTP} sent to buyer ${delivery.order.buyer.name}`);
+      } catch (notifyErr) {
+        console.error('OTP notification error:', notifyErr.message);
+      }
     }
 
+    // Return response WITHOUT OTP to partner
+    const responseData = { message: responseMessage, delivery: result };
+    
     return successResponse(responseData);
   } catch (error) {
     console.error('Update delivery error:', error);

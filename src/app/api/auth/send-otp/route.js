@@ -31,8 +31,6 @@ async function sendSMS(mobile, otp) {
         route: 'otp',
         variables_values: otp,
         numbers: mobile,
-        flash: 0,
-        message: 'Your OTP for PROCURE login is: ' + otp + '. Valid for 5 minutes.',
       }),
     });
     
