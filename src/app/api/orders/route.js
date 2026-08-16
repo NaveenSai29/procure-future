@@ -38,9 +38,18 @@ async function deductWallet(userId, amount, referenceId, description) {
   }
 }
 
-// Helper: Get delivery address by addressId
-async function getDeliveryAddress(addressId, userId) {
+// Helper: Get delivery address by addressId or GPS coordinates
+async function getDeliveryAddress(addressId, userId, gpsData = {}) {
   try {
+    // If GPS coordinates provided, use them directly (fallback for no saved address)
+    if (gpsData.latitude && gpsData.longitude) {
+      return {
+        deliveryAddress: gpsData.address || 'GPS Location',
+        deliveryLat: gpsData.latitude,
+        deliveryLng: gpsData.longitude,
+      };
+    }
+    
     if (!addressId) return null;
     const address = await prisma.address.findFirst({
       where: { id: addressId, buyer: { userId } },
@@ -307,10 +316,17 @@ export async function POST(request) {
       couponDiscount = 0, walletDeduction = 0,
       razorpayPaymentId = null,
       deliveryInstructions = null,
+      gpsLat = null,
+      gpsLng = null,
+      gpsAddress = null,
     } = body;
 
-    // Get delivery address if addressId provided
-    const addressData = await getDeliveryAddress(addressId, session.userId);
+    // Get delivery address - check GPS first, then addressId
+    const addressData = await getDeliveryAddress(addressId, session.userId, {
+      latitude: gpsLat,
+      longitude: gpsLng,
+      address: gpsAddress,
+    });
 
     // ─── MULTI-ITEM ORDER ───
     if (items && Array.isArray(items) && items.length > 0) {
