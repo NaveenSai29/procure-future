@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { 
   Plus, Package, Search, Edit, Trash2, Eye, EyeOff, X,
-  Upload, Download, FileSpreadsheet 
+  Upload, Download, FileSpreadsheet, FileCode
 } from "lucide-react";
 import BulkImportDialog from "@/components/shared/BulkImportDialog";
 
@@ -19,6 +19,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importDialogMode, setImportDialogMode] = useState('csv'); // 'csv' or 'tally'
 
   useEffect(() => { fetchProducts(); }, []);
 
@@ -166,6 +167,7 @@ export default function ProductsPage() {
         isOpen={showImportDialog} 
         onClose={() => setShowImportDialog(false)}
         onSuccess={handleImportSuccess}
+        mode={importDialogMode}
       />
 
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -184,7 +186,15 @@ export default function ProductsPage() {
           </Button>
           <Button 
             variant="outline" 
-            onClick={() => setShowImportDialog(true)}
+            onClick={() => { setImportDialogMode('tally'); setShowImportDialog(true); }}
+            className="flex items-center gap-2"
+          >
+            <FileCode className="h-4 w-4" />
+            Import from Tally
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => { setImportDialogMode('csv'); setShowImportDialog(true); }}
             className="flex items-center gap-2"
           >
             <Upload className="h-4 w-4" />
@@ -245,7 +255,11 @@ export default function ProductsPage() {
             <Link href="/dashboard/supplier/products/new">
               <Button>Add Your First Product</Button>
             </Link>
-            <Button variant="outline" onClick={() => setShowImportDialog(true)}>
+            <Button variant="outline" onClick={() => { setImportDialogMode('tally'); setShowImportDialog(true); }}>
+              <FileCode className="h-4 w-4 mr-2" />
+              Import from Tally
+            </Button>
+            <Button variant="outline" onClick={() => { setImportDialogMode('csv'); setShowImportDialog(true); }}>
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               Import from CSV
             </Button>

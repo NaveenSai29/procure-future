@@ -31,9 +31,9 @@ export async function POST(request) {
 
     // Validate file type
     if (!ALLOWED_MIME_TYPES.includes(file.type) && 
-        !file.name.match(/\.(csv|xlsx|xls)$/i)) {
+        !file.name.match(/\.(csv|xlsx|xls|xml)$/i)) {
       return NextResponse.json(
-        { error: 'Invalid file type. Please upload CSV or Excel file.' },
+        { error: 'Invalid file type. Please upload CSV, Excel, or Tally XML file.' },
         { status: 400 }
       );
     }
@@ -41,7 +41,7 @@ export async function POST(request) {
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: 'File too large. Maximum size is 10MB.' },
+        { error: 'File too large. Maximum size is 20MB.' },
         { status: 400 }
       );
     }
@@ -49,8 +49,17 @@ export async function POST(request) {
     // Read file buffer
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // Parse file
-    const products = await ProductImportService.parseFile(buffer, file.name);
+    // Parse file - check if XML (Tally export) or CSV/Excel
+    const extension = file.name.split('.').pop().toLowerCase();
+    let products;
+    
+    if (extension === 'xml') {
+      // Parse Tally XML file
+      products = await ProductImportService.parseTallyXML(buffer);
+    } else {
+      // Parse CSV/Excel file
+      products = await ProductImportService.parseFile(buffer, file.name);
+    }
 
     if (products.length === 0) {
       return NextResponse.json({ error: 'No valid products found in file' }, { status: 400 });

@@ -3,13 +3,14 @@
 import { useState, useRef } from 'react';
 import {
   Upload, Download, FileSpreadsheet, X, CheckCircle,
-  AlertTriangle, XCircle, FileText, Loader2, Eye, ArrowRight
+  AlertTriangle, XCircle, FileText, Loader2, Eye, ArrowRight,
+  Info, FileCode
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportProgress from './ImportProgress';
 import ImportErrors from './ImportErrors';
 
-export default function BulkImportDialog({ isOpen, onClose, onSuccess }) {
+export default function BulkImportDialog({ isOpen, onClose, onSuccess, mode = 'csv' }) {
   const [step, setStep] = useState('UPLOAD'); // UPLOAD, VALIDATING, VALIDATED, IMPORTING, COMPLETE
   const [file, setFile] = useState(null);
   const [importMode, setImportMode] = useState('CREATE');
@@ -24,8 +25,8 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess }) {
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        toast.error('File too large. Maximum 10MB allowed.');
+      if (selectedFile.size > 20 * 1024 * 1024) {
+        toast.error('File too large. Maximum 20MB allowed.');
         return;
       }
       setFile(selectedFile);
@@ -36,6 +37,10 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess }) {
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
+      if (droppedFile.size > 20 * 1024 * 1024) {
+        toast.error('File too large. Maximum 20MB allowed.');
+        return;
+      }
       setFile(droppedFile);
     }
   };
@@ -129,6 +134,22 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess }) {
     }
   };
 
+  const handleDownloadTallySample = async () => {
+    try {
+      const res = await fetch('/api/supplier/products/tally-template');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tally-sample-export.xml';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Tally sample downloaded');
+    } catch (error) {
+      toast.error('Failed to download Tally sample');
+    }
+  };
+
   const getStepIcon = (stepName) => {
     switch (stepName) {
       case 'VALIDATED': return <CheckCircle className="h-5 w-5 text-green-500" />;
@@ -147,8 +168,14 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess }) {
           <div className="flex items-center gap-3">
             <FileSpreadsheet className="h-6 w-6 text-green-600" />
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Bulk Import Products</h2>
-              <p className="text-sm text-gray-500">Import multiple products from CSV or Excel file</p>
+              <h2 className="text-xl font-bold text-gray-900">
+                {mode === 'tally' ? 'Import from Tally' : 'Bulk Import Products'}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {mode === 'tally' 
+                  ? 'Upload Tally XML export file to import your products' 
+                  : 'Import multiple products from CSV or Excel file'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -158,6 +185,26 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess }) {
 
         {/* Content */}
         <div className="p-6">
+          {/* Tally Instructions Banner */}
+          {mode === 'tally' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 space-y-3">
+              <h4 className="font-semibold text-blue-900 flex items-center gap-2 text-sm">
+                <Info className="h-4 w-4" /> How to Export from Tally
+              </h4>
+              <ol className="text-xs text-blue-800 space-y-1.5 list-decimal list-inside">
+                <li>Open Tally → Gateway of Tally</li>
+                <li>Go to Display → Inventory Reports → Stock Summary</li>
+                <li>Press <kbd className="bg-white px-1.5 py-0.5 rounded border text-[10px]">E</kbd> (Export)</li>
+                <li>Select <strong>XML</strong> format</li>
+                <li>Save the file and upload it here</li>
+              </ol>
+              <div className="bg-white rounded-lg p-3 text-xs text-blue-700">
+                <CheckCircle className="h-3.5 w-3.5 inline mr-1" />
+                Products will be imported as DRAFT. You can add images and submit for approval later.
+              </div>
+            </div>
+          )}
+
           {/* Steps Indicator */}
             <div className="flex items-center gap-2 mb-6">
               {['UPLOAD', 'VALIDATING', 'VALIDATED', 'IMPORTING', 'COMPLETE'].map((s, i) => {
@@ -225,7 +272,7 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess }) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,.xlsx,.xls"
+                  accept=".csv,.xlsx,.xls,.xml"
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -256,20 +303,32 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess }) {
                       </p>
                     </div>
                     <p className="text-xs text-gray-400">
-                      Supported: CSV, Excel (.xlsx, .xls) - Max 10MB
+                      Supported: CSV, Excel (.xlsx, .xls), Tally XML (.xml) - Max 20MB
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* Download Template */}
-              <button
-                onClick={handleDownloadTemplate}
-                className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-              >
-                <Download className="h-4 w-4" />
-                Download Import Template
-              </button>
+              {/* Download Template / Tally Sample */}
+              <div className="flex items-center gap-4 flex-wrap">
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                >
+                  <Download className="h-4 w-4" />
+                  Download CSV Template
+                </button>
+                
+                {mode === 'tally' && (
+                  <button
+                    onClick={handleDownloadTallySample}
+                    className="flex items-center gap-2 text-sm text-purple-600 hover:text-purple-700"
+                  >
+                    <FileCode className="h-4 w-4" />
+                    Download Tally Sample
+                  </button>
+                )}
+              </div>
 
               {/* Validate Button */}
               {file && (

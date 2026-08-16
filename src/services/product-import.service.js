@@ -24,6 +24,174 @@ export class ProductImportService {
   }
 
   /**
+   * Parse Tally XML buffer and return structured data
+   */
+  static async parseTallyXML(buffer) {
+    const xmlString = buffer.toString('utf-8');
+    const products = [];
+    
+    // Extract all STOCKITEM blocks using regex
+    const stockItemRegex = /<STOCKITEM[^>]*>([\s\S]*?)<\/STOCKITEM>/g;
+    let match;
+    
+    while ((match = stockItemRegex.exec(xmlString)) !== null) {
+      const stockItemXml = match[1];
+      
+      // Helper: Extract direct field value
+      const extractField = (fieldName) => {
+        const regex = new RegExp(`<${fieldName}[^>]*>([\\s\\S]*?)<\\/${fieldName}>`, 'i');
+        const fieldMatch = stockItemXml.match(regex);
+        return fieldMatch ? fieldMatch[1].trim() : '';
+      };
+      
+      // Helper: Extract nested field value (e.g., HSNCODE inside GSTDETAILS)
+      const extractNested = (parent, child) => {
+        const parentRegex = new RegExp(`<${parent}[^>]*>([\\s\\S]*?)<\\/${parent}>`, 'i');
+        const parentMatch = stockItemXml.match(parentRegex);
+        if (!parentMatch) return '';
+        const childRegex = new RegExp(`<${child}[^>]*>([\\s\\S]*?)<\\/${child}>`, 'i');
+        const childMatch = parentMatch[1].match(childRegex);
+        return childMatch ? childMatch[1].trim() : '';
+      };
+      
+      // Extract NAME from attributes if direct field not found
+      const nameMatch = match[0].match(/<STOCKITEM[^>]*NAME="([^"]*)"/i);
+      const name = extractField('NAME') || nameMatch?.[1] || '';
+      
+      // Extract PARENT (Stock Group) - can be direct or from NAME.LIST
+      const parentMatch = match[0].match(/<STOCKITEM[^>]*PARENT="([^"]*)"/i);
+      const categoryName = extractField('PARENT') || parentMatch?.[1] || extractField('STOCKGROUP') || 'General';
+      
+      // Extract BASEUNITS
+      const baseUnitsMatch = match[0].match(/<STOCKITEM[^>]*BASEUNITS="([^"]*)"/i);
+      const unit = extractField('BASEUNITS') || baseUnitsMatch?.[1] || extractField('UNIT') || 'PCS';
+      
+      // Extract GST details
+      const hsnCode = extractNested('GSTDETAILS', 'HSNCODE') || extractField('HSNCODE') || '';
+      const gstRate = extractNested('GSTDETAILS', 'GSTRATE') || extractField('GSTRATE') || '18';
+      
+      // Extract pricing
+      const mrp = extractField('MRP') || extractField('STANDARDPRICE') || extractField('RATE') || '';
+      const sellingPrice = extractField('SELLINGPRICE') || extractField('STANDARDSELLINGPRICE') || extractField('STANDARDPRICE') || extractField('RATE') || '';
+      
+      // Extract stock
+      const initialStock = extractField('CLOSINGBALANCE') || extractField('OPENINGBALANCE') || '0';
+      
+      // Extract warehouse/godown
+      const warehouseName = extractField('GODOWN') || extractField('GODOWNNAME') || '';
+      
+      // Extract other fields
+      const description = extractField('DESCRIPTION') || '';
+      const barcode = extractField('BARCODE') || extractField('EAN') || '';
+      const sku = extractField('SKU') || extractField('ALIAS') || name;
+      
+      // Build standard product object
+      const product = {
+        name: name,
+        categoryName: categoryName,
+        description: description,
+        sku: sku,
+        barcode: barcode,
+        hsnCode: hsnCode,
+        unit: unit,
+        weight: '0.5', // Default weight (supplier can update later)
+        warranty: '',
+        countryOfOrigin: 'India',
+        mrp: mrp || '0',
+        sellingPrice: sellingPrice || mrp || '0',
+        minQty: '1',
+        gstRate: gstRate || '18',
+        initialStock: initialStock || '0',
+        warehouseName: warehouseName,
+        isActive: false,
+        isApproved: false,
+      };
+      
+      // Only add if name exists
+      if (product.name) {
+        products.push(product);
+      }
+    }
+    
+    // If no STOCKITEM blocks found, try alternative Tally XML format
+    if (products.length === 0) {
+      // Try ENVELOPE format with LEDGER entries
+      const ledgerRegex = /<LEDGER[^>]*>([\s\S]*?)<\/LEDGER>/g;
+      while ((match = ledgerRegex.exec(xmlString)) !== null) {
+        const ledgerXml = match[1];
+        
+        const extractField = (fieldName) => {
+          const regex = new RegExp(`<${fieldName}[^>]*>([\\s\\S]*?)<\\/${fieldName}>`, 'i');
+          const fieldMatch = ledgerXml.match(regex);
+          return fieldMatch ? fieldMatch[1].trim() : '';
+        };
+        
+        const nameMatch = match[0].match(/<LEDGER[^>]*NAME="([^"]*)"/i);
+        const name = extractField('NAME') || nameMatch?.[1] || '';
+        
+        if (name) {
+          products.push({
+            name: name,
+            categoryName: extractField('PARENT') || 'General',
+            description: '',
+            sku: name,
+            barcode: '',
+            hsnCode: '',
+            unit: 'PCS',
+            weight: '0.5',
+            warranty: '',
+            countryOfOrigin: 'India',
+            mrp: '0',
+            sellingPrice: '0',
+            minQty: '1',
+            gstRate: '18',
+            initialStock: '0',
+            warehouseName: '',
+            isActive: false,
+            isApproved: false,
+          });
+        }
+      }
+    }
+    
+    return products;
+  }
+
+  /**
+   * Map Tally product to standard format
+   */
+  static mapTallyProduct(tallyProduct) {
+    // Convert string values to proper types for validation
+    return {
+      name: tallyProduct.name || '',
+      categoryName: tallyProduct.categoryName || 'General',
+      description: tallyProduct.description || '',
+      sku: tallyProduct.sku || tallyProduct.name || '',
+      barcode: tallyProduct.barcode || '',
+      hsnCode: tallyProduct.hsnCode || '',
+      unit: tallyProduct.unit || 'PCS',
+      weight: tallyProduct.weight ? parseFloat(tallyProduct.weight) : 0.5,
+      warranty: tallyProduct.warranty || '',
+      countryOfOrigin: tallyProduct.countryOfOrigin || 'India',
+      mrp: tallyProduct.mrp ? parseFloat(tallyProduct.mrp) : 0,
+      sellingPrice: tallyProduct.sellingPrice ? parseFloat(tallyProduct.sellingPrice) : 0,
+      minQty: tallyProduct.minQty ? parseInt(tallyProduct.minQty) : 1,
+      gstRate: tallyProduct.gstRate ? parseFloat(tallyProduct.gstRate) : 18,
+      initialStock: tallyProduct.initialStock ? parseInt(tallyProduct.initialStock) : 0,
+      warehouseName: tallyProduct.warehouseName || '',
+      isActive: tallyProduct.isActive !== undefined ? tallyProduct.isActive : false,
+      isApproved: tallyProduct.isApproved !== undefined ? tallyProduct.isApproved : false,
+    };
+  }
+
+  /**
+   * Convert Tally products to standard import format
+   */
+  static convertTallyProductsToStandard(tallyProducts) {
+    return tallyProducts.map(tp => this.mapTallyProduct(tp));
+  }
+
+  /**
    * Parse CSV buffer
    */
   static async parseCSV(buffer) {

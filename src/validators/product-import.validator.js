@@ -78,15 +78,17 @@ export const ImportRowStatus = {
   DUPLICATE: 'duplicate',
 };
 
-// Maximum file size (10MB)
-export const MAX_FILE_SIZE = 10 * 1024 * 1024;
+// Maximum file size (20MB - increased for Tally XML files)
+export const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
-// Allowed MIME types
+// Allowed MIME types (added XML for Tally imports)
 export const ALLOWED_MIME_TYPES = [
   'text/csv',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.oasis.opendocument.spreadsheet',
+  'text/xml',
+  'application/xml',
 ];
 
 // CSV column mapping (supports multiple header names)
