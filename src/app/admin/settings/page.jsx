@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Settings, Building2, CreditCard, Bell, BellRing,
   Zap, Save, RefreshCw,
   Globe, Mail, Phone,
   RotateCcw, Wallet, Banknote, Building, Percent,
   Truck, CloudRain, Clock, MapPin, Gauge, DollarSign, ShieldCheck,
-  Volume2, VolumeX, X, Repeat, Bike
+  Volume2, VolumeX, X, Repeat, Bike, Play, Pause
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -89,7 +89,21 @@ export default function AdminSettingsPage() {
     branchName: '', upiId: '', qrCodeUrl: '', notes: '',
   });
 
+  // Audio preview refs
+  const audioRef = useRef(null);
+  const [playingSound, setPlayingSound] = useState(null); // 'supplier' | 'delivery' | 'pickup'
+
   useEffect(() => { fetchSettings(); }, []);
+
+  // Stop audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
 
   const fetchSettings = async () => {
     try {
@@ -240,6 +254,50 @@ export default function AdminSettingsPage() {
     } catch {
       toast.error('Upload failed');
     }
+  };
+
+  // Toggle audio play/pause
+  const toggleAudioPreview = (url, type) => {
+    try {
+      if (playingSound === type && audioRef.current) {
+        // Pause current audio
+        audioRef.current.pause();
+        audioRef.current = null;
+        setPlayingSound(null);
+        return;
+      }
+
+      // Stop any existing audio
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+
+      // Play new audio
+      const audio = new Audio(url);
+      audio.volume = (notifForm.soundVolume || 50) / 100;
+      audio.play().catch(() => toast.error('Failed to play sound'));
+      audioRef.current = audio;
+      setPlayingSound(type);
+
+      // Auto-stop when ended
+      audio.onended = () => {
+        setPlayingSound(null);
+        audioRef.current = null;
+      };
+    } catch (err) {
+      console.log('Audio toggle error:', err.message);
+    }
+  };
+
+  // Stop all audio
+  const stopAllAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    setPlayingSound(null);
   };
 
   if (loading) return <div className="p-6"><div className="animate-pulse space-y-4">{[1,2,3].map(i => <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>)}</div></div>;
@@ -413,7 +471,6 @@ export default function AdminSettingsPage() {
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val === 'custom') {
-                    // Keep current value, show custom input
                     setDeliveryForm(prev => ({ ...prev, newOrderTimeoutSeconds: 240 }));
                   } else {
                     setDeliveryForm(prev => ({ ...prev, newOrderTimeoutSeconds: parseInt(val) }));
@@ -430,7 +487,6 @@ export default function AdminSettingsPage() {
                 <option value="custom">⚙️ Custom...</option>
               </select>
               
-              {/* Custom input appears when not using preset values */}
               {![30, 60, 90, 120, 180, 300].includes(deliveryForm.newOrderTimeoutSeconds) && (
                 <div className="mt-3">
                   <label className="text-sm font-medium text-gray-700">Custom Timeout (seconds)</label>
@@ -751,14 +807,18 @@ export default function AdminSettingsPage() {
                             </span>
                             <button 
                               onClick={() => {
-                                // Stop any playing audio before removing
-                                const audioElements = document.querySelectorAll('audio');
-                                audioElements.forEach(a => { a.pause(); a.src = ''; });
+                                stopAllAudio();
                                 setNotifForm(prev => ({ ...prev, soundFileUrl: '' }));
                               }}
                               className="text-red-400 hover:text-red-600"
                             >
                               <X className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={() => toggleAudioPreview(notifForm.soundFileUrl, 'supplier')}
+                              className="p-1 hover:bg-gray-100 rounded-full"
+                            >
+                              {playingSound === 'supplier' ? <Pause className="h-3.5 w-3.5 text-gray-600" /> : <Play className="h-3.5 w-3.5 text-gray-600" />}
                             </button>
                           </div>
                         </>
@@ -780,9 +840,7 @@ export default function AdminSettingsPage() {
                     <button 
                       onClick={() => {
                         if (notifForm.soundFileUrl) {
-                          const audio = new Audio(notifForm.soundFileUrl);
-                          audio.volume = (notifForm.soundVolume || 50) / 100;
-                          audio.play().catch(() => toast.error('Failed to play sound'));
+                          toggleAudioPreview(notifForm.soundFileUrl, 'supplier');
                         } else {
                           const AudioContext = window.AudioContext || window.webkitAudioContext;
                           if (AudioContext) {
@@ -808,8 +866,8 @@ export default function AdminSettingsPage() {
                       }}
                       className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 flex items-center gap-2"
                     >
-                      <Volume2 className="h-4 w-4" />
-                      Test Sound
+                      {playingSound === 'supplier' ? <Pause className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                      {playingSound === 'supplier' ? 'Stop Sound' : 'Test Sound'}
                     </button>
                   </div>
                 </div>
@@ -889,13 +947,18 @@ export default function AdminSettingsPage() {
                             </span>
                             <button 
                               onClick={() => {
-                                const audioElements = document.querySelectorAll('audio');
-                                audioElements.forEach(a => { a.pause(); a.src = ''; });
+                                stopAllAudio();
                                 setNotifForm(prev => ({ ...prev, deliverySoundFileUrl: '' }));
                               }}
                               className="text-red-400 hover:text-red-600"
                             >
                               <X className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={() => toggleAudioPreview(notifForm.deliverySoundFileUrl, 'delivery')}
+                              className="p-1 hover:bg-gray-100 rounded-full"
+                            >
+                              {playingSound === 'delivery' ? <Pause className="h-3.5 w-3.5 text-gray-600" /> : <Play className="h-3.5 w-3.5 text-gray-600" />}
                             </button>
                           </div>
                         </>
@@ -917,9 +980,7 @@ export default function AdminSettingsPage() {
                     <button 
                       onClick={() => {
                         if (notifForm.deliverySoundFileUrl) {
-                          const audio = new Audio(notifForm.deliverySoundFileUrl);
-                          audio.volume = (notifForm.soundVolume || 50) / 100;
-                          audio.play().catch(() => toast.error('Failed to play sound'));
+                          toggleAudioPreview(notifForm.deliverySoundFileUrl, 'delivery');
                         } else {
                           const AudioContext = window.AudioContext || window.webkitAudioContext;
                           if (AudioContext) {
@@ -945,8 +1006,8 @@ export default function AdminSettingsPage() {
                       }}
                       className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 flex items-center gap-2"
                     >
-                      <Bike className="h-4 w-4" />
-                      Test Delivery Sound
+                      {playingSound === 'delivery' ? <Pause className="h-4 w-4" /> : <Bike className="h-4 w-4" />}
+                      {playingSound === 'delivery' ? 'Stop Sound' : 'Test Delivery Sound'}
                     </button>
                   </div>
                 </div>
@@ -1026,13 +1087,18 @@ export default function AdminSettingsPage() {
                             </span>
                             <button 
                               onClick={() => {
-                                const audioElements = document.querySelectorAll('audio');
-                                audioElements.forEach(a => { a.pause(); a.src = ''; });
+                                stopAllAudio();
                                 setNotifForm(prev => ({ ...prev, pickupSoundFileUrl: '' }));
                               }}
                               className="text-red-400 hover:text-red-600"
                             >
                               <X className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={() => toggleAudioPreview(notifForm.pickupSoundFileUrl, 'pickup')}
+                              className="p-1 hover:bg-gray-100 rounded-full"
+                            >
+                              {playingSound === 'pickup' ? <Pause className="h-3.5 w-3.5 text-gray-600" /> : <Play className="h-3.5 w-3.5 text-gray-600" />}
                             </button>
                           </div>
                         </>
@@ -1054,9 +1120,7 @@ export default function AdminSettingsPage() {
                     <button 
                       onClick={() => {
                         if (notifForm.pickupSoundFileUrl) {
-                          const audio = new Audio(notifForm.pickupSoundFileUrl);
-                          audio.volume = (notifForm.soundVolume || 50) / 100;
-                          audio.play().catch(() => toast.error('Failed to play sound'));
+                          toggleAudioPreview(notifForm.pickupSoundFileUrl, 'pickup');
                         } else {
                           const AudioContext = window.AudioContext || window.webkitAudioContext;
                           if (AudioContext) {
@@ -1083,8 +1147,8 @@ export default function AdminSettingsPage() {
                       }}
                       className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 flex items-center gap-2"
                     >
-                      <BellRing className="h-4 w-4" />
-                      Test Pickup Sound
+                      {playingSound === 'pickup' ? <Pause className="h-4 w-4" /> : <BellRing className="h-4 w-4" />}
+                      {playingSound === 'pickup' ? 'Stop Sound' : 'Test Pickup Sound'}
                     </button>
                   </div>
                 </div>
