@@ -290,7 +290,7 @@ export default function SupplierAnalyticsPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Warehouse</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Location</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Available</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Min Level</th>
                 </tr>
@@ -329,7 +329,7 @@ export default function SupplierAnalyticsPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Warehouse</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Location</th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                 </tr>
               </thead>

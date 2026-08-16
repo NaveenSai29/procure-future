@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 export default function StaffManagementPage() {
   const [staff, setStaff] = useState([]);
   const [roles, setRoles] = useState([]);
-  const [branches, setBranches] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -20,7 +20,7 @@ export default function StaffManagementPage() {
 
   // Form states
   const [staffForm, setStaffForm] = useState({
-    name: '', email: '', password: '', mobile: '', role: 'STAFF', branchId: ''
+    name: '', email: '', password: '', mobile: '', role: 'STAFF', warehouseId: ''
   });
 
   useEffect(() => {
@@ -30,19 +30,19 @@ export default function StaffManagementPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [staffRes, rolesRes, branchesRes] = await Promise.all([
+      const [staffRes, rolesRes, warehousesRes] = await Promise.all([
         fetch('/api/supplier/staff'),
         fetch('/api/supplier/roles'),
-        fetch('/api/supplier/branches')
+        fetch('/api/warehouses')
       ]);
 
-      const [staffData, rolesData, branchesData] = await Promise.all([
-        staffRes.json(), rolesRes.json(), branchesRes.json()
+      const [staffData, rolesData, warehousesData] = await Promise.all([
+        staffRes.json(), rolesRes.json(), warehousesRes.json()
       ]);
 
       setStaff(staffData.staff || []);
       setRoles(rolesData || []);
-      setBranches(branchesData.branches || []);
+      setWarehouses(warehousesData.data || warehousesData || []);
     } catch (error) {
       console.error('Fetch error:', error);
       toast.error('Failed to load staff data');
@@ -62,7 +62,7 @@ export default function StaffManagementPage() {
       if (res.ok) {
         toast.success('Staff member added');
         setShowAddModal(false);
-        setStaffForm({ name: '', email: '', password: '', mobile: '', role: 'STAFF', branchId: '' });
+        setStaffForm({ name: '', email: '', password: '', mobile: '', role: 'STAFF', warehouseId: '' });
         fetchData();
       } else {
         const data = await res.json();
@@ -213,10 +213,10 @@ export default function StaffManagementPage() {
                     {member.role}
                   </span>
                 </div>
-                {member.branch && (
+                {member.warehouse && (
                   <div className="flex items-center gap-2 text-gray-500">
                     <Building2 className="h-3.5 w-3.5" />
-                    {member.branch.branchName}
+                    {member.warehouse.name}
                   </div>
                 )}
                 {member.staffRoles?.length > 0 && (
@@ -318,15 +318,15 @@ export default function StaffManagementPage() {
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium">Branch</label>
+                <label className="text-sm font-medium">Pickup Location</label>
                 <select
-                  value={staffForm.branchId}
-                  onChange={(e) => setStaffForm(prev => ({ ...prev, branchId: e.target.value }))}
+                  value={staffForm.warehouseId}
+                  onChange={(e) => setStaffForm(prev => ({ ...prev, warehouseId: e.target.value }))}
                   className="w-full px-3 py-2 border rounded-lg mt-1"
                 >
-                  <option value="">All Branches</option>
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.branchName}</option>
+                  <option value="">All Pickup Locations</option>
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
                   ))}
                 </select>
               </div>

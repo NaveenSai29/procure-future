@@ -509,7 +509,7 @@ export default function EditProductPage() {
 
           {/* Stock Location */}
           <div className="bg-background rounded-xl border p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">Stock Location</h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Pickup Location</h3>
             {currentStock !== null && (
               <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
                 <p className="text-sm text-blue-700">Current Stock: <span className="font-bold">{currentStock} {unit}</span></p>
@@ -517,18 +517,18 @@ export default function EditProductPage() {
             )}
             {warehouses.length === 0 ? (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-                <p className="text-amber-800 font-medium mb-2">No warehouse found</p>
-                <p className="text-sm text-amber-700 mb-3">Create a warehouse first.</p>
+                <p className="text-amber-800 font-medium mb-2">No pickup location found</p>
+                <p className="text-sm text-amber-700 mb-3">Create a pickup location first.</p>
                 <Link href="/dashboard/warehouse" target="_blank" className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition inline-flex items-center gap-2">
-                  <Building className="h-4 w-4" /> Create Warehouse
+                  <Building className="h-4 w-4" /> Create Pickup Location
                 </Link>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium">Warehouse</label>
+                  <label className="text-sm font-medium">Pickup Location</label>
                   <select value={warehouseId} onChange={e => setWarehouseId(e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg text-sm bg-white">
-                    <option value="">Select warehouse</option>
+                    <option value="">Select pickup location</option>
                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name} ({w.city || ""})</option>)}
                   </select>
                 </div>

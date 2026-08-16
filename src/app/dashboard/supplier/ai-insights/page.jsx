@@ -108,9 +108,9 @@ export default function AiInsightsPage() {
             
             <Link href="/dashboard/warehouse" className="p-5 bg-green-50 rounded-xl border border-green-200 hover:bg-green-100 transition block">
               <Store className="h-8 w-8 text-green-600 mb-3" />
-              <h3 className="font-semibold text-gray-900 mb-1">2. Set Up Warehouse</h3>
+              <h3 className="font-semibold text-gray-900 mb-1">2. Set Up Pickup Location</h3>
               <p className="text-sm text-gray-500">Configure your storage locations and manage inventory</p>
-              <span className="text-xs text-green-600 font-medium mt-2 inline-block">Manage Warehouses →</span>
+              <span className="text-xs text-green-600 font-medium mt-2inline-block">Manage Pickup Locations →</span>
             </Link>
             
             <Link href="/dashboard/supplier/rfq" className="p-5 bg-purple-50 rounded-xl border border-purple-200 hover:bg-purple-100 transition block">

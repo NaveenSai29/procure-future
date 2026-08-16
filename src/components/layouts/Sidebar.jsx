@@ -26,13 +26,12 @@ const menuItems = [
     group: "Catalog",
     items: [
       { title: "Products", href: "/dashboard/supplier/products", icon: Package },
-      { title: "Warehouses & Inventory", href: "/dashboard/warehouse", icon: Warehouse },
+      { title: "Pickup Locations", href: "/dashboard/warehouse", icon: Warehouse },
     ],
   },
   {
     group: "Operations",
     items: [
-      { title: "Branches", href: "/dashboard/supplier/branches", icon: Building2 },
       { title: "Messages", href: "/dashboard/supplier/messages", icon: MessageSquare },
       { title: "Customers", href: "/dashboard/supplier/customers", icon: Users },
       { title: "RFQ Marketplace", href: "/dashboard/supplier/rfq", icon: FileText },

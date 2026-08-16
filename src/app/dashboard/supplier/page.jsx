@@ -98,7 +98,7 @@ export default function SupplierDashboard() {
   const stats = [
     { label: "Products", value: String(statsData.products), icon: Package, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
     { label: "Orders", value: String(statsData.orders), icon: ShoppingCart, color: "text-green-600", bg: "bg-green-50", border: "border-green-100" },
-    { label: "Warehouses", value: String(statsData.warehouses), icon: Warehouse, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
+    { label: "Pickup Locations", value: String(statsData.warehouses), icon: Warehouse, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
     { label: "Revenue", value: `₹${(statsData.revenue || 0).toLocaleString('en-IN')}`, icon: TrendingUp, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100" },
   ];
 

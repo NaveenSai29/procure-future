@@ -44,7 +44,7 @@ export default function WarehousePage() {
     e.preventDefault();
 
     if (!location) {
-      toast.error("Please drop a pin on the map to set warehouse location");
+      toast.error("Please drop a pin on the map to set pickup location");
       return;
     }
 
@@ -55,7 +55,7 @@ export default function WarehousePage() {
 
     const name = e.target.name?.value;
     if (!name) {
-      toast.error("Warehouse name is required");
+      toast.error("Pickup location name is required");
       return;
     }
 
@@ -74,7 +74,7 @@ export default function WarehousePage() {
       });
       const result = await res.json();
       if (result.success) {
-        toast.success(result.message || "Warehouse created!");
+        toast.success(result.message || "Pickup location created!");
         setShowForm(false);
         setLocation(null);
         setIsPickup(true);
@@ -84,7 +84,7 @@ export default function WarehousePage() {
         toast.error(result.message || result.error);
       }
     } catch {
-      toast.error("Failed to create warehouse");
+      toast.error("Failed to create pickup location");
     } finally {
       setSaving(false);
     }
@@ -106,11 +106,11 @@ export default function WarehousePage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Warehouses & Inventory</h1>
-          <p className="text-gray-500 mt-1">{warehouses.length} warehouses • {totalProducts} products in stock</p>
+          <h1 className="text-2xl font-bold text-gray-900">Pickup Locations</h1>
+          <p className="text-gray-500 mt-1">{warehouses.length} pickup locations • {totalProducts} products in stock</p>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
-          <Plus className="h-4 w-4 mr-2" /> Add Warehouse
+          <Plus className="h-4 w-4 mr-2" /> Add Pickup Location
         </Button>
       </div>
 
@@ -118,7 +118,7 @@ export default function WarehousePage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div className="bg-white rounded-xl border p-3 text-center">
           <p className="text-xl font-bold text-blue-600">{warehouses.length}</p>
-          <p className="text-xs text-gray-500">Warehouses</p>
+          <p className="text-xs text-gray-500">Pickup Locations</p>
         </div>
         <div className="bg-white rounded-xl border p-3 text-center">
           <p className="text-xl font-bold text-green-600">{totalProducts}</p>
@@ -138,7 +138,7 @@ export default function WarehousePage() {
       {showForm && (
         <form onSubmit={onSubmit} className="bg-white rounded-xl border p-6 space-y-4 mb-6 shadow-sm">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-lg">New Warehouse</h2>
+            <h2 className="font-semibold text-lg">New Pickup Location</h2>
             <button type="button" onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600">
               <X className="h-5 w-5" />
             </button>
@@ -146,12 +146,12 @@ export default function WarehousePage() {
 
           {/* Warehouse Name */}
           <div>
-            <label className="text-sm font-medium text-gray-700">Warehouse Name *</label>
+            <label className="text-sm font-medium text-gray-700">Location Name *</label>
             <input
               type="text"
               name="name"
               required
-              placeholder="Main Warehouse"
+              placeholder="e.g., My Shop, Main Godown"
               className="w-full mt-1 px-3 py-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -167,13 +167,13 @@ export default function WarehousePage() {
             />
             <div>
               <label htmlFor="isPickup" className="text-sm font-medium text-gray-900">Pickup Location</label>
-              <p className="text-xs text-gray-500">Delivery partners can pick up orders from this warehouse</p>
+              <p className="text-xs text-gray-500">Delivery partners will pick up orders from this location</p>
             </div>
           </div>
 
           {/* Location Picker */}
           <div className="border-t pt-4">
-            <label className="text-sm font-medium text-gray-700 block mb-3">📍 Warehouse Location *</label>
+            <label className="text-sm font-medium text-gray-700 block mb-3">📍 Pickup Location on Map *</label>
             <LocationPicker
               onLocationChange={setLocation}
               onAddressChange={setAddressForm}
@@ -188,7 +188,7 @@ export default function WarehousePage() {
 
           <div className="flex gap-2 pt-2">
             <Button type="submit" disabled={saving || !location}>
-              {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Creating...</> : 'Create Warehouse'}
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Creating...</> : 'Create Pickup Location'}
             </Button>
             <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
           </div>
@@ -199,9 +199,9 @@ export default function WarehousePage() {
       {warehouses.length === 0 ? (
         <div className="bg-white rounded-xl border p-12 text-center">
           <Warehouse className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-500">No warehouses</h3>
-          <p className="text-gray-400 mb-4">Add your first warehouse to manage inventory</p>
-          <Button onClick={() => setShowForm(true)}>Add Warehouse</Button>
+          <h3 className="text-lg font-semibold text-gray-500">No pickup locations</h3>
+          <p className="text-gray-400 mb-4">Add your first pickup location to manage inventory</p>
+          <Button onClick={() => setShowForm(true)}>Add Pickup Location</Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

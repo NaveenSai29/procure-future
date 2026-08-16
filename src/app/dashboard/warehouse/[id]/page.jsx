@@ -90,7 +90,7 @@ export default function WarehouseDetailPage() {
 
   const saveEdit = async () => {
     if (!editForm.name) {
-      toast.error("Warehouse name is required");
+      toast.error("Pickup location name is required");
       return;
     }
     if (!editAddressForm.addressLine1 || !editAddressForm.city || !editAddressForm.state || !editAddressForm.pincode) {
@@ -119,7 +119,7 @@ export default function WarehouseDetailPage() {
       });
       const result = await res.json();
       if (result.success) {
-        toast.success('Warehouse updated!');
+        toast.success('Pickup location updated!');
         setEditing(false);
         setEditLocation(null);
         fetchWarehouse();
@@ -200,13 +200,13 @@ export default function WarehouseDetailPage() {
   };
 
   if (loading) return <div className="p-8">Loading...</div>;
-  if (!warehouse) return <div className="p-8">Warehouse not found</div>;
+  if (!warehouse) return <div className="p-8">Pickup location not found</div>;
 
   return (
     <div className="space-y-6">
       <Link href="/dashboard/warehouse" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" />
-        Back to Warehouses
+        Back to Pickup Locations
       </Link>
 
       {/* Warehouse Header */}
@@ -220,8 +220,8 @@ export default function WarehouseDetailPage() {
               <div className="flex-1 space-y-4">
                 {/* Name */}
                 <div>
-                  <label className="text-xs font-medium text-gray-500">Warehouse Name *</label>
-                  <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="Main Warehouse" />
+                  <label className="text-xs font-medium text-gray-500">Location Name *</label>
+                  <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="e.g., My Shop, Main Godown" />
                 </div>
 
                 {/* Pickup Location Toggle */}
@@ -234,13 +234,13 @@ export default function WarehouseDetailPage() {
                   />
                   <div>
                     <label className="text-sm font-medium text-gray-900">Pickup Location</label>
-                    <p className="text-xs text-gray-500">Delivery partners can pick up orders from this warehouse</p>
+                    <p className="text-xs text-gray-500">Delivery partners can pick up orders from this location</p>
                   </div>
                 </div>
 
                 {/* Location Picker for Edit */}
                 <div className="border-t pt-4">
-                  <label className="text-sm font-medium text-gray-700 block mb-3">📍 Update Warehouse Location *</label>
+                  <label className="text-sm font-medium text-gray-700 block mb-3">📍 Update Pickup Location *</label>
                   <LocationPicker
                     initialLat={warehouse.latitude || undefined}
                     initialLng={warehouse.longitude || undefined}
@@ -286,7 +286,7 @@ export default function WarehouseDetailPage() {
                     </span>
                   )}
                   <button onClick={startEditing} className="text-xs text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1">
-                    <Edit3 className="h-3 w-3" /> Edit warehouse details
+                    <Edit3 className="h-3 w-3" /> Edit pickup location details
                   </button>
                 </div>
               </div>

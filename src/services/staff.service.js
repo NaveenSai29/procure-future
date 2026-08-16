@@ -121,7 +121,7 @@ export class StaffService {
               lastLogin: true,
             }
           },
-          branch: { select: { id: true, branchName: true } },
+          warehouse: { select: { id: true, name: true } },
           staffRoles: {
             include: {
               role: { select: { id: true, name: true } }
@@ -155,7 +155,7 @@ export class StaffService {
             lastLogin: true,
           }
         },
-        branch: true,
+        warehouse: true,
         staffRoles: {
           include: {
             role: true
@@ -165,7 +165,7 @@ export class StaffService {
     });
   }
 
-  static async addStaffMember(supplierId, { name, email, password, mobile, role, branchId }) {
+  static async addStaffMember(supplierId, { name, email, password, mobile, role, warehouseId }) {
     // Check if email exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -201,13 +201,13 @@ export class StaffService {
           supplierId,
           userId: user.id,
           role: role || 'STAFF',
-          branchId: branchId || null,
+          warehouseId: warehouseId || null,
         },
         include: {
           user: {
             select: { id: true, name: true, email: true }
           },
-          branch: true
+          warehouse: true
         }
       });
 
@@ -227,19 +227,19 @@ export class StaffService {
     return result;
   }
 
-  static async updateStaffMember(staffId, { role, branchId, isActive }) {
+  static async updateStaffMember(staffId, { role, warehouseId, isActive }) {
     return prisma.supplierStaff.update({
       where: { id: staffId },
       data: {
         ...(role && { role }),
-        ...(branchId !== undefined && { branchId }),
+        ...(warehouseId !== undefined && { warehouseId }),
         ...(isActive !== undefined && { isActive }),
       },
       include: {
         user: {
           select: { id: true, name: true, email: true }
         },
-        branch: true,
+        warehouse: true,
         staffRoles: {
           include: { role: true }
         }

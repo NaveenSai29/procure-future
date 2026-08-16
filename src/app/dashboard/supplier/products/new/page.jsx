@@ -125,7 +125,7 @@ export default function NewProductPage() {
   const handleSaveDraft = async () => {
     if (!name || !categoryId) { toast.error("Name and category required for draft"); return; }
     if (!weight) { toast.error("Weight is required"); return; }
-    if (!warehouseId) { toast.error("Please select a warehouse"); return; }
+    if (!warehouseId) { toast.error("Please select a pickup location"); return; }
     if (!stockQty || parseInt(stockQty) < 0) { toast.error("Stock quantity is required"); return; }
 
     setLoading(true);
@@ -185,7 +185,7 @@ export default function NewProductPage() {
     e.preventDefault();
     if (!name || !categoryId) { toast.error("Name and category required"); return; }
     if (!weight) { toast.error("Weight is required for delivery"); return; }
-    if (!warehouseId) { toast.error("Please select a warehouse for initial stock"); return; }
+    if (!warehouseId) { toast.error("Please select a pickup location for initial stock"); return; }
     if (!stockQty || parseInt(stockQty) < 0) { toast.error("Initial stock quantity is required"); return; }
     if (images.length === 0) { toast.error("Please upload at least one product image"); return; }
 
@@ -369,27 +369,27 @@ export default function NewProductPage() {
 
           {/* Stock Location */}
           <div className="bg-background rounded-xl border p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">Stock Location *</h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Pickup Location *</h3>
             {warehouses.length === 0 ? (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-                <p className="text-amber-800 font-medium mb-2">No warehouse found</p>
-                <p className="text-sm text-amber-700 mb-3">Create a warehouse first — it can be your shop, godown, or storage location.</p>
+                <p className="text-amber-800 font-medium mb-2">No pickup location found</p>
+                <p className="text-sm text-amber-700 mb-3">Create a pickup location first — it can be your shop, godown, or storage location.</p>
                 <div className="flex gap-2 justify-center">
                   <Link href="/dashboard/warehouse" target="_blank" className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition inline-flex items-center gap-2">
-                    <Building className="h-4 w-4" /> Create Warehouse (New Tab)
+                    <Building className="h-4 w-4" /> Create Pickup Location
                   </Link>
-                  <button type="button" onClick={() => { fetch("/api/warehouses").then(r => r.text()).then(text => { if (!text) return; try { const d = JSON.parse(text); const list = d.success ? (d.data || []) : (Array.isArray(d) ? d : []); setWarehouses(list); if (list.length > 0) toast.success(`${list.length} warehouse(s) found!`); } catch {} }).catch(() => {}); }} className="px-4 py-2 bg-white border border-amber-300 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 transition">🔄 Refresh</button>
+                  <button type="button" onClick={() => { fetch("/api/warehouses").then(r => r.text()).then(text => { if (!text) return; try { const d = JSON.parse(text); const list = d.success ? (d.data || []) : (Array.isArray(d) ? d : []); setWarehouses(list); if (list.length > 0) toast.success(`${list.length} pickup location(s) found!`); } catch {} }).catch(() => {}); }} className="px-4 py-2 bg-white border border-amber-300 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 transition">🔄 Refresh</button>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium">Warehouse *</label>
+                  <label className="text-sm font-medium">Pickup Location *</label>
                   <select value={warehouseId} onChange={e => setWarehouseId(e.target.value)} className="w-full mt-1 px-3 py-2 border rounded-lg text-sm bg-white" required>
-                    <option value="">Select warehouse</option>
+                    <option value="">Select pickup location</option>
                     {warehouses.map(w => <option key={w.id} value={w.id}>{w.name} ({w.city || ""})</option>)}
                   </select>
-                  <Link href="/dashboard/warehouse" target="_blank" className="text-xs text-blue-600 hover:underline mt-1 inline-block">+ Add new warehouse</Link>
+                  <Link href="/dashboard/warehouse" target="_blank" className="text-xs text-blue-600 hover:underline mt-1 inline-block">+ Add new pickup location</Link>
                 </div>
                 <div><label className="text-sm font-medium">Quantity *</label><Input type="number" value={stockQty} onChange={e => setStockQty(e.target.value)} placeholder="e.g., 100" required /></div>
               </div>

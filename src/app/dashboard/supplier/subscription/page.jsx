@@ -93,7 +93,7 @@ export default function SupplierSubscriptionPage() {
             {[
               { label: 'Products', used: usage.productCount, limit: currentPlan.maxProducts, icon: Package },
               { label: 'Staff', used: usage.staffCount, limit: currentPlan.maxStaff, icon: Users },
-              { label: 'Warehouses', used: usage.warehouseCount, limit: currentPlan.maxWarehouses, icon: Warehouse },
+              { label: 'Pickup Locations', used: usage.warehouseCount, limit: currentPlan.maxWarehouses, icon: Warehouse },
               { label: 'Branches', used: usage.branchCount, limit: currentPlan.maxBranches, icon: Building2 },
             ].map(item => {
               const pct = item.limit > 0 ? (item.used / item.limit * 100) : 0;
@@ -144,7 +144,7 @@ export default function SupplierSubscriptionPage() {
                 <div className="space-y-2.5 mb-6">
                   <div className="flex items-center gap-2 text-sm"><Package className="h-4 w-4 text-gray-400" /> {plan.maxProducts === 0 ? 'Unlimited' : plan.maxProducts.toLocaleString()} Products</div>
                   <div className="flex items-center gap-2 text-sm"><Users className="h-4 w-4 text-gray-400" /> {plan.maxStaff === 0 ? 'Unlimited' : plan.maxStaff} Staff Members</div>
-                  <div className="flex items-center gap-2 text-sm"><Warehouse className="h-4 w-4 text-gray-400" /> {plan.maxWarehouses === 0 ? 'Unlimited' : plan.maxWarehouses} Warehouses</div>
+                  <div className="flex items-center gap-2 text-sm"><Warehouse className="h-4 w-4 text-gray-400" /> {plan.maxWarehouses === 0 ? 'Unlimited' : plan.maxWarehouses} Pickup Locations</div>
                   <div className="flex items-center gap-2 text-sm"><Building2 className="h-4 w-4 text-gray-400" /> {plan.maxBranches === 0 ? 'Unlimited' : plan.maxBranches} Branches</div>
                   <hr />
                   {features.map(f => (

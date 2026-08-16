@@ -374,7 +374,6 @@ model SupplierBranch {
   updatedAt    DateTime        @updatedAt
 
   supplier     Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  staff        SupplierStaff[]
   businessHours BusinessHours[]
   holidays     Holiday[]
 }
@@ -409,18 +408,18 @@ model Holiday {
 }
 
 model SupplierStaff {
-  id         String              @id @default(uuid())
-  supplierId String
-  userId     String              @unique
-  branchId   String?
-  role       String
-  isActive   Boolean             @default(true)
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  id          String              @id @default(uuid())
+  supplierId  String
+  userId      String              @unique
+  warehouseId String?
+  role        String
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
 
   supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branch     SupplierBranch?     @relation(fields: [branchId], references: [id])
+  warehouse  Warehouse?          @relation(fields: [warehouseId], references: [id])
   staffRoles SupplierStaffRole[]
 }
 
@@ -476,6 +475,7 @@ model Warehouse {
   isPickupLocation Boolean       @default(true)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
+  staff        SupplierStaff[]
 
   supplier     Supplier          @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   zones        WarehouseZone[]

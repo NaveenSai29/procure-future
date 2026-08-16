@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Building2, Plus, Edit, Trash2, X, Save, MapPin,
-  Phone, Mail, Star, Clock, Calendar, Users, ChevronRight,
-  Home, Check
+  Phone, Mail, Star, Calendar, Users
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -16,17 +16,12 @@ export default function BranchesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
   const [selectedBranch, setSelectedBranch] = useState(null);
-  const [showHoursModal, setShowHoursModal] = useState(false);
   const [showHolidayModal, setShowHolidayModal] = useState(false);
 
   const [form, setForm] = useState({
     branchName: '', addressLine1: '', addressLine2: '', city: '',
     state: '', pincode: '', mobile: '', email: '', isHeadOffice: false
   });
-
-  const [hoursForm, setHoursForm] = useState(
-    DAYS.map((_, i) => ({ dayOfWeek: i, openTime: '09:00', closeTime: '18:00', isOpen: i !== 0 }))
-  );
 
   const [holidayForm, setHolidayForm] = useState({ date: '', name: '', description: '' });
   const [holidays, setHolidays] = useState([]);
@@ -102,22 +97,6 @@ export default function BranchesPage() {
     } catch { toast.error('Failed to delete'); }
   };
 
-  const handleSaveHours = async () => {
-    if (!selectedBranch) return;
-    try {
-      const res = await fetch('/api/supplier/branches/' + selectedBranch.id + '/hours', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessHours: hoursForm })
-      });
-      if (res.ok) {
-        toast.success('Business hours updated');
-        setShowHoursModal(false);
-        fetchBranchDetails(selectedBranch.id);
-      }
-    } catch { toast.error('Failed to update hours'); }
-  };
-
   const handleAddHoliday = async () => {
     if (!selectedBranch) return;
     try {
@@ -161,19 +140,6 @@ export default function BranchesPage() {
       isHeadOffice: branch.isHeadOffice
     });
     setShowModal(true);
-  };
-
-  const openHours = (branch) => {
-    setSelectedBranch(branch);
-    setHoursForm(
-      DAYS.map((_, i) => {
-        const existing = branch.businessHours?.find(bh => bh.dayOfWeek === i);
-        return existing
-          ? { dayOfWeek: i, openTime: existing.openTime, closeTime: existing.closeTime, isOpen: existing.isOpen }
-          : { dayOfWeek: i, openTime: '09:00', closeTime: '18:00', isOpen: i !== 0 };
-      })
-    );
-    setShowHoursModal(true);
   };
 
   const openHolidays = (branch) => {
@@ -226,9 +192,6 @@ export default function BranchesPage() {
 
             <div className="flex items-center gap-4 mt-4 pt-3 border-t text-xs text-gray-400">
               <span className="flex items-center gap-1"><Users className="h-3 w-3" />{branch._count?.staff || 0} staff</span>
-              <button onClick={(e) => { e.stopPropagation(); openHours(branch); }} className="flex items-center gap-1 text-blue-600 hover:text-blue-700">
-                <Clock className="h-3 w-3" /> Hours
-              </button>
               <button onClick={(e) => { e.stopPropagation(); openHolidays(branch); }} className="flex items-center gap-1 text-blue-600 hover:text-blue-700">
                 <Calendar className="h-3 w-3" /> Holidays
               </button>
@@ -269,21 +232,11 @@ export default function BranchesPage() {
             </div>
           )}
 
-          {selectedBranch.businessHours?.length > 0 && (
-            <div>
-              <h3 className="font-medium text-sm text-gray-700 mb-2">Business Hours</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {selectedBranch.businessHours.map(bh => (
-                  <div key={bh.dayOfWeek} className={`p-2 rounded-lg text-sm ${bh.isOpen ? 'bg-green-50' : 'bg-red-50'}`}>
-                    <p className="font-medium text-gray-700">{DAYS[bh.dayOfWeek]}</p>
-                    <p className={bh.isOpen ? 'text-green-600' : 'text-red-600'}>
-                      {bh.isOpen ? bh.openTime + ' - ' + bh.closeTime : 'Closed'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-700">
+              💡 Shop hours are managed in <Link href="/dashboard/supplier/settings" className="font-semibold underline">Settings → Shop Hours</Link>
+            </p>
+          </div>
         </div>
       )}
 
@@ -342,42 +295,6 @@ export default function BranchesPage() {
               <button onClick={handleSubmit} disabled={!form.branchName || !form.city || !form.state} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 <Save className="h-4 w-4" />{editingBranch ? 'Update' : 'Create'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Business Hours Modal */}
-      {showHoursModal && selectedBranch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-bold mb-4">Business Hours - {selectedBranch.branchName}</h3>
-            <div className="space-y-2">
-              {hoursForm.map((bh, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="w-24 text-sm font-medium">{DAYS[i]}</span>
-                  <label className="flex items-center gap-1">
-                    <input type="checkbox" checked={bh.isOpen} onChange={() => {
-                      const updated = [...hoursForm];
-                      updated[i].isOpen = !updated[i].isOpen;
-                      setHoursForm(updated);
-                    }} className="rounded" />
-                  </label>
-                  {bh.isOpen ? (
-                    <div className="flex items-center gap-1">
-                      <input type="time" value={bh.openTime} onChange={(e) => { const u = [...hoursForm]; u[i].openTime = e.target.value; setHoursForm(u); }} className="px-2 py-1 border rounded text-sm w-32" />
-                      <span className="text-gray-400">to</span>
-                      <input type="time" value={bh.closeTime} onChange={(e) => { const u = [...hoursForm]; u[i].closeTime = e.target.value; setHoursForm(u); }} className="px-2 py-1 border rounded text-sm w-32" />
-                    </div>
-                  ) : (
-                    <span className="text-sm text-red-500">Closed</span>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button onClick={() => setShowHoursModal(false)} className="flex-1 py-2 border rounded-lg">Cancel</button>
-              <button onClick={handleSaveHours} className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save Hours</button>
             </div>
           </div>
         </div>
