@@ -384,14 +384,22 @@ export class DeliveryService {
     let isRaining = false;
     let isHeavyRain = false;
 
-    if (settings.surgeEnabled && warehouseLat && warehouseLng && settings.autoWeatherEnabled) {
-      const weather = await WeatherService.checkRain(warehouseLat, warehouseLng);
+    if (settings.surgeEnabled && settings.autoWeatherEnabled) {
+      let weather = { isRaining: false, isSevere: false };
+      // Check rain at warehouse/supplier location
+      if (warehouseLat && warehouseLng) {
+        weather = await WeatherService.checkRain(warehouseLat, warehouseLng);
+      }
+      // Also check rain at buyer location
+      if (!weather.isRaining && buyerLat && buyerLng) {
+        weather = await WeatherService.checkRain(buyerLat, buyerLng);
+      }
       if (weather.isRaining) {
         isRaining = true;
         isHeavyRain = weather.isSevere || false;
         const multiplier = isHeavyRain ? settings.rainSurgeMultiplier * 1.3 : settings.rainSurgeMultiplier;
         surgeAmount = Math.round(deliveryFee * (multiplier - 1));
-        surgeReason = isHeavyRain ? 'Heavy rain in your area' : 'Rain in your area';
+        surgeReason = isHeavyRain ? 'Heavy rain in delivery area' : 'Rain in delivery area';
       }
     }
 
