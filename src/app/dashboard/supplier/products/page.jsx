@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { 
-  Plus, Package, Search, Edit, Trash2, Eye, EyeOff, Image, Tags, 
-  MonitorSmartphone, Upload, Download, FileSpreadsheet 
+  Plus, Package, Search, Edit, Trash2, Eye, EyeOff, X,
+  Upload, Download, FileSpreadsheet 
 } from "lucide-react";
 import BulkImportDialog from "@/components/shared/BulkImportDialog";
 
@@ -54,6 +54,69 @@ export default function ProductsPage() {
     } catch { toast.error("Failed"); }
   };
 
+  const submitAllDrafts = async () => {
+    // Find products that are drafts (no image, not active, not rejected)
+    const drafts = products.filter(p => !p.isApproved && !p.isActive && !p.rejectionReason);
+    
+    if (drafts.length === 0) { toast.error("No drafts to submit"); return; }
+
+    // Separate valid and invalid drafts
+    const validDrafts = drafts.filter(p => 
+      p.name && 
+      p.categoryId && 
+      p.weight && 
+      p.inventory?.length > 0 && 
+      p.pricing?.length > 0
+    );
+    
+    const invalidDrafts = drafts.filter(p => 
+      !p.name || 
+      !p.categoryId || 
+      !p.weight || 
+      !p.inventory?.length || 
+      !p.pricing?.length
+    );
+    
+    if (validDrafts.length === 0) {
+      toast.error(`No valid drafts. ${invalidDrafts.length} draft(s) missing mandatory fields.`);
+      return;
+    }
+    
+    const skipMessage = invalidDrafts.length > 0 
+      ? `\n\n⚠️ ${invalidDrafts.length} draft(s) will be SKIPPED (missing fields).`
+      : '';
+    
+    if (!confirm(`Submit ${validDrafts.length} valid draft(s) for approval? Images are exempted.${skipMessage}`)) return;
+    
+    try {
+      let submitted = 0;
+      let failed = 0;
+      for (const draft of validDrafts) {
+        try {
+          const res = await fetch(`/api/products/${draft.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isActive: true, isApproved: false, rejectionReason: null }),
+          });
+          const data = await res.json();
+          if (data.success) submitted++;
+          else failed++;
+        } catch { failed++; }
+      }
+      
+      if (submitted > 0 && invalidDrafts.length === 0 && failed === 0) {
+        toast.success(`${submitted} products submitted for approval!`);
+      } else if (submitted > 0 && invalidDrafts.length > 0) {
+        toast.success(`${submitted} submitted ✅ | ${invalidDrafts.length} skipped (missing fields) | ${failed} failed`);
+      } else if (submitted > 0 && failed > 0) {
+        toast.success(`${submitted} submitted, ${failed} failed`);
+      } else {
+        toast.error("Failed to submit products");
+      }
+      fetchProducts();
+    } catch { toast.error("Failed to submit products"); }
+  };
+
   const handleExport = async () => {
     try {
       const res = await fetch("/api/supplier/products/export");
@@ -76,9 +139,22 @@ export default function ProductsPage() {
   };
 
   const filteredProducts = products.filter((p) => {
-    if (statusFilter === "active") return p.isActive;
-    if (statusFilter === "inactive") return !p.isActive;
-    if (statusFilter === "pending") return !p.isApproved;
+    if (statusFilter === "active" && !p.isActive) return false;
+    if (statusFilter === "inactive" && p.isActive) return false;
+    if (statusFilter === "pending" && p.isApproved) return false;
+    
+    // Real-time search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matches = 
+        p.name?.toLowerCase().includes(q) ||
+        p.sku?.toLowerCase().includes(q) ||
+        p.brand?.name?.toLowerCase().includes(q) ||
+        p.category?.name?.toLowerCase().includes(q) ||
+        p.barcode?.toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+    
     return true;
   });
 
@@ -97,7 +173,15 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold">Products</h1>
           <p className="text-muted-foreground">{products.length} products</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button 
+            variant="outline" 
+            onClick={submitAllDrafts}
+            className="flex items-center gap-2"
+          >
+            <Package className="h-4 w-4" />
+            Submit Drafts
+          </Button>
           <Button 
             variant="outline" 
             onClick={() => setShowImportDialog(true)}
@@ -144,9 +228,11 @@ export default function ProductsPage() {
             <option value="inactive">Inactive</option>
             <option value="pending">Pending Approval</option>
           </select>
-          <Button variant="outline" onClick={fetchProducts}>
-            <Search className="h-4 w-4 mr-1" />Search
-          </Button>
+          {search && (
+            <Button variant="outline" onClick={() => setSearch("")}>
+              <X className="h-4 w-4 mr-1" />Clear
+            </Button>
+          )}
         </div>
       </div>
 

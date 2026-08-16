@@ -132,7 +132,7 @@ export default function NewProductPage() {
     const pricing = pricingTiers.filter(t => t.mrp && t.sellingPrice).map(t => ({
       priceType: t.priceType, mrp: parseFloat(t.mrp), sellingPrice: parseFloat(t.sellingPrice), minQty: parseInt(t.minQty) || 1,
     }));
-    if (pricing.length === 0) { toast.error("Add at least one price"); setLoading(false); return; }
+    // Price optional for draft
 
     try {
       let finalBrandId = brandId || null;
@@ -158,7 +158,7 @@ export default function NewProductPage() {
           weight: weight ? parseFloat(weight) : null,
           length: length || null, width: width || null, height: height || null,
           warranty: warranty || null, countryOfOrigin: countryOfOrigin || "India",
-          pricing, warehouseId, stockQty: parseInt(stockQty) || 0,
+          pricing: pricing.length > 0 ? pricing : [], warehouseId, stockQty: parseInt(stockQty) || 0,
           isActive: false,
           isApproved: false,
           variants: variants.filter(v => v.value.trim()).map(v => ({

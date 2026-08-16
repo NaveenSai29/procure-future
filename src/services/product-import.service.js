@@ -441,7 +441,7 @@ export class ProductImportService {
       'minQty', 'moq', 'gstRate', 'taxInclusive',
       'initialStock', 'lowStockAlert', 'warehouseName',
       'variantsJson', 'attributesJson', 'specificationsJson',
-      'metaTitle', 'metaDescription', 'tags', 'isActive', 'isFeatured'
+      'metaTitle', 'metaDescription', 'tags'
     ];
 
     const sampleRow = [
@@ -451,7 +451,7 @@ export class ProductImportService {
       '1', '10', '18', 'false',
       '100', '10', 'Main Warehouse',
       '', '', '',
-      'Sample Product - Buy Online', 'Buy Sample Product at best price', 'electronics,sample', 'true', 'false'
+      'Sample Product - Buy Online', 'Buy Sample Product at best price', 'electronics,sample'
     ];
 
     const csvContent = [

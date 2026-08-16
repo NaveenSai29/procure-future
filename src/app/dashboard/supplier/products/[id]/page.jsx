@@ -50,6 +50,7 @@ export default function EditProductPage() {
   const [stockQty, setStockQty] = useState("");
   const [currentStock, setCurrentStock] = useState(null);
   const [productStatus, setProductStatus] = useState({ isActive: false, isApproved: false, rejectionReason: null });
+  const [productData, setProductData] = useState(null);
   const [pricingTiers, setPricingTiers] = useState([{ priceType: "RETAIL", mrp: "", sellingPrice: "", minQty: "1" }]);
 
   // Images state
@@ -119,6 +120,18 @@ export default function EditProductPage() {
         isActive: p.isActive || false,
         isApproved: p.isApproved || false,
         rejectionReason: p.rejectionReason || null,
+      });
+      setProductData({
+        name: p.name || "",
+        categoryId: p.categoryId || "",
+        brandId: p.brandId || "",
+        description: p.description || "",
+        sku: p.sku || "",
+        hsnCode: p.hsnCode || "",
+        unit: p.unit || "PCS",
+        weight: p.weight ? String(p.weight) : "",
+        imagesCount: p.images?.length || 0,
+        pricing: p.pricing?.map(t => ({ pt: t.priceType, m: String(t.mrp || ""), s: String(t.sellingPrice || ""), mq: String(t.minQty || "1") })) || [],
       });
       
       // Load images
@@ -204,6 +217,7 @@ export default function EditProductPage() {
     const pricing = pricingTiers.filter(t => t.mrp && t.sellingPrice).map(t => ({
       priceType: t.priceType, mrp: parseFloat(t.mrp), sellingPrice: parseFloat(t.sellingPrice), minQty: parseInt(t.minQty) || 1,
     }));
+    // Price optional for draft
     
     try {
       let finalBrandId = brandId || null;
@@ -230,7 +244,7 @@ export default function EditProductPage() {
           weight: weight ? parseFloat(weight) : null,
           length: length || null, width: width || null, height: height || null,
           warranty: warranty || null, countryOfOrigin: countryOfOrigin || null,
-          pricing,
+          pricing: pricing.length > 0 ? pricing : [],
           warehouseId: warehouseId || null,
           stockQty: stockQty ? parseInt(stockQty) : null,
           isActive: false,
@@ -260,6 +274,22 @@ export default function EditProductPage() {
     if (!name || !categoryId) { toast.error("Name and category required"); return; }
     if (!weight) { toast.error("Weight is required for delivery"); return; }
     if (images.length === 0) { toast.error("Please upload at least one product image"); return; }
+
+    const currentPricingKey = JSON.stringify(pricingTiers.filter(t => t.mrp && t.sellingPrice).map(t => ({ pt: t.priceType, m: t.mrp, s: t.sellingPrice, mq: t.minQty })));
+    const originalPricingKey = JSON.stringify(productData?.pricing || []);
+    
+    const isStockOnlyUpdate = (
+      name === productData?.name &&
+      categoryId === productData?.categoryId &&
+      brandId === productData?.brandId &&
+      description === productData?.description &&
+      sku === productData?.sku &&
+      hsnCode === productData?.hsnCode &&
+      unit === productData?.unit &&
+      String(weight || '') === String(productData?.weight || '') &&
+      images.length === productData?.imagesCount &&
+      currentPricingKey === originalPricingKey
+    );
 
     setSaving(true);
     setSubmittingForApproval(true);
@@ -296,7 +326,7 @@ export default function EditProductPage() {
           warehouseId: warehouseId || null,
           stockQty: stockQty ? parseInt(stockQty) : null,
           isActive: images.length > 0,
-          isApproved: false,
+          isApproved: isStockOnlyUpdate ? (productStatus.isApproved || false) : false,
           rejectionReason: null,
           variants: variants.filter(v => v.value.trim()).map(v => ({
             type: variantType || 'Variant',
@@ -309,7 +339,11 @@ export default function EditProductPage() {
       });
       const result = await res.json();
       if (result.success) { 
-        toast.success("Product updated! Waiting for admin approval."); 
+        if (isStockOnlyUpdate) {
+          toast.success("Stock updated! Product is still live."); 
+        } else {
+          toast.success("Product updated! Waiting for admin approval."); 
+        }
         router.push("/dashboard/supplier/products"); 
       }
       else { toast.error(result.message || result.error); }
