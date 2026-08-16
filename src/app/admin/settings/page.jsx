@@ -409,8 +409,16 @@ export default function AdminSettingsPage() {
             <div className="max-w-xs">
               <label className="text-sm font-medium text-gray-700">Timeout (seconds)</label>
               <select 
-                value={deliveryForm.newOrderTimeoutSeconds || 120} 
-                onChange={(e) => setDeliveryForm(prev => ({ ...prev, newOrderTimeoutSeconds: parseInt(e.target.value) }))}
+                value={[30, 60, 90, 120, 180, 300].includes(deliveryForm.newOrderTimeoutSeconds) ? deliveryForm.newOrderTimeoutSeconds : 'custom'} 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'custom') {
+                    // Keep current value, show custom input
+                    setDeliveryForm(prev => ({ ...prev, newOrderTimeoutSeconds: 240 }));
+                  } else {
+                    setDeliveryForm(prev => ({ ...prev, newOrderTimeoutSeconds: parseInt(val) }));
+                  }
+                }}
                 className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold"
               >
                 <option value={30}>30 seconds (Fast)</option>
@@ -419,7 +427,27 @@ export default function AdminSettingsPage() {
                 <option value={120}>120 seconds (Recommended)</option>
                 <option value={180}>180 seconds (3 min)</option>
                 <option value={300}>300 seconds (5 min)</option>
+                <option value="custom">⚙️ Custom...</option>
               </select>
+              
+              {/* Custom input appears when not using preset values */}
+              {![30, 60, 90, 120, 180, 300].includes(deliveryForm.newOrderTimeoutSeconds) && (
+                <div className="mt-3">
+                  <label className="text-sm font-medium text-gray-700">Custom Timeout (seconds)</label>
+                  <input 
+                    type="number" 
+                    min="15" 
+                    max="3600" 
+                    step="15"
+                    value={deliveryForm.newOrderTimeoutSeconds || 240} 
+                    onChange={(e) => setDeliveryForm(prev => ({ ...prev, newOrderTimeoutSeconds: parseInt(e.target.value) || 120 }))}
+                    className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold"
+                    placeholder="Enter seconds (e.g., 240)"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Min: 15 seconds • Max: 3600 seconds (1 hour)</p>
+                </div>
+              )}
+              
               <p className="text-xs text-gray-400 mt-2">Startup tip: Use 120-180s until you have more delivery partners. Reduce to 30-60s as you scale.</p>
             </div>
           </div>
@@ -722,13 +750,17 @@ export default function AdminSettingsPage() {
                               {notifForm.soundFileUrl.split('/').pop()}
                             </span>
                             <button 
-                              onClick={() => setNotifForm(prev => ({ ...prev, soundFileUrl: '' }))}
+                              onClick={() => {
+                                // Stop any playing audio before removing
+                                const audioElements = document.querySelectorAll('audio');
+                                audioElements.forEach(a => { a.pause(); a.src = ''; });
+                                setNotifForm(prev => ({ ...prev, soundFileUrl: '' }));
+                              }}
                               className="text-red-400 hover:text-red-600"
                             >
                               <X className="h-4 w-4" />
                             </button>
                           </div>
-                          <audio controls src={notifForm.soundFileUrl} className="h-10" />
                         </>
                       ) : (
                         <div className="flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 rounded-lg px-3 py-2 flex-1">
@@ -856,13 +888,16 @@ export default function AdminSettingsPage() {
                               {notifForm.deliverySoundFileUrl.split('/').pop()}
                             </span>
                             <button 
-                              onClick={() => setNotifForm(prev => ({ ...prev, deliverySoundFileUrl: '' }))}
+                              onClick={() => {
+                                const audioElements = document.querySelectorAll('audio');
+                                audioElements.forEach(a => { a.pause(); a.src = ''; });
+                                setNotifForm(prev => ({ ...prev, deliverySoundFileUrl: '' }));
+                              }}
                               className="text-red-400 hover:text-red-600"
                             >
                               <X className="h-4 w-4" />
                             </button>
                           </div>
-                          <audio controls src={notifForm.deliverySoundFileUrl} className="h-10" />
                         </>
                       ) : (
                         <div className="flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 rounded-lg px-3 py-2 flex-1">
@@ -990,13 +1025,16 @@ export default function AdminSettingsPage() {
                               {notifForm.pickupSoundFileUrl.split('/').pop()}
                             </span>
                             <button 
-                              onClick={() => setNotifForm(prev => ({ ...prev, pickupSoundFileUrl: '' }))}
+                              onClick={() => {
+                                const audioElements = document.querySelectorAll('audio');
+                                audioElements.forEach(a => { a.pause(); a.src = ''; });
+                                setNotifForm(prev => ({ ...prev, pickupSoundFileUrl: '' }));
+                              }}
                               className="text-red-400 hover:text-red-600"
                             >
                               <X className="h-4 w-4" />
                             </button>
                           </div>
-                          <audio controls src={notifForm.pickupSoundFileUrl} className="h-10" />
                         </>
                       ) : (
                         <div className="flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 rounded-lg px-3 py-2 flex-1">
