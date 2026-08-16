@@ -694,6 +694,9 @@ model Order {
     status        String               @default("PENDING")
     notes         String?
     deliveryInstructions String?
+    deliveryAddress  String?
+    deliveryLat      Float?
+    deliveryLng      Float?
     createdAt     DateTime             @default(now())
     updatedAt     DateTime             @updatedAt
 

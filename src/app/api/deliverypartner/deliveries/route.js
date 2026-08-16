@@ -48,11 +48,41 @@ export async function GET(request) {
               status: true,
               notes: true,
               createdAt: true,
+              deliveryAddress: true,
+              deliveryLat: true,
+              deliveryLng: true,
               buyer: {
                 select: {
                   id: true,
                   name: true,
                   mobile: true,
+                },
+              },
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  supplier: {
+                    select: {
+                      id: true,
+                      businessName: true,
+                    },
+                  },
+                  warehouses: {
+                    where: { isPickupLocation: true, isActive: true },
+                    take: 1,
+                    select: {
+                      id: true,
+                      name: true,
+                      addressLine1: true,
+                      addressLine2: true,
+                      city: true,
+                      state: true,
+                      pincode: true,
+                      latitude: true,
+                      longitude: true,
+                    },
+                  },
                 },
               },
             },
@@ -65,16 +95,33 @@ export async function GET(request) {
       prisma.delivery.count({ where }),
     ]);
 
-    // Calculate net delivery fee after commission for each delivery
+    // Calculate net delivery fee after commission and build pickup info
     const { CommissionService } = await import('@/services/commission.service');
     const deliveriesWithNet = await Promise.all(deliveries.map(async (d) => {
       const deliveryFee = d.order?.deliveryFee || 0;
       const { netEarning } = await CommissionService.calculateDeliveryNetEarning(deliveryFee);
+      
+      // Build pickup address from warehouse
+      const pickupWarehouse = d.order?.product?.warehouses?.[0] || null;
+      const pickupAddress = pickupWarehouse
+        ? [
+            pickupWarehouse.addressLine1,
+            pickupWarehouse.addressLine2,
+            pickupWarehouse.city,
+            pickupWarehouse.state,
+            pickupWarehouse.pincode,
+          ].filter(Boolean).join(', ')
+        : null;
+      
       return {
         ...d,
         order: {
           ...d.order,
           netDeliveryFee: netEarning,
+          pickupName: d.order?.product?.supplier?.businessName || pickupWarehouse?.name || null,
+          pickupAddress: pickupAddress,
+          pickupLat: pickupWarehouse?.latitude || null,
+          pickupLng: pickupWarehouse?.longitude || null,
         },
       };
     }));

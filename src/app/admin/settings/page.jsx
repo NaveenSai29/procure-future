@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import {
-  Settings, Building2, CreditCard, Bell,
+  Settings, Building2, CreditCard, Bell, BellRing,
   Zap, Save, RefreshCw,
   Globe, Mail, Phone,
   RotateCcw, Wallet, Banknote, Building, Percent,
   Truck, CloudRain, Clock, MapPin, Gauge, DollarSign, ShieldCheck,
-  Volume2, VolumeX, X
+  Volume2, VolumeX, X, Repeat, Bike
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -42,6 +42,7 @@ export default function AdminSettingsPage() {
     waitTimerMinutes: 5,
     photoProofRequired: true,
     returnFeePercent: 100,
+    newOrderTimeoutSeconds: 120,
   });
 
   const [paymentForm, setPaymentForm] = useState({
@@ -65,6 +66,16 @@ export default function AdminSettingsPage() {
     newOrderSound: true,
     soundVolume: 50,
     soundFileUrl: '',
+    newOrderRepeat: true,
+    newOrderRepeatInterval: 120,
+    pickupSound: true,
+    pickupSoundFileUrl: '',
+    pickupRepeat: true,
+    pickupRepeatInterval: 120,
+    deliveryNewOrderSound: true,
+    deliverySoundFileUrl: '',
+    deliveryRepeat: true,
+    deliveryRepeatInterval: 10,
   });
 
   const [featureForm, setFeatureForm] = useState({
@@ -116,6 +127,7 @@ export default function AdminSettingsPage() {
           waitTimerMinutes: d.waitTimerMinutes ?? prev.waitTimerMinutes ?? 5,
           photoProofRequired: d.photoProofRequired ?? prev.photoProofRequired ?? true,
           returnFeePercent: d.returnFeePercent ?? prev.returnFeePercent ?? 100,
+          newOrderTimeoutSeconds: d.newOrderTimeoutSeconds ?? prev.newOrderTimeoutSeconds ?? 120,
         }));
       }
       if (data.platform) {
@@ -180,6 +192,48 @@ export default function AdminSettingsPage() {
       if (data.success) {
         setNotifForm(prev => ({ ...prev, soundFileUrl: data.url }));
         toast.success('Sound uploaded');
+      } else {
+        toast.error(data.error || 'Upload failed');
+      }
+    } catch {
+      toast.error('Upload failed');
+    }
+  };
+
+  const handlePickupSoundUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entityType', 'SOUND');
+    formData.append('entityId', 'pickup-sound');
+    try {
+      const res = await fetch('/api/admin/media/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setNotifForm(prev => ({ ...prev, pickupSoundFileUrl: data.url }));
+        toast.success('Pickup sound uploaded');
+      } else {
+        toast.error(data.error || 'Upload failed');
+      }
+    } catch {
+      toast.error('Upload failed');
+    }
+  };
+
+  const handleDeliverySoundUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entityType', 'SOUND');
+    formData.append('entityId', 'delivery-partner-sound');
+    try {
+      const res = await fetch('/api/admin/media/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setNotifForm(prev => ({ ...prev, deliverySoundFileUrl: data.url }));
+        toast.success('Delivery partner sound uploaded');
       } else {
         toast.error(data.error || 'Upload failed');
       }
@@ -343,6 +397,34 @@ export default function AdminSettingsPage() {
 
           <button onClick={() => { setDeliveryForm(prev => ({ ...prev, vehicles: [...prev.vehicles, { type: 'New Vehicle', maxWeight: 100, distanceSlabs: [{ upToKm: 5, perKmRate: 25 }, { upToKm: 10, perKmRate: 35 }, { upToKm: 20, perKmRate: 50 }, { upToKm: 999, perKmRate: 70 }] }] })); }} className="w-full py-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-600 hover:bg-blue-50 font-medium text-sm">+ Add Vehicle Type</button>
 
+          {/* NEW ORDER TIMEOUT SETTING */}
+          <div className="bg-white rounded-xl border shadow-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-purple-100 rounded-lg"><Clock className="h-5 w-5 text-purple-600" /></div>
+              <div>
+                <h3 className="font-semibold text-gray-900">New Order Response Timeout</h3>
+                <p className="text-xs text-gray-500">How long delivery partner has to accept before auto-reassign</p>
+              </div>
+            </div>
+            <div className="max-w-xs">
+              <label className="text-sm font-medium text-gray-700">Timeout (seconds)</label>
+              <select 
+                value={deliveryForm.newOrderTimeoutSeconds || 120} 
+                onChange={(e) => setDeliveryForm(prev => ({ ...prev, newOrderTimeoutSeconds: parseInt(e.target.value) }))}
+                className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold"
+              >
+                <option value={30}>30 seconds (Fast)</option>
+                <option value={60}>60 seconds</option>
+                <option value={90}>90 seconds</option>
+                <option value={120}>120 seconds (Recommended)</option>
+                <option value={180}>180 seconds (3 min)</option>
+                <option value={300}>300 seconds (5 min)</option>
+              </select>
+              <p className="text-xs text-gray-400 mt-2">Startup tip: Use 120-180s until you have more delivery partners. Reduce to 30-60s as you scale.</p>
+            </div>
+          </div>
+
+
           {/* VERIFICATION SETTINGS */}
           <div className="bg-white rounded-xl border shadow-sm p-6">
             <div className="flex items-center gap-3 mb-4">
@@ -476,6 +558,7 @@ export default function AdminSettingsPage() {
               waitTimerMinutes: parseInt(deliveryForm.waitTimerMinutes) || 5,
               photoProofRequired: deliveryForm.photoProofRequired,
               returnFeePercent: parseInt(deliveryForm.returnFeePercent) || 100,
+              newOrderTimeoutSeconds: parseInt(deliveryForm.newOrderTimeoutSeconds) || 120,
             })} disabled={saving} className="px-8 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 flex items-center gap-2 font-semibold shadow-lg"><Save className="h-5 w-5" />{saving ? 'Saving...' : 'Save Delivery Settings'}</button>
           </div>
         </div>
@@ -546,7 +629,7 @@ export default function AdminSettingsPage() {
             </div>
             {notifForm.emailEnabled && <div className="mb-6 p-4 bg-gray-50 rounded-lg"><h4 className="font-medium text-sm mb-3">SMTP Config</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-3"><input type="text" value={notifForm.smtpHost || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpHost: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="Host" /><input type="number" value={notifForm.smtpPort || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpPort: parseInt(e.target.value) }))} className="px-3 py-2 border rounded-lg" placeholder="Port" /><input type="text" value={notifForm.smtpUser || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpUser: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="User" /><input type="password" value={notifForm.smtpPass || ''} onChange={(e) => setNotifForm(prev => ({ ...prev, smtpPass: e.target.value }))} className="px-3 py-2 border rounded-lg" placeholder="Password" /></div></div>}
 
-            {/* Supplier Alert Sound Settings */}
+            {/* Supplier New Order Alert Sound */}
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -573,7 +656,6 @@ export default function AdminSettingsPage() {
 
               {notifForm.newOrderSound && (
                 <div className="space-y-4">
-                  {/* Volume Slider */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-sm font-medium text-gray-700">Volume</label>
@@ -595,7 +677,41 @@ export default function AdminSettingsPage() {
                     </div>
                   </div>
 
-                  {/* Sound File Upload */}
+                  <div className="flex items-center justify-between border-t pt-4">
+                    <div className="flex items-center gap-2">
+                      <Repeat className="h-4 w-4 text-blue-600" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Repeat Sound</p>
+                        <p className="text-xs text-gray-400">Repeat until order is accepted/declined</p>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={notifForm.newOrderRepeat} 
+                        onChange={(e) => setNotifForm(prev => ({ ...prev, newOrderRepeat: e.target.checked }))} 
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">{notifForm.newOrderRepeat ? 'ON' : 'OFF'}</span>
+                    </label>
+                  </div>
+
+                  {notifForm.newOrderRepeat && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Repeat Interval (seconds)</label>
+                      <input 
+                        type="number" 
+                        min="30" 
+                        max="600" 
+                        step="30"
+                        value={notifForm.newOrderRepeatInterval || 120} 
+                        onChange={(e) => setNotifForm(prev => ({ ...prev, newOrderRepeatInterval: parseInt(e.target.value) || 120 }))} 
+                        className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Default: 120 seconds (2 minutes)</p>
+                    </div>
+                  )}
+
                   <div className="border-t pt-4">
                     <label className="text-sm font-medium text-gray-700 block mb-2">Custom Sound File (MP3, WAV, OGG - Max 5MB)</label>
                     <div className="flex items-center gap-3">
@@ -628,7 +744,6 @@ export default function AdminSettingsPage() {
                     <p className="text-xs text-gray-400 mt-2">Upload a short notification sound. If no custom sound, a default beep will play.</p>
                   </div>
 
-                  {/* Test Sound Button */}
                   <div className="border-t pt-4">
                     <button 
                       onClick={() => {
@@ -663,6 +778,275 @@ export default function AdminSettingsPage() {
                     >
                       <Volume2 className="h-4 w-4" />
                       Test Sound
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Delivery Partner Alert Sound */}
+            <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  {notifForm.deliveryNewOrderSound ? (
+                    <Bike className="h-5 w-5 text-purple-600" />
+                  ) : (
+                    <VolumeX className="h-5 w-5 text-gray-400" />
+                  )}
+                  <div>
+                    <p className="font-medium text-sm text-gray-900">Delivery Partner Alert Sound</p>
+                    <p className="text-xs text-gray-500">Play sound when delivery partner receives new order</p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={notifForm.deliveryNewOrderSound} 
+                    onChange={(e) => setNotifForm(prev => ({ ...prev, deliveryNewOrderSound: e.target.checked }))} 
+                    className="w-5 h-5"
+                  />
+                  <span className="text-sm font-medium">{notifForm.deliveryNewOrderSound ? 'ON' : 'OFF'}</span>
+                </label>
+              </div>
+
+              {notifForm.deliveryNewOrderSound && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-t pt-4">
+                    <div className="flex items-center gap-2">
+                      <Repeat className="h-4 w-4 text-purple-600" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Repeat Sound</p>
+                        <p className="text-xs text-gray-400">Repeat until accepted/declined (30s timeout)</p>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={notifForm.deliveryRepeat} 
+                        onChange={(e) => setNotifForm(prev => ({ ...prev, deliveryRepeat: e.target.checked }))} 
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">{notifForm.deliveryRepeat ? 'ON' : 'OFF'}</span>
+                    </label>
+                  </div>
+
+                  {notifForm.deliveryRepeat && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Repeat Interval (seconds)</label>
+                      <input 
+                        type="number" 
+                        min="5" 
+                        max="30" 
+                        step="5"
+                        value={notifForm.deliveryRepeatInterval || 10} 
+                        onChange={(e) => setNotifForm(prev => ({ ...prev, deliveryRepeatInterval: parseInt(e.target.value) || 10 }))} 
+                        className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Default: 10 seconds (plays 3x before 30s timeout)</p>
+                    </div>
+                  )}
+
+                  <div className="border-t pt-4">
+                    <label className="text-sm font-medium text-gray-700 block mb-2">Custom Delivery Partner Sound (MP3, WAV, OGG - Max 5MB)</label>
+                    <div className="flex items-center gap-3">
+                      {notifForm.deliverySoundFileUrl ? (
+                        <>
+                          <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex-1">
+                            <span className="text-sm text-green-700 font-medium truncate">
+                              {notifForm.deliverySoundFileUrl.split('/').pop()}
+                            </span>
+                            <button 
+                              onClick={() => setNotifForm(prev => ({ ...prev, deliverySoundFileUrl: '' }))}
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <audio controls src={notifForm.deliverySoundFileUrl} className="h-10" />
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 rounded-lg px-3 py-2 flex-1">
+                          <span className="text-sm text-gray-400">No custom delivery sound — default beep will play</span>
+                        </div>
+                      )}
+                      <label className="px-4 py-2.5 bg-purple-600 text-white rounded-lg cursor-pointer hover:bg-purple-700 text-sm font-medium flex items-center gap-1 whitespace-nowrap">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        Upload Delivery Sound
+                        <input type="file" accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg" onChange={handleDeliverySoundUpload} className="hidden" />
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Upload a distinct sound for delivery partners. If no custom sound, default beep will play.</p>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <button 
+                      onClick={() => {
+                        if (notifForm.deliverySoundFileUrl) {
+                          const audio = new Audio(notifForm.deliverySoundFileUrl);
+                          audio.volume = (notifForm.soundVolume || 50) / 100;
+                          audio.play().catch(() => toast.error('Failed to play sound'));
+                        } else {
+                          const AudioContext = window.AudioContext || window.webkitAudioContext;
+                          if (AudioContext) {
+                            const ctx = new AudioContext();
+                            const playBeep = (freq, start, dur) => {
+                              const osc = ctx.createOscillator();
+                              const gain = ctx.createGain();
+                              osc.connect(gain);
+                              gain.connect(ctx.destination);
+                              osc.frequency.value = freq;
+                              osc.type = 'sine';
+                              gain.gain.setValueAtTime((notifForm.soundVolume || 50) / 300, start);
+                              gain.gain.exponentialRampToValueAtTime(0.01, start + dur);
+                              osc.start(start);
+                              osc.stop(start + dur);
+                            };
+                            const now = ctx.currentTime;
+                            playBeep(880, now, 0.2);
+                            playBeep(1100, now + 0.25, 0.3);
+                            setTimeout(() => ctx.close().catch(() => {}), 1000);
+                          }
+                        }
+                      }}
+                      className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 flex items-center gap-2"
+                    >
+                      <Bike className="h-4 w-4" />
+                      Test Delivery Sound
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Ready for Pickup Alert Sound */}
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  {notifForm.pickupSound ? (
+                    <BellRing className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <Bell className="h-5 w-5 text-gray-400" />
+                  )}
+                  <div>
+                    <p className="font-medium text-sm text-gray-900">Ready for Pickup Alert Sound</p>
+                    <p className="text-xs text-gray-500">Play sound when order is ready for pickup</p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={notifForm.pickupSound} 
+                    onChange={(e) => setNotifForm(prev => ({ ...prev, pickupSound: e.target.checked }))} 
+                    className="w-5 h-5"
+                  />
+                  <span className="text-sm font-medium">{notifForm.pickupSound ? 'ON' : 'OFF'}</span>
+                </label>
+              </div>
+
+              {notifForm.pickupSound && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-t pt-4">
+                    <div className="flex items-center gap-2">
+                      <Repeat className="h-4 w-4 text-green-600" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Repeat Sound</p>
+                        <p className="text-xs text-gray-400">Repeat until partner picks up</p>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={notifForm.pickupRepeat} 
+                        onChange={(e) => setNotifForm(prev => ({ ...prev, pickupRepeat: e.target.checked }))} 
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm">{notifForm.pickupRepeat ? 'ON' : 'OFF'}</span>
+                    </label>
+                  </div>
+
+                  {notifForm.pickupRepeat && (
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Repeat Interval (seconds)</label>
+                      <input 
+                        type="number" 
+                        min="30" 
+                        max="600" 
+                        step="30"
+                        value={notifForm.pickupRepeatInterval || 120} 
+                        onChange={(e) => setNotifForm(prev => ({ ...prev, pickupRepeatInterval: parseInt(e.target.value) || 120 }))} 
+                        className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Default: 120 seconds (2 minutes)</p>
+                    </div>
+                  )}
+
+                  <div className="border-t pt-4">
+                    <label className="text-sm font-medium text-gray-700 block mb-2">Custom Pickup Sound (MP3, WAV, OGG - Max 5MB)</label>
+                    <div className="flex items-center gap-3">
+                      {notifForm.pickupSoundFileUrl ? (
+                        <>
+                          <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 flex-1">
+                            <span className="text-sm text-green-700 font-medium truncate">
+                              {notifForm.pickupSoundFileUrl.split('/').pop()}
+                            </span>
+                            <button 
+                              onClick={() => setNotifForm(prev => ({ ...prev, pickupSoundFileUrl: '' }))}
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <audio controls src={notifForm.pickupSoundFileUrl} className="h-10" />
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-gray-50 border border-dashed border-gray-300 rounded-lg px-3 py-2 flex-1">
+                          <span className="text-sm text-gray-400">No custom pickup sound — default beep will play</span>
+                        </div>
+                      )}
+                      <label className="px-4 py-2.5 bg-green-600 text-white rounded-lg cursor-pointer hover:bg-green-700 text-sm font-medium flex items-center gap-1 whitespace-nowrap">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        Upload Pickup Sound
+                        <input type="file" accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg" onChange={handlePickupSoundUpload} className="hidden" />
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Upload a short pickup notification sound. If no custom sound, a default beep will play.</p>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <button 
+                      onClick={() => {
+                        if (notifForm.pickupSoundFileUrl) {
+                          const audio = new Audio(notifForm.pickupSoundFileUrl);
+                          audio.volume = (notifForm.soundVolume || 50) / 100;
+                          audio.play().catch(() => toast.error('Failed to play sound'));
+                        } else {
+                          const AudioContext = window.AudioContext || window.webkitAudioContext;
+                          if (AudioContext) {
+                            const ctx = new AudioContext();
+                            const playBeep = (freq, start, dur) => {
+                              const osc = ctx.createOscillator();
+                              const gain = ctx.createGain();
+                              osc.connect(gain);
+                              gain.connect(ctx.destination);
+                              osc.frequency.value = freq;
+                              osc.type = 'sine';
+                              gain.gain.setValueAtTime((notifForm.soundVolume || 50) / 300, start);
+                              gain.gain.exponentialRampToValueAtTime(0.01, start + dur);
+                              osc.start(start);
+                              osc.stop(start + dur);
+                            };
+                            const now = ctx.currentTime;
+                            playBeep(660, now, 0.15);
+                            playBeep(660, now + 0.2, 0.15);
+                            playBeep(660, now + 0.4, 0.3);
+                            setTimeout(() => ctx.close().catch(() => {}), 1000);
+                          }
+                        }
+                      }}
+                      className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 flex items-center gap-2"
+                    >
+                      <BellRing className="h-4 w-4" />
+                      Test Pickup Sound
                     </button>
                   </div>
                 </div>

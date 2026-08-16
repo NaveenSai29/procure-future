@@ -38,6 +38,45 @@ async function deductWallet(userId, amount, referenceId, description) {
   }
 }
 
+// Helper: Get delivery address by addressId
+async function getDeliveryAddress(addressId, userId) {
+  try {
+    if (!addressId) return null;
+    const address = await prisma.address.findFirst({
+      where: { id: addressId, buyer: { userId } },
+      select: {
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        state: true,
+        pincode: true,
+        landmark: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+    if (!address) return null;
+    
+    const fullAddress = [
+      address.addressLine1,
+      address.addressLine2,
+      address.landmark,
+      address.city,
+      address.state,
+      address.pincode,
+    ].filter(Boolean).join(', ');
+    
+    return {
+      deliveryAddress: fullAddress,
+      deliveryLat: address.latitude || null,
+      deliveryLng: address.longitude || null,
+    };
+  } catch (err) {
+    console.error('Address fetch error:', err.message);
+    return null;
+  }
+}
+
 // Helper: Check if shop is currently open
 async function isShopOpen(supplierId) {
   try {
@@ -270,6 +309,9 @@ export async function POST(request) {
       deliveryInstructions = null,
     } = body;
 
+    // Get delivery address if addressId provided
+    const addressData = await getDeliveryAddress(addressId, session.userId);
+
     // ─── MULTI-ITEM ORDER ───
     if (items && Array.isArray(items) && items.length > 0) {
 
@@ -351,6 +393,9 @@ export async function POST(request) {
             paymentMethod: (paymentMethod || 'ONLINE').toUpperCase(),
             razorpayPaymentId: razorpayPaymentId || null,
             deliveryInstructions: deliveryInstructions || null,
+            deliveryAddress: addressData?.deliveryAddress || null,
+            deliveryLat: addressData?.deliveryLat || null,
+            deliveryLng: addressData?.deliveryLng || null,
             status: "PENDING",
           },
         });
@@ -500,6 +545,9 @@ export async function POST(request) {
         paymentMethod: (paymentMethod || 'ONLINE').toUpperCase(),
         razorpayPaymentId: razorpayPaymentId || null,
         deliveryInstructions: deliveryInstructions || null,
+        deliveryAddress: addressData?.deliveryAddress || null,
+        deliveryLat: addressData?.deliveryLat || null,
+        deliveryLng: addressData?.deliveryLng || null,
         status: "PENDING",
       },
     });

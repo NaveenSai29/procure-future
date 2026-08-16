@@ -38,7 +38,17 @@ export default function SupplierOrdersPage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [soundVolume, setSoundVolume] = useState(50);
   const [soundFileUrl, setSoundFileUrl] = useState(null);
+  const [newOrderRepeat, setNewOrderRepeat] = useState(true);
+  const [newOrderRepeatInterval, setNewOrderRepeatInterval] = useState(120);
+  const [pickupSoundEnabled, setPickupSoundEnabled] = useState(true);
+  const [pickupSoundFileUrl, setPickupSoundFileUrl] = useState(null);
+  const [pickupRepeat, setPickupRepeat] = useState(true);
+  const [pickupRepeatInterval, setPickupRepeatInterval] = useState(120);
+  
   const audioCtxRef = useRef(null);
+  const newOrderRepeatTimerRef = useRef(null);
+  const pickupRepeatTimerRef = useRef(null);
+  const ordersRef = useRef([]);
 
   // Fetch sound settings from public settings API
   useEffect(() => {
@@ -50,10 +60,22 @@ export default function SupplierOrdersPage() {
         setSoundEnabled(notifSettings.newOrderSound !== false);
         setSoundVolume(parseInt(notifSettings.soundVolume) || 50);
         setSoundFileUrl(notifSettings.soundFileUrl || null);
+        setNewOrderRepeat(notifSettings.newOrderRepeat !== false);
+        setNewOrderRepeatInterval(parseInt(notifSettings.newOrderRepeatInterval) || 120);
+        setPickupSoundEnabled(notifSettings.pickupSound !== false);
+        setPickupSoundFileUrl(notifSettings.pickupSoundFileUrl || null);
+        setPickupRepeat(notifSettings.pickupRepeat !== false);
+        setPickupRepeatInterval(parseInt(notifSettings.pickupRepeatInterval) || 120);
       } catch {
         setSoundEnabled(true);
         setSoundVolume(50);
         setSoundFileUrl(null);
+        setNewOrderRepeat(true);
+        setNewOrderRepeatInterval(120);
+        setPickupSoundEnabled(true);
+        setPickupSoundFileUrl(null);
+        setPickupRepeat(true);
+        setPickupRepeatInterval(120);
       }
     };
     fetchSoundSetting();
@@ -68,6 +90,14 @@ export default function SupplierOrdersPage() {
   useEffect(() => {
     fetchOrders();
   }, [dateFrom, dateTo]);
+
+  // Cleanup repeat timers on unmount
+  useEffect(() => {
+    return () => {
+      if (newOrderRepeatTimerRef.current) clearInterval(newOrderRepeatTimerRef.current);
+      if (pickupRepeatTimerRef.current) clearInterval(pickupRepeatTimerRef.current);
+    };
+  }, []);
 
   // Play default beep sound with volume
   const playDefaultBeep = () => {
@@ -108,10 +138,49 @@ export default function SupplierOrdersPage() {
     }
   };
 
-  // Play custom sound file or default beep
+  // Play pickup beep (different pattern - three beeps)
+  const playPickupBeep = () => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+
+      const audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
+
+      const playBeep = (frequency, startTime, duration) => {
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'sine';
+
+        const volumeLevel = soundVolume / 300;
+        gainNode.gain.setValueAtTime(volumeLevel, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+
+      const now = audioCtx.currentTime;
+      playBeep(660, now, 0.15);
+      playBeep(660, now + 0.2, 0.15);
+      playBeep(660, now + 0.4, 0.3);
+
+      setTimeout(() => {
+        audioCtx.close().catch(() => {});
+      }, 1000);
+    } catch (e) {
+      console.log('Pickup beep error:', e.message);
+    }
+  };
+
+  // Play new order sound (custom or default)
   const playNewOrderSound = () => {
     try {
-      // If custom sound file is set, play it
       if (soundFileUrl) {
         const audio = new Audio(soundFileUrl);
         audio.volume = soundVolume / 100;
@@ -121,12 +190,68 @@ export default function SupplierOrdersPage() {
         });
         return;
       }
-      
-      // Otherwise play default beep
       playDefaultBeep();
     } catch (e) {
       console.log('Sound play error:', e.message);
     }
+  };
+
+  // Play pickup sound (custom or default)
+  const playPickupSound = () => {
+    try {
+      if (pickupSoundFileUrl) {
+        const audio = new Audio(pickupSoundFileUrl);
+        audio.volume = soundVolume / 100;
+        audio.play().catch((e) => {
+          console.log('Custom pickup sound play error:', e.message);
+          playPickupBeep();
+        });
+        return;
+      }
+      playPickupBeep();
+    } catch (e) {
+      console.log('Pickup sound play error:', e.message);
+    }
+  };
+
+  // Start repeat timer for new order sound
+  const startNewOrderRepeat = () => {
+    if (!newOrderRepeat) return;
+    if (newOrderRepeatTimerRef.current) clearInterval(newOrderRepeatTimerRef.current);
+    
+    newOrderRepeatTimerRef.current = setInterval(() => {
+      const currentOrders = ordersRef.current;
+      const hasPending = currentOrders.some(o => o.status === 'PENDING');
+      if (hasPending && soundEnabled) {
+        playNewOrderSound();
+      } else {
+        // Stop repeating if no pending orders
+        if (newOrderRepeatTimerRef.current) {
+          clearInterval(newOrderRepeatTimerRef.current);
+          newOrderRepeatTimerRef.current = null;
+        }
+      }
+    }, newOrderRepeatInterval * 1000);
+  };
+
+  // Start repeat timer for pickup sound
+  const startPickupRepeat = () => {
+    if (!pickupRepeat) return;
+    if (pickupRepeatTimerRef.current) clearInterval(pickupRepeatTimerRef.current);
+    
+    pickupRepeatTimerRef.current = setInterval(() => {
+      const currentOrders = ordersRef.current;
+      const hasReadyForPickup = currentOrders.some(o => o.status === 'READY_FOR_PICKUP');
+      if (hasReadyForPickup && pickupSoundEnabled) {
+        playPickupSound();
+      } else {
+        // Stop repeating if no ready-for-pickup orders
+        if (pickupRepeatTimerRef.current) {
+          clearInterval(pickupRepeatTimerRef.current);
+          pickupRepeatTimerRef.current = null;
+        }
+      }
+    }, pickupRepeatInterval * 1000);
   };
 
   const fetchOrders = async () => {
@@ -141,16 +266,33 @@ export default function SupplierOrdersPage() {
       if (data.success) {
         const newOrders = data.data.orders || [];
         
+        // Update ordersRef for repeat timers
+        ordersRef.current = newOrders;
+        
         // Detect new orders for toast + sound
         if (prevOrderIds.length > 0) {
           const existingIds = new Set(prevOrderIds);
           const freshOrders = newOrders.filter(o => !existingIds.has(o.id));
-          if (freshOrders.length > 0) {
-            toast.success(`🔔 ${freshOrders.length} new order${freshOrders.length > 1 ? 's' : ''} received!`);
-            
-            // Play sound if enabled
+          
+          // Check for new PENDING orders
+          const freshPending = freshOrders.filter(o => o.status === 'PENDING');
+          if (freshPending.length > 0) {
+            toast.success(`🔔 ${freshPending.length} new order${freshPending.length > 1 ? 's' : ''} received!`);
             if (soundEnabled) {
               playNewOrderSound();
+              // Start repeat timer
+              startNewOrderRepeat();
+            }
+          }
+          
+          // Check for new READY_FOR_PICKUP orders
+          const freshPickup = freshOrders.filter(o => o.status === 'READY_FOR_PICKUP');
+          if (freshPickup.length > 0) {
+            toast.success(`📦 ${freshPickup.length} order${freshPickup.length > 1 ? 's' : ''} ready for pickup!`);
+            if (pickupSoundEnabled) {
+              playPickupSound();
+              // Start pickup repeat timer
+              startPickupRepeat();
             }
           }
         }
