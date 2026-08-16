@@ -16,6 +16,9 @@ export default function AdminProductsPage() {
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [rejectModal, setRejectModal] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectLoading, setRejectLoading] = useState(false);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -59,6 +62,32 @@ export default function AdminProductsPage() {
       }
     } catch {
       toast.error("Failed to update");
+    }
+  };
+
+  const handleRejectProduct = async () => {
+    if (!rejectReason.trim()) {
+      toast.error("Please provide a rejection reason");
+      return;
+    }
+    setRejectLoading(true);
+    try {
+      const res = await fetch("/api/admin/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: rejectModal.id, isApproved: false, isActive: false, rejectionReason: rejectReason.trim() }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        toast.success("Product rejected");
+        setRejectModal(null);
+        setRejectReason("");
+        fetchProducts();
+      }
+    } catch {
+      toast.error("Failed to reject product");
+    } finally {
+      setRejectLoading(false);
     }
   };
 
@@ -293,6 +322,9 @@ export default function AdminProductsPage() {
                           <p className="text-xs text-gray-400 mt-0.5">
                             SKU: {p.sku || "N/A"} • {p._count?.images || 0} images • {p._count?.variants || 0} variants
                           </p>
+                          {p.rejectionReason && (
+                            <p className="text-xs text-red-600 mt-1">Rejected: {p.rejectionReason}</p>
+                          )}
                         </div>
                       </td>
                       <td className="p-4">
@@ -328,10 +360,14 @@ export default function AdminProductsPage() {
                         </div>
                       </td>
                       <td className="p-4">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {p.isApproved ? (
                             <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1">
                               <CheckCircle className="h-3 w-3" /> Approved
+                            </span>
+                          ) : p.rejectionReason ? (
+                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1">
+                              <XCircle className="h-3 w-3" /> Rejected
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
@@ -339,21 +375,29 @@ export default function AdminProductsPage() {
                             </span>
                           )}
                           {!p.isActive && (
-                            <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">
+                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
                               Inactive
                             </span>
                           )}
                         </div>
                       </td>
                       <td className="p-4">
-                        <div className="flex gap-1.5">
+                        <div className="flex gap-1.5 flex-wrap">
                           {!p.isApproved && (
-                            <button
-                              onClick={() => toggleProduct(p.id, "isApproved", true)}
-                              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition flex items-center gap-1"
-                            >
-                              <CheckCircle className="h-3.5 w-3.5" /> Approve
-                            </button>
+                            <>
+                              <button
+                                onClick={() => toggleProduct(p.id, "isApproved", true)}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition flex items-center gap-1"
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" /> Approve
+                              </button>
+                              <button
+                                onClick={() => { setRejectModal(p); setRejectReason(""); }}
+                                className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 transition flex items-center gap-1"
+                              >
+                                <XCircle className="h-3.5 w-3.5" /> Reject
+                              </button>
+                            </>
                           )}
                           {p.isApproved && !p.isActive && (
                             <button
@@ -402,6 +446,41 @@ export default function AdminProductsPage() {
           >
             Next
           </button>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-bold text-gray-900">Reject Product</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {rejectModal.name}
+            </p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+              placeholder="Enter rejection reason (e.g., Poor quality image, Incorrect pricing, Incomplete description)"
+              className="w-full mt-4 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+              autoFocus
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => { setRejectModal(null); setRejectReason(""); }}
+                className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRejectProduct}
+                disabled={rejectLoading || !rejectReason.trim()}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition disabled:opacity-50"
+              >
+                {rejectLoading ? "Rejecting..." : "Reject Product"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

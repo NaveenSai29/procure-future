@@ -222,17 +222,30 @@ export default function ProductsPage() {
                       <td className="p-4 text-sm font-semibold">{priceDisplay}</td>
                       <td className="p-4 text-sm">{p.variants?.length || 0}</td>
                       <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <span className={"inline-block w-2 h-2 rounded-full " + (p.isActive ? "bg-green-500" : "bg-red-500")} />
-                          <span className="text-xs">{p.isActive ? "Active" : "Inactive"}</span>
-                          {!p.isApproved && (
-                            <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">
-                              Pending
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {!p.images?.length && !p.isActive ? (
+                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full font-medium">
+                              DRAFT — Image Missing
                             </span>
-                          )}
-                          {p.isApproved && (
-                            <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
-                              Approved
+                          ) : !p.isApproved && p.isActive && !p.rejectionReason ? (
+                            <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full font-medium">
+                              ⏳ Pending Approval
+                            </span>
+                          ) : !p.isApproved && p.rejectionReason ? (
+                            <span className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded-full font-medium">
+                              ❌ Rejected
+                            </span>
+                          ) : p.isApproved && p.isActive ? (
+                            <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">
+                              ✅ Live
+                            </span>
+                          ) : p.isApproved && !p.isActive ? (
+                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full font-medium">
+                              ⏸️ Inactive
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full font-medium">
+                              {p.isActive ? "Active" : "Inactive"}
                             </span>
                           )}
                         </div>
@@ -242,21 +255,6 @@ export default function ProductsPage() {
                           <Link href={"/dashboard/supplier/products/" + p.id}>
                             <button className="p-2 hover:bg-muted rounded-md" title="Edit">
                               <Edit className="h-4 w-4" />
-                            </button>
-                          </Link>
-                          <Link href={"/dashboard/supplier/products/" + p.id + "/variants"}>
-                            <button className="p-2 hover:bg-muted rounded-md" title="Variants">
-                              <Tags className="h-4 w-4" />
-                            </button>
-                          </Link>
-                          <Link href={"/dashboard/supplier/products/" + p.id + "/images"}>
-                            <button className="p-2 hover:bg-muted rounded-md" title="Images">
-                              <Image className="h-4 w-4" />
-                            </button>
-                          </Link>
-                          <Link href={"/dashboard/supplier/products/" + p.id + "/preview"}>
-                            <button className="p-2 hover:bg-muted rounded-md" title="Preview">
-                              <MonitorSmartphone className="h-4 w-4" />
                             </button>
                           </Link>
                           <button 

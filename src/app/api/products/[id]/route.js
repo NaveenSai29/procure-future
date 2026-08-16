@@ -113,6 +113,7 @@ export async function PATCH(request, { params }) {
       description, longDescription, highlights,
       weight, length, width, height, warranty, countryOfOrigin,
       metaTitle, metaDescription, pricing, attributes,
+      isActive, isApproved, rejectionReason,
     } = body;
 
     // Build dimensions string
@@ -124,6 +125,9 @@ export async function PATCH(request, { params }) {
       ...(name !== undefined && { name }),
       ...(categoryId !== undefined && { categoryId }),
       ...(brandId !== undefined && { brandId: brandId || null }),
+      ...(isActive !== undefined && { isActive }),
+      ...(isApproved !== undefined && { isApproved }),
+      ...(rejectionReason !== undefined && { rejectionReason }),
       ...(sku !== undefined && { sku }),
       ...(barcode !== undefined && { barcode }),
       ...(hsnCode !== undefined && { hsnCode }),

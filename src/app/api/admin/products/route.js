@@ -17,10 +17,14 @@ export async function GET(req) {
     
     if (status === "PENDING") {
       where.isApproved = false;
+      where.rejectionReason = null;
     } else if (status === "APPROVED") {
       where.isApproved = true;
     } else if (status === "INACTIVE") {
       where.isActive = false;
+    } else if (status === "REJECTED") {
+      where.isApproved = false;
+      where.rejectionReason = { not: null };
     }
     
     if (supplierId) where.supplierId = supplierId;
@@ -57,16 +61,17 @@ export async function GET(req) {
     ]);
 
     // Stats
-    const [pendingCount, approvedCount, inactiveCount] = await Promise.all([
-      prisma.product.count({ where: { isApproved: false } }),
+    const [pendingCount, approvedCount, inactiveCount, rejectedCount] = await Promise.all([
+      prisma.product.count({ where: { isApproved: false, rejectionReason: null } }),
       prisma.product.count({ where: { isApproved: true, isActive: true } }),
       prisma.product.count({ where: { isActive: false } }),
+      prisma.product.count({ where: { isApproved: false, rejectionReason: { not: null } } }),
     ]);
 
     return successResponse({
       products,
       suppliers,
-      stats: { pending: pendingCount, approved: approvedCount, inactive: inactiveCount, total },
+      stats: { pending: pendingCount, approved: approvedCount, inactive: inactiveCount, rejected: rejectedCount, total },
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
@@ -82,7 +87,7 @@ export async function PATCH(request) {
     if (!session) return errorResponse("Not authenticated", 401);
 
     const body = await request.json();
-    const { productId, productIds, action, isApproved, isActive } = body;
+    const { productId, productIds, action, isApproved, isActive, rejectionReason } = body;
 
     // Bulk action
     if (productIds && Array.isArray(productIds) && action) {
@@ -91,9 +96,11 @@ export async function PATCH(request) {
       if (action === "APPROVE") {
         updateData.isApproved = true;
         updateData.isActive = true;
+        updateData.rejectionReason = null;
       } else if (action === "REJECT") {
         updateData.isApproved = false;
         updateData.isActive = false;
+        updateData.rejectionReason = "Rejected by admin";
       } else if (action === "ACTIVATE") {
         updateData.isActive = true;
       } else if (action === "DEACTIVATE") {
@@ -128,10 +135,14 @@ export async function PATCH(request) {
     const updateData = {};
     if (isApproved !== undefined) {
       updateData.isApproved = isApproved;
-      // When approving, also activate
-      if (isApproved) updateData.isActive = true;
+      // When approving, also activate and clear rejection reason
+      if (isApproved) {
+        updateData.isActive = true;
+        updateData.rejectionReason = null;
+      }
     }
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (rejectionReason !== undefined) updateData.rejectionReason = rejectionReason;
 
     const product = await prisma.product.update({
       where: { id: productId },
@@ -151,6 +162,24 @@ export async function PATCH(request) {
             type: "PRODUCT_APPROVED",
             title: "Product Approved ✅",
             message: `Your product "${product.name}" has been approved and is now live.`,
+          },
+        });
+      }
+    }
+
+    // Notify supplier if rejected
+    if (isApproved === false && rejectionReason) {
+      const supplierStaff = await prisma.supplierStaff.findFirst({
+        where: { supplierId: product.supplierId },
+        select: { userId: true },
+      });
+      if (supplierStaff) {
+        await prisma.notification.create({
+          data: {
+            userId: supplierStaff.userId,
+            type: "PRODUCT_REJECTED",
+            title: "Product Rejected",
+            message: `Your product "${product.name}" was rejected. Reason: ${rejectionReason}`,
           },
         });
       }

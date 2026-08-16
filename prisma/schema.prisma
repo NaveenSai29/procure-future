@@ -585,6 +585,7 @@ model Product {
   isActive         Boolean             @default(false)
   isApproved       Boolean             @default(false)
   isFeatured       Boolean             @default(false)
+  rejectionReason  String?
   metaTitle        String?
   metaDescription  String?
   createdAt        DateTime            @default(now())
