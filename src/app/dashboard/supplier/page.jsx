@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Store, Package, ShoppingCart, Warehouse, Plus, ArrowLeft, Shield, AlertTriangle, CheckCircle, Upload, ArrowRight, BadgeCheck, Clock, XCircle, Mail, Ban } from "lucide-react";
+import { Store, Package, ShoppingCart, Warehouse, Plus, ArrowLeft, Shield, AlertTriangle, CheckCircle, Upload, ArrowRight, BadgeCheck, Clock, XCircle, Mail, Ban, TrendingUp, Users, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SupplierDashboard() {
@@ -13,10 +13,12 @@ export default function SupplierDashboard() {
   const [kycStatus, setKycStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [resending, setResending] = useState(false);
+  const [statsData, setStatsData] = useState({ products: 0, orders: 0, warehouses: 0, revenue: 0 });
 
   useEffect(() => {
     fetchSupplier();
     fetchKYCStatus();
+    fetchStats();
   }, []);
 
   const fetchSupplier = async () => {
@@ -44,6 +46,28 @@ export default function SupplierDashboard() {
     finally { setLoading(false); }
   };
 
+  const fetchStats = async () => {
+    try {
+      const [productsRes, ordersRes, supplierRes, statsRes] = await Promise.all([
+        fetch("/api/supplier/products?limit=1"),
+        fetch("/api/orders?limit=1"),
+        fetch("/api/supplier/me"),
+        fetch("/api/supplier/stats"),
+      ]);
+      const productsData = await productsRes.json();
+      const ordersData = await ordersRes.json();
+      const supplierData = await supplierRes.json();
+      const statsDataRes = await statsRes.json();
+
+      setStatsData({
+        products: productsData.data?.total || productsData.data?.length || 0,
+        orders: ordersData.data?.total || ordersData.data?.orders?.length || 0,
+        warehouses: supplierData.data?.warehouses?.length || 0,
+        revenue: statsDataRes.data?.totalRevenue || 0,
+      });
+    } catch {}
+  };
+
   const handleResendVerification = async () => {
     setResending(true);
     try {
@@ -58,7 +82,11 @@ export default function SupplierDashboard() {
     }
   };
 
-  if (loading) return <div className="p-8">Loading...</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+    </div>
+  );
   if (!supplier) return null;
 
   const isVerified = supplier.isVerified;
@@ -68,23 +96,23 @@ export default function SupplierDashboard() {
   const hasDocs = (kycStatus?.documents?.length || 0) > 0;
 
   const stats = [
-    { label: "Products", value: "0", icon: Package, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "Orders", value: "0", icon: ShoppingCart, color: "text-green-600", bg: "bg-green-50" },
-    { label: "Warehouses", value: "0", icon: Warehouse, color: "text-purple-600", bg: "bg-purple-50" },
-    { label: "Revenue", value: "₹0", icon: Store, color: "text-orange-600", bg: "bg-orange-50" },
+    { label: "Products", value: String(statsData.products), icon: Package, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
+    { label: "Orders", value: String(statsData.orders), icon: ShoppingCart, color: "text-green-600", bg: "bg-green-50", border: "border-green-100" },
+    { label: "Warehouses", value: String(statsData.warehouses), icon: Warehouse, color: "text-purple-600", bg: "bg-purple-50", border: "border-purple-100" },
+    { label: "Revenue", value: `₹${(statsData.revenue || 0).toLocaleString('en-IN')}`, icon: TrendingUp, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-100" },
   ];
 
-  // Features that are restricted without KYC
-  const restrictedFeatures = [
-    { icon: Plus, label: "Add Products", blocked: true },
-    { icon: Store, label: "Go Online", blocked: true },
-    { icon: ShoppingCart, label: "Process Orders", blocked: true },
-    { icon: Upload, label: "Bulk Import", blocked: true },
+  const quickActions = [
+    { label: "Add Product", icon: Plus, href: "/dashboard/supplier/products/new", color: "bg-blue-600 hover:bg-blue-700" },
+    { label: "View Orders", icon: ShoppingCart, href: "/dashboard/supplier/orders", color: "bg-green-600 hover:bg-green-700" },
+    { label: "Manage Products", icon: Package, href: "/dashboard/supplier/products", color: "bg-purple-600 hover:bg-purple-700" },
+    { label: "Reports", icon: FileText, href: "/dashboard/supplier/reports", color: "bg-orange-600 hover:bg-orange-700" },
   ];
 
   return (
-    <div className="space-y-6">
-      <Link href="/dashboard" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Back Link */}
+      <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800 transition-colors">
         <ArrowLeft className="h-4 w-4" />
         Back to Dashboard
       </Link>
@@ -94,13 +122,13 @@ export default function SupplierDashboard() {
         <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center gap-3">
           <Mail className="h-6 w-6 text-blue-600 flex-shrink-0" />
           <div className="flex-1">
-            <p className="font-semibold text-blue-800">Verify your email address</p>
-            <p className="text-sm text-blue-700">Check your inbox for the verification link. Didn&apos;t receive it?</p>
+            <p className="font-semibold text-blue-800 text-sm">Verify your email address</p>
+            <p className="text-xs text-blue-700 mt-0.5">Check your inbox for the verification link.</p>
           </div>
           <button
             onClick={handleResendVerification}
             disabled={resending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 whitespace-nowrap"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition disabled:opacity-50 whitespace-nowrap"
           >
             {resending ? 'Sending...' : 'Resend Link'}
           </button>
@@ -112,13 +140,13 @@ export default function SupplierDashboard() {
         <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3">
           <CheckCircle className="h-6 w-6 text-green-600 flex-shrink-0" />
           <div>
-            <p className="font-semibold text-green-800">Email Verified ✅</p>
-            <p className="text-sm text-green-700">Your email address has been verified.</p>
+            <p className="font-semibold text-green-800 text-sm">Email Verified ✅</p>
+            <p className="text-xs text-green-700 mt-0.5">Your email address has been verified.</p>
           </div>
         </div>
       )}
 
-      {/* KYC RESTRICTION BANNER - Shows what's blocked */}
+      {/* KYC RESTRICTION BANNER */}
       {!isVerified && (
         <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-5">
           <div className="flex items-start gap-4">
@@ -131,8 +159,13 @@ export default function SupplierDashboard() {
                 Your account is in <strong>view-only mode</strong>. Complete KYC verification to unlock all features.
               </p>
               <div className="grid grid-cols-2 gap-2 mt-3">
-                {restrictedFeatures.map(({ icon: Icon, label }) => (
-                  <div key={label} className="flex items-center gap-2 text-sm text-red-600 bg-red-100 rounded-lg px-3 py-2">
+                {[
+                  { icon: Plus, label: "Add Products" },
+                  { icon: Store, label: "Go Online" },
+                  { icon: ShoppingCart, label: "Process Orders" },
+                  { icon: Upload, label: "Bulk Import" },
+                ].map(({ icon: Icon, label }) => (
+                  <div key={label} className="flex items-center gap-2 text-xs text-red-600 bg-red-100 rounded-lg px-3 py-2">
                     <Ban className="h-4 w-4 flex-shrink-0" />
                     <span>{label}</span>
                   </div>
@@ -143,7 +176,7 @@ export default function SupplierDashboard() {
         </div>
       )}
 
-      {/* KYC VERIFICATION BANNER - Documents upload prompt */}
+      {/* KYC UPLOAD BANNER */}
       {!isVerified && (
         <div className={`rounded-2xl p-6 border-2 ${hasDocs ? 'bg-yellow-50 border-yellow-400' : 'bg-amber-50 border-amber-400'}`}>
           <div className="flex items-start gap-4">
@@ -155,13 +188,13 @@ export default function SupplierDashboard() {
               )}
             </div>
             <div className="flex-1">
-              <h2 className="text-xl font-bold text-gray-900">
+              <h2 className="text-lg font-bold text-gray-900">
                 {hasDocs ? 'Documents Under Review' : 'Upload KYC Documents to Unlock Features'}
               </h2>
-              <p className="text-sm text-gray-700 mt-2">
+              <p className="text-sm text-gray-700 mt-1">
                 {hasDocs 
-                  ? 'Your documents are being reviewed by our team. This usually takes 24-48 hours. You\'ll be notified once verified.'
-                  : 'Upload your business documents (PAN, GST, Bank Proof) to get verified and unlock all selling features.'
+                  ? 'Your documents are being reviewed. This usually takes 24-48 hours.'
+                  : 'Upload your business documents (PAN, GST, Bank Proof) to get verified.'
                 }
               </p>
               {kycProgress && !kycProgress.isComplete && (
@@ -172,23 +205,15 @@ export default function SupplierDashboard() {
                       style={{ width: `${kycProgress.completionPercentage || 0}%` }}
                     />
                   </div>
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-xs font-medium text-gray-700">
                     {kycProgress.uploaded}/{kycProgress.total} uploaded
                   </span>
                 </div>
               )}
-              {!hasDocs && (
-                <Link href="/dashboard/supplier/settings?tab=kyc" className="mt-4 inline-flex items-center gap-2 px-6 py-3 bg-amber-600 text-white rounded-xl font-semibold hover:bg-amber-700 transition shadow-lg shadow-amber-200">
-                  <Upload className="h-5 w-5" />
-                  Upload KYC Documents
-                  <ArrowRight className="h-5 w-5" />
-                </Link>
-              )}
-              {hasDocs && (
-                <Link href="/dashboard/supplier/settings?tab=kyc" className="mt-4 inline-flex items-center gap-2 text-sm text-yellow-700 font-medium hover:text-yellow-800">
-                  View submitted documents →
-                </Link>
-              )}
+              <Link href="/dashboard/supplier/settings?tab=kyc" className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700 transition shadow-md">
+                {hasDocs ? <ArrowRight className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+                {hasDocs ? 'View Documents' : 'Upload KYC Documents'}
+              </Link>
             </div>
           </div>
         </div>
@@ -199,18 +224,14 @@ export default function SupplierDashboard() {
         <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-center gap-3">
           <CheckCircle className="h-6 w-6 text-green-600" />
           <div>
-            <p className="font-semibold text-green-800">Your store is VERIFIED & LIVE!</p>
-            <p className="text-sm text-green-700">All features unlocked. Buyers can see and order your products.</p>
+            <p className="font-semibold text-green-800 text-sm">Your store is VERIFIED & LIVE!</p>
+            <p className="text-xs text-green-700 mt-0.5">All features unlocked. Buyers can see and order your products.</p>
           </div>
         </div>
       )}
 
-      {/* GST Verification Status */}
-      <div className={`rounded-2xl p-5 border-2 ${
-        isGstVerified 
-          ? 'bg-emerald-50 border-emerald-300' 
-          : 'bg-amber-50 border-amber-300'
-      }`}>
+      {/* GST Status */}
+      <div className={`rounded-2xl p-5 border-2 ${isGstVerified ? 'bg-emerald-50 border-emerald-300' : 'bg-amber-50 border-amber-300'}`}>
         <div className="flex items-start gap-4">
           <div className={`p-3 rounded-xl ${isGstVerified ? 'bg-emerald-200' : 'bg-amber-200'}`}>
             {isGstVerified ? (
@@ -220,42 +241,30 @@ export default function SupplierDashboard() {
             )}
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-gray-900">
+            <h3 className="text-base font-bold text-gray-900">
               {isGstVerified ? 'GST Verified' : 'GST Verification Pending'}
             </h3>
-            <p className="text-sm text-gray-700 mt-1">
+            <p className="text-xs text-gray-700 mt-1">
               {isGstVerified 
-                ? `Your GSTIN ${supplier.gstin} has been verified. Business name on GST portal: ${supplier.gstBusinessName || 'N/A'}.`
-                : `Your GSTIN ${supplier.gstin} is pending verification by the admin team. This is required for tax compliance.`
+                ? `Your GSTIN ${supplier.gstin} has been verified.`
+                : `Your GSTIN ${supplier.gstin} is pending verification by the admin team.`
               }
             </p>
-            {isGstVerified && supplier.gstVerificationDate && (
-              <p className="text-xs text-emerald-600 mt-2 font-medium">
-                Verified on: {new Date(supplier.gstVerificationDate).toLocaleDateString('en-IN', { 
-                  day: 'numeric', month: 'long', year: 'numeric' 
-                })}
-              </p>
-            )}
-            {!isGstVerified && (
-              <p className="text-xs text-amber-600 mt-2 font-medium">
-                The admin team will verify your GSTIN soon. No action needed from your side.
-              </p>
-            )}
           </div>
         </div>
       </div>
 
       {/* Store Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold">{supplier.businessName}</h1>
-          <p className="text-muted-foreground">{supplier.businessType} • {supplier.gstin}</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{supplier.businessName}</h1>
+          <p className="text-sm text-gray-500 mt-1">{supplier.businessType} • {supplier.gstin}</p>
         </div>
         <Link href={isVerified ? "/dashboard/supplier/products/new" : "#"}>
           <Button 
             disabled={!isVerified} 
             title={!isVerified ? "Complete KYC verification to add products" : "Add a new product"}
-            className={!isVerified ? "opacity-50 cursor-not-allowed" : ""}
+            className={!isVerified ? "opacity-50 cursor-not-allowed text-sm" : "text-sm"}
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Product
@@ -263,14 +272,14 @@ export default function SupplierDashboard() {
         </Link>
       </div>
 
-      {/* Stats */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-background rounded-xl border p-6">
+        {stats.map(({ label, value, icon: Icon, color, bg, border }) => (
+          <div key={label} className={`bg-white rounded-xl border ${border} p-5 shadow-sm hover:shadow-md transition-shadow`}>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">{label}</p>
-                <p className="text-2xl font-bold mt-1">{value}</p>
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
               </div>
               <div className={`${bg} p-3 rounded-lg`}>
                 <Icon className={`h-5 w-5 ${color}`} />
@@ -280,51 +289,47 @@ export default function SupplierDashboard() {
         ))}
       </div>
 
-      {/* Info */}
-      <div className="bg-background rounded-xl border p-6">
-        <h2 className="text-lg font-semibold mb-4">Supplier Information</h2>
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <span className="text-muted-foreground">KYC Status: </span>
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {quickActions.map(({ label, icon: Icon, href, color }) => (
+          <Link key={label} href={href} className={`${color} text-white rounded-xl p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-all text-sm font-medium`}>
+            <Icon className="h-5 w-5" />
+            {label}
+          </Link>
+        ))}
+      </div>
+
+      {/* Supplier Info */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-gray-900 mb-4">Supplier Information</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <span className="text-gray-500">KYC Status</span>
             <span className={`font-medium ${isVerified ? 'text-green-600' : 'text-yellow-600'}`}>
-              {isVerified ? "Verified" : "Pending Verification"}
+              {isVerified ? "✓ Verified" : "Pending"}
             </span>
           </div>
-          <div>
-            <span className="text-muted-foreground">GST Status: </span>
-            <span className={`font-medium flex items-center gap-1 ${isGstVerified ? 'text-emerald-600' : 'text-amber-600'}`}>
-              {isGstVerified ? (
-                <><BadgeCheck className="h-4 w-4" /> Verified</>
-              ) : (
-                <><Clock className="h-4 w-4" /> Pending</>
-              )}
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <span className="text-gray-500">GST Status</span>
+            <span className={`font-medium ${isGstVerified ? 'text-emerald-600' : 'text-amber-600'}`}>
+              {isGstVerified ? "✓ Verified" : "Pending"}
             </span>
           </div>
-          <div>
-            <span className="text-muted-foreground">Email Verification: </span>
-            <span className={`font-medium flex items-center gap-1 ${isEmailVerified ? 'text-green-600' : 'text-yellow-600'}`}>
-              {isEmailVerified ? (
-                <><CheckCircle className="h-4 w-4" /> Verified</>
-              ) : (
-                <><Clock className="h-4 w-4" /> Not Verified</>
-              )}
-            </span>
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <span className="text-gray-500">Email</span>
+            <span className="font-medium text-gray-900">{supplier.email}</span>
           </div>
-          <div>
-            <span className="text-muted-foreground">Email: </span>
-            <span className="font-medium">{supplier.email}</span>
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <span className="text-gray-500">Mobile</span>
+            <span className="font-medium text-gray-900">{supplier.mobile}</span>
           </div>
-          <div>
-            <span className="text-muted-foreground">Mobile: </span>
-            <span className="font-medium">{supplier.mobile}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">Joined: </span>
-            <span className="font-medium">{new Date(supplier.createdAt).toLocaleDateString()}</span>
+          <div className="flex items-center justify-between py-2">
+            <span className="text-gray-500">Joined</span>
+            <span className="font-medium text-gray-900">{new Date(supplier.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
           </div>
           {supplier.gstBusinessName && (
-            <div>
-              <span className="text-muted-foreground">GST Business Name: </span>
+            <div className="flex items-center justify-between py-2">
+              <span className="text-gray-500">GST Business Name</span>
               <span className="font-medium text-emerald-700">{supplier.gstBusinessName}</span>
             </div>
           )}
