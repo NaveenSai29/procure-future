@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ArrowLeft, Package, Plus, X, Save, ChevronDown, ChevronUp, Building, MonitorSmartphone, Tags, Upload, AlertTriangle, Image as ImageIcon, Loader2, CheckCircle, Coins } from "lucide-react";
+import { ArrowLeft, Package, Plus, X, Save, ChevronDown, ChevronUp, Building, MonitorSmartphone, Tags, Upload, AlertTriangle, Image as ImageIcon, Loader2, CheckCircle, Coins, Sparkles } from "lucide-react";
 import AIGenerateButton from "@/components/products/AIGenerateButton";
 import SEOSection from "@/components/products/SEOSection";
 import HsnSearchInput from "@/components/products/HsnSearchInput";
@@ -57,7 +57,7 @@ export default function EditProductPage() {
   const [saving, setSaving] = useState(false);
   const [submittingForApproval, setSubmittingForApproval] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
-  const [submitStage, setSubmitStage] = useState('idle'); // idle, saving, generating, done
+  const [submitStage, setSubmitStage] = useState('idle'); // idle, saving, done
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -94,9 +94,6 @@ export default function EditProductPage() {
   // Images state
   const [images, setImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
-
-  // Auto-generate image toggle
-  const [autoGenerateImage, setAutoGenerateImage] = useState(true);
 
   // AI Credits state
   const [aiCredits, setAiCredits] = useState(null);
@@ -204,8 +201,7 @@ export default function EditProductPage() {
       
       // Load images
       if (p.images && p.images.length > 0) {
-        setImages(p.images.map(img => ({ url: img.url, id: img.id })));
-        setAutoGenerateImage(false); // Already has images
+        setImages(p.images.map(img => ({ url: img.url, id: img.id, source: 'UPLOADED' })));
       }
 
       // Load variants
@@ -255,7 +251,7 @@ export default function EditProductPage() {
         .then(r => r.json())
         .then(data => {
           if (data.success) {
-            setImages(prev => [...prev, { url: data.data.image.url, id: data.data.image.id }]);
+            setImages(prev => [...prev, { url: data.data.image.url, id: data.data.image.id, source: 'UPLOADED' }]);
           }
         })
         .catch(() => {})
@@ -264,14 +260,23 @@ export default function EditProductPage() {
   };
 
   const removeImage = async (index, imageId) => {
+    const imgToRemove = images[index];
     setImages(prev => prev.filter((_, i) => i !== index));
-    if (imageId) {
-      try { await fetch(`/api/products/images/${imageId}`, { method: 'DELETE' }); } catch {}
+    
+    // Delete from database if has ID
+    const deleteId = imageId || imgToRemove?.id;
+    if (deleteId) {
+      try { 
+        const res = await fetch(`/api/products/images/${deleteId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          toast.error('Failed to delete image from server');
+        }
+      } catch {}
     }
   };
 
-  // Auto-generate image for product
-  const autoGenerateForProduct = async () => {
+  // Generate AI image NOW (deduct credit immediately)
+  const handleGenerateAIImage = async () => {
     setGeneratingImage(true);
     try {
       const res = await fetch('/api/products/images/generate', {
@@ -284,15 +289,22 @@ export default function EditProductPage() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success('AI image generated successfully!');
-        return true;
+        toast.success('AI image generated! Credit deducted.');
+        // Add generated image to gallery with ID
+        setImages(prev => [...prev, { 
+          url: data.data.url, 
+          id: data.data.imageId || null, 
+          source: 'AI_GENERATED' 
+        }]);
+        // Refresh credits
+        fetch("/api/supplier/ai-credits").then(r => r.json()).then(d => { 
+          if (d.success) setAiCredits(d.data); 
+        }).catch(() => {});
       } else {
-        console.error('Image generation failed:', data.error);
-        return false;
+        toast.error(data.error || 'Failed to generate image');
       }
     } catch (error) {
-      console.error('Image generation error:', error);
-      return false;
+      toast.error('Failed to generate image');
     } finally {
       setGeneratingImage(false);
     }
@@ -405,36 +417,6 @@ export default function EditProductPage() {
           const brandData = await brandRes.json();
           if (brandData.id) finalBrandId = brandData.id;
         } catch (err) {}
-      }
-
-      // Auto-generate image if no images and toggle is on
-      if (images.length === 0 && autoGenerateImage) {
-        setSubmitStage('generating');
-        setGeneratingImage(true);
-        
-        try {
-          const genRes = await fetch('/api/products/images/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              productId: id,
-              action: 'auto-generate-and-attach',
-            }),
-          });
-          const genData = await genRes.json();
-          
-          if (genData.success) {
-            toast.success('AI image generated!');
-          } else {
-            toast.warning('No image generated. Submitting anyway...');
-          }
-        } catch (genError) {
-          console.error('Image generation error:', genError);
-          toast.warning('No image generated. Submitting anyway...');
-        }
-        
-        setGeneratingImage(false);
-        setSubmitStage('saving');
       }
 
       const res = await fetch(`/api/products/${id}`, {
@@ -566,7 +548,7 @@ export default function EditProductPage() {
           ) : !productStatus.isActive && !productStatus.isApproved && images.length === 0 ? (
             <div className="bg-gray-50 border border-gray-300 rounded-xl p-4">
               <p className="text-sm font-bold text-gray-700">📝 DRAFT</p>
-              <p className="text-xs text-gray-600 mt-1">Submit with AI-generated image or upload your own.</p>
+              <p className="text-xs text-gray-600 mt-1">Generate AI image or upload your own.</p>
             </div>
           ) : productStatus.isApproved && productStatus.isActive ? (
             <div className="bg-green-50 border border-green-300 rounded-xl p-4">
@@ -629,59 +611,67 @@ export default function EditProductPage() {
 
           {/* Product Images */}
           <div className="bg-background rounded-xl border p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">Product Images <span className="text-xs text-gray-400 font-normal">(Optional - AI will auto-generate if empty)</span></h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Product Images</h3>
             
-            {/* Auto-Generate Toggle */}
-            {images.length === 0 && (
-              <div className="mb-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoGenerateImage}
-                    onChange={(e) => setAutoGenerateImage(e.target.checked)}
-                    className="h-4 w-4 text-purple-600 rounded border-purple-300"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-purple-800 flex items-center gap-1.5">
-                      <ImageIcon className="h-4 w-4" />
-                      Auto-generate AI image
-                    </p>
-                    <p className="text-xs text-purple-600 mt-0.5">
-                      AI creates image using product name, description, weight, and category
-                    </p>
-                    {aiCredits !== null && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <Coins className="h-3.5 w-3.5 text-purple-500" />
-                        <span className="text-xs text-purple-700 font-medium">
-                          {aiCredits.creditsRemaining} credits remaining
-                        </span>
-                        <span className="text-xs text-purple-400">•</span>
-                        <span className="text-xs text-purple-600">
-                          Costs {aiCredits.creditCostPerGeneration} credit(s)
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </label>
+            {/* Credits Info */}
+            {aiCredits !== null && (
+              <div className="mb-3 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center gap-2">
+                <Coins className="h-4 w-4 text-purple-500 shrink-0" />
+                <span className="text-xs text-purple-700 font-medium">
+                  {aiCredits.creditsRemaining} credits remaining
+                </span>
+                <span className="text-xs text-purple-400">•</span>
+                <span className="text-xs text-purple-600">
+                  AI image costs {aiCredits.creditCostPerGeneration} credit(s)
+                </span>
               </div>
             )}
             
-            <div className="flex flex-wrap gap-3">
+            {/* Image Gallery */}
+            <div className="flex flex-wrap gap-3 mb-3">
               {images.map((img, i) => (
                 <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200">
                   <img src={img.url} alt="" className="w-full h-full object-cover" />
+                  {img.source === 'AI_GENERATED' && (
+                    <span className="absolute bottom-0 left-0 right-0 text-[8px] bg-purple-500 text-white text-center py-0.5">
+                      AI
+                    </span>
+                  )}
                   <button type="button" onClick={() => removeImage(i, img.id)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5">
                     <X className="h-3 w-3" />
                   </button>
                 </div>
               ))}
+              
+              {/* Upload Button */}
               <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition">
                 <Upload className="h-5 w-5 text-gray-400" />
                 <span className="text-[10px] text-gray-400 mt-1">{uploadingImages ? 'Uploading...' : 'Upload'}</span>
                 <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageSelect} />
               </label>
             </div>
-            <p className="text-xs text-gray-400 mt-2">Max 5MB each. JPG, PNG, or WebP. Upload your own or let AI generate.</p>
+
+            {/* Generate AI Button */}
+            <button
+              type="button"
+              onClick={handleGenerateAIImage}
+              disabled={generatingImage}
+              className="w-full py-3 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {generatingImage ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating AI Image...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Generate AI Image (1 credit)
+                </>
+              )}
+            </button>
+            
+            <p className="text-xs text-gray-400 mt-2">Upload your own photos FREE or generate AI images using credits.</p>
           </div>
 
           {/* Weight & Dimensions */}
@@ -807,19 +797,6 @@ export default function EditProductPage() {
             )}
           </div>
 
-          {/* Generating Status Banner */}
-          {submitStage === 'generating' && (
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-center gap-3">
-              <Loader2 className="h-5 w-5 text-purple-600 animate-spin shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-purple-800">Generating AI image...</p>
-                <p className="text-xs text-purple-600 mt-0.5">
-                  Creating "{name}" using {selectedCategory?.name || 'category'} category, {weight}kg weight{description ? ', and description' : ''}
-                </p>
-              </div>
-            </div>
-          )}
-
           <div className="flex gap-3">
             <Button 
               type="button" 
@@ -840,22 +817,13 @@ export default function EditProductPage() {
               {submitStage === 'saving' ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving Product...
-                </>
-              ) : submitStage === 'generating' ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Generating AI Image...
+                  Saving...
                 </>
               ) : submitStage === 'done' ? (
                 <>
                   <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
                   Submitted!
                 </>
-              ) : images.length === 0 && autoGenerateImage ? (
-                "Submit with AI Image"
-              ) : images.length === 0 && !autoGenerateImage ? (
-                "Submit without Image"
               ) : (
                 "Submit for Approval"
               )}

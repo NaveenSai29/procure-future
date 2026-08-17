@@ -5,8 +5,10 @@ import {
   Package, CheckCircle, XCircle, Search,
   Ban, AlertCircle, Loader2, Store, Boxes,
   Image as ImageIcon, ArrowUpDown, Trash2, Eye,
-  Download, AlertTriangle, ChevronDown, ChevronUp
+  Download, AlertTriangle, ChevronDown, ChevronUp,
+  MonitorSmartphone
 } from "lucide-react";
+import ProductPreview from "@/components/products/ProductPreview";
 import { toast } from "sonner";
 
 // Custom Confirm Popup
@@ -66,6 +68,9 @@ export default function AdminProductsPage() {
   
   // Detail modal state
   const [detailProduct, setDetailProduct] = useState(null);
+  
+  // Preview modal state
+  const [previewProduct, setPreviewProduct] = useState(null);
   
   // Confirm popup state
   const [confirmPopup, setConfirmPopup] = useState(null);
@@ -488,7 +493,7 @@ export default function AdminProductsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-gray-50 text-sm text-gray-600">
-                  <th className="text-left p-4 w-10">
+                  <th className="text-left p-3 w-10 shrink-0">
                     <input
                       type="checkbox"
                       checked={selectedIds.length === products.length && products.length > 0}
@@ -496,13 +501,13 @@ export default function AdminProductsPage() {
                       className="rounded"
                     />
                   </th>
-                  <th className="text-left p-4">Product</th>
-                  <th className="text-left p-4">Supplier</th>
-                  <th className="text-left p-4">Category</th>
-                  <th className="text-left p-4">Price</th>
-                  <th className="text-left p-4">Stock</th>
-                  <th className="text-left p-4">Status</th>
-                  <th className="text-left p-4">Actions</th>
+                  <th className="text-left p-3 min-w-[200px]">Product</th>
+                  <th className="text-left p-3 min-w-[120px]">Supplier</th>
+                  <th className="text-left p-3 min-w-[100px]">Category</th>
+                  <th className="text-left p-3 min-w-[80px]">Price</th>
+                  <th className="text-left p-3 min-w-[80px]">Stock</th>
+                  <th className="text-left p-3 min-w-[120px]">Status</th>
+                  <th className="text-left p-3 min-w-[180px]">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -511,9 +516,13 @@ export default function AdminProductsPage() {
                   const warehouseName = p.inventory?.[0]?.warehouse?.name;
                   const lowStock = isLowStock(p);
                   const noImage = p._count?.images === 0;
+                  // Check if product was previously approved and now re-submitted
+                  const isResubmitted = p.updatedAt && p.createdAt && 
+                    new Date(p.updatedAt).getTime() - new Date(p.createdAt).getTime() > 60000 && 
+                    !p.isApproved && !p.rejectionReason;
                   return (
                     <tr key={p.id} className={`border-b last:border-0 hover:bg-gray-50 transition ${!p.isApproved && !p.rejectionReason ? "bg-yellow-50/30" : ""}`}>
-                      <td className="p-4">
+                      <td className="p-3 shrink-0">
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(p.id)}
@@ -521,7 +530,7 @@ export default function AdminProductsPage() {
                           className="rounded"
                         />
                       </td>
-                      <td className="p-4">
+                      <td className="p-3">
                         <div className="flex items-center gap-3">
                           {/* Image Thumbnail */}
                           <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
@@ -539,8 +548,13 @@ export default function AdminProductsPage() {
                               {p.name}
                             </button>
                             <p className="text-xs text-gray-400 mt-0.5">
-                              SKU: {p.sku || "N/A"} • {p._count?.images || 0} images • {p._count?.variants || 0} variants
+                              SKU: {p.sku || "N/A"} • {p._count?.images || 0} img • {p._count?.variants || 0} var
                             </p>
+                            {isResubmitted && (
+                              <p className="text-xs text-blue-500 mt-0.5">
+                                Updated: {new Date(p.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            )}
                             {p.rejectionReason && (
                               <p className="text-xs text-red-600 mt-1">❌ {p.rejectionReason}</p>
                             )}
@@ -552,7 +566,7 @@ export default function AdminProductsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-4">
+                      <td className="p-3">
                         <div className="flex items-center gap-2">
                           <Store className="h-4 w-4 text-gray-400 shrink-0" />
                           <div>
@@ -563,14 +577,14 @@ export default function AdminProductsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-4 text-sm text-gray-600">{p.category?.name || "N/A"}</td>
-                      <td className="p-4">
+                      <td className="p-3 text-sm text-gray-600">{p.category?.name || "N/A"}</td>
+                      <td className="p-3">
                         <p className="font-medium">₹{p.pricing?.[0]?.sellingPrice || "N/A"}</p>
                         {p.pricing?.[0]?.mrp > p.pricing?.[0]?.sellingPrice && (
                           <p className="text-xs text-gray-400 line-through">₹{p.pricing?.[0]?.mrp}</p>
                         )}
                       </td>
-                      <td className="p-4">
+                      <td className="p-3">
                         <div className="flex items-center gap-1.5">
                           <Boxes className="h-4 w-4 text-gray-400 shrink-0" />
                           <div>
@@ -588,7 +602,7 @@ export default function AdminProductsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-4">
+                      <td className="p-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {p.isApproved ? (
                             <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1">
@@ -608,11 +622,25 @@ export default function AdminProductsPage() {
                               Inactive
                             </span>
                           )}
+                          {isResubmitted && (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                              🔄 Updated
+                            </span>
+                          )}
                         </div>
                       </td>
-                      <td className="p-4">
+                      <td className="p-3">
                         <div className="flex gap-1.5 flex-wrap">
-                          {/* View */}
+                          {/* Preview (Buyer View) */}
+                          <button
+                            onClick={() => setPreviewProduct(p)}
+                            className="p-2 bg-purple-100 text-purple-600 rounded-lg text-xs font-medium hover:bg-purple-200 transition"
+                            title="Preview (Buyer View)"
+                          >
+                            <MonitorSmartphone className="h-3.5 w-3.5" />
+                          </button>
+                          
+                          {/* View Details */}
                           <button
                             onClick={() => setDetailProduct(p)}
                             className="p-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 transition"
@@ -723,6 +751,41 @@ export default function AdminProductsPage() {
                 {rejectLoading ? "Rejecting..." : "Reject Product"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Preview Modal (Buyer View) */}
+      {previewProduct && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setPreviewProduct(null)}>
+          <div className="max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end mb-2">
+              <button onClick={() => setPreviewProduct(null)} className="p-2 bg-white rounded-full shadow-lg">
+                <XCircle className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <ProductPreview 
+              product={{
+                name: previewProduct.name,
+                brand: previewProduct.brand?.name || '',
+                description: previewProduct.description || '',
+                highlights: previewProduct.highlights || '',
+                images: previewProduct.images || [],
+                pricing: previewProduct.pricing || [],
+                stockQty: previewProduct.inventory?.reduce((s, i) => s + (i.availableQty || 0), 0) || 0,
+                variants: previewProduct.variants || [],
+                weight: previewProduct.weight || 0,
+                unit: previewProduct.unit || 'PCS',
+                hsnCode: previewProduct.hsnCode || '',
+                sku: previewProduct.sku || '',
+                barcode: previewProduct.barcode || '',
+                countryOfOrigin: previewProduct.countryOfOrigin || '',
+                warranty: previewProduct.warranty || '',
+              }}
+              mode="detail"
+              supplierName={previewProduct.supplier?.businessName || 'Supplier'}
+              isVerified={previewProduct.supplier?.isVerified || false}
+            />
           </div>
         </div>
       )}

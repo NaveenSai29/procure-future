@@ -69,6 +69,7 @@ export class ImageGeneratorService {
         supplierId,
         productId,
         status: 'SUCCESS',
+        action: 'GENERATE',
       },
     });
     
@@ -220,16 +221,21 @@ export class ImageGeneratorService {
     try {
       const prompt = this.buildPrompt(productName, category, description, weight, unit, brand);
       
-      // Pollinations.ai - free, no API key needed
-      // Add seed for consistency
-      const seed = Math.floor(Math.random() * 1000);
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=800&height=800&nologo=true&seed=${seed}`;
+      // Enhanced prompt with negative instructions for better quality
+      const enhancedPrompt = `${prompt}, ultra sharp, crisp details, realistic product, professional quality, 8k resolution`;
+      
+      // Negative prompt to avoid common AI issues
+      const negativePrompt = 'blurry, distorted, cartoon, illustration, sketch, low quality, pixelated, grainy, deformed, ugly, bad proportions, extra fingers, cropped, out of frame';
+      
+      // Pollinations.ai - with quality parameters
+      const seed = Math.floor(Math.random() * 10000);
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=1024&height=1024&nologo=true&seed=${seed}&negative_prompt=${encodeURIComponent(negativePrompt)}&model=flux`;
       
       return {
         success: true,
         imageUrl,
         source: 'AI_GENERATED',
-        prompt,
+        prompt: enhancedPrompt,
       };
     } catch (error) {
       console.error('AI generation error:', error);
@@ -251,10 +257,13 @@ export class ImageGeneratorService {
       const anglePrompt = `${basePrompt}, angle ${i + 1}, view ${i + 1}`;
       const seed = Math.floor(Math.random() * 10000);
       
+      const enhancedAnglePrompt = `${anglePrompt}, ultra sharp, crisp details, realistic product, professional quality, 8k resolution`;
+      const negativePrompt = 'blurry, distorted, cartoon, illustration, sketch, low quality, pixelated, grainy, deformed, ugly, bad proportions, extra fingers, cropped, out of frame';
+      
       variations.push({
-        url: `https://image.pollinations.ai/prompt/${encodeURIComponent(anglePrompt)}?width=800&height=800&nologo=true&seed=${seed}`,
+        url: `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedAnglePrompt)}?width=1024&height=1024&nologo=true&seed=${seed}&negative_prompt=${encodeURIComponent(negativePrompt)}&model=flux`,
         source: 'AI_GENERATED',
-        prompt: anglePrompt,
+        prompt: enhancedAnglePrompt,
       });
     }
     

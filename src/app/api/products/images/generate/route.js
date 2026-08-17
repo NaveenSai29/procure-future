@@ -225,9 +225,21 @@ export async function POST(request) {
           }, { status: 500 });
         }
 
+        // Fetch the created image to get its ID
+        const createdImage = await prisma.productImage.findFirst({
+          where: { 
+            productId,
+            url: result.url,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
         return NextResponse.json({
           success: true,
-          data: result,
+          data: {
+            ...result,
+            imageId: createdImage?.id || null,
+          },
         });
       }
 

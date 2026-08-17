@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ArrowLeft, Package, Plus, X, ChevronDown, ChevronUp, Building, MonitorSmartphone, Tags, Upload, AlertTriangle, Image as ImageIcon, Loader2, CheckCircle, Coins } from "lucide-react";
+import { ArrowLeft, Package, Plus, X, ChevronDown, ChevronUp, Building, MonitorSmartphone, Tags, Upload, AlertTriangle, Image as ImageIcon, Loader2, CheckCircle, Coins, Sparkles } from "lucide-react";
 import AIGenerateButton from "@/components/products/AIGenerateButton";
 import SEOSection from "@/components/products/SEOSection";
 import HsnSearchInput from "@/components/products/HsnSearchInput";
@@ -53,7 +53,7 @@ export default function NewProductPage() {
   const [loading, setLoading] = useState(false);
   const [submittingForApproval, setSubmittingForApproval] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
-  const [submitStage, setSubmitStage] = useState('idle'); // idle, saving, generating, done
+  const [submitStage, setSubmitStage] = useState('idle'); // idle, saving, done
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -82,12 +82,10 @@ export default function NewProductPage() {
   const [warehouseId, setWarehouseId] = useState("");
   const [stockQty, setStockQty] = useState("");
 
-  // Images state (uploaded after product creation)
+  // Images state
   const [images, setImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
-
-  // Auto-generate image toggle
-  const [autoGenerateImage, setAutoGenerateImage] = useState(true);
+  const [createdProductId, setCreatedProductId] = useState(null);
 
   // AI Credits state
   const [aiCredits, setAiCredits] = useState(null);
@@ -132,47 +130,53 @@ export default function NewProductPage() {
   const removeTier = (i) => setPricingTiers(pricingTiers.filter((_, idx) => idx !== i));
   const updateTier = (i, f, v) => { const u = [...pricingTiers]; u[i][f] = v; setPricingTiers(u); };
 
-  // Image selection (preview only — uploaded after product creation)
+  // Image selection (upload own photos - FREE)
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
     
     files.forEach(file => {
-      // Validate file size (5MB)
       if (file.size > 5 * 1024 * 1024) {
         toast.error(`${file.name} is too large (max 5MB)`);
         return;
       }
-      // Validate file type
       if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.type)) {
         toast.error(`${file.name} has invalid type`);
         return;
       }
-      // Create preview URL
       const reader = new FileReader();
       reader.onload = (event) => {
-        setImages(prev => [...prev, { file, previewUrl: event.target.result }]);
+        setImages(prev => [...prev, { file, previewUrl: event.target.result, source: 'UPLOADED' }]);
       };
       reader.readAsDataURL(file);
     });
   };
 
-  const removeImage = (index) => {
+  const removeImage = async (index) => {
+    const imgToRemove = images[index];
     setImages(prev => prev.filter((_, i) => i !== index));
+    
+    // If it's an AI-generated image with a database record, delete it
+    if (imgToRemove?.id) {
+      try { 
+        await fetch(`/api/products/images/${imgToRemove.id}`, { method: 'DELETE' }); 
+      } catch {}
+    }
   };
 
   // Upload images after product creation
   const uploadImagesForProduct = async (productId) => {
-    if (images.length === 0) return;
+    const uploadedImages = images.filter(img => img.file);
+    if (uploadedImages.length === 0) return;
     setUploadingImages(true);
     try {
-      for (const img of images) {
+      for (const img of uploadedImages) {
         const formData = new FormData();
         formData.append('file', img.file);
         formData.append('productId', productId);
         await fetch('/api/products/images/upload', { method: 'POST', body: formData });
       }
-      toast.success(`${images.length} image(s) uploaded`);
+      toast.success(`${uploadedImages.length} image(s) uploaded`);
     } catch {
       toast.error('Some images failed to upload');
     } finally {
@@ -180,11 +184,63 @@ export default function NewProductPage() {
     }
   };
 
-  // Auto-generate image for product
-  const autoGenerateForProduct = async (productId, productName, categoryName) => {
+  // Generate AI image NOW (deduct credit immediately)
+  const handleGenerateAIImage = async () => {
+    if (!name || !categoryId) { 
+      toast.error("Enter product name and category first"); 
+      return; 
+    }
+    if (!weight) { 
+      toast.error("Enter weight first"); 
+      return; 
+    }
+
     setGeneratingImage(true);
     try {
-      const res = await fetch('/api/products/images/generate', {
+      // If product not created yet, create as draft first
+      let productId = createdProductId;
+      
+      if (!productId) {
+        // Create product as draft first
+        const pricing = pricingTiers.filter(t => t.mrp && t.sellingPrice).map(t => ({
+          priceType: t.priceType, mrp: parseFloat(t.mrp), sellingPrice: parseFloat(t.sellingPrice), minQty: parseInt(t.minQty) || 1,
+        }));
+
+        const createRes = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name, categoryId, brandId: brandId || null, description, longDescription: description,
+            metaTitle, metaDescription,
+            sku, hsnCode, barcode, unit,
+            weight: weight ? parseFloat(weight) : null,
+            length: length || null, width: width || null, height: height || null,
+            warranty: warranty || null, countryOfOrigin: countryOfOrigin || "India",
+            pricing: pricing.length > 0 ? pricing : [], 
+            warehouseId: warehouseId || null, 
+            stockQty: stockQty ? parseInt(stockQty) : 0,
+            isActive: false,
+            isApproved: false,
+            variants: variants.filter(v => v.value.trim()).map(v => ({
+              type: variantType || 'Variant',
+              value: v.value.trim(),
+              mrp: parseFloat(v.mrp) || null,
+              sellingPrice: parseFloat(v.sellingPrice) || null,
+              minQty: parseInt(v.minQty) || 1,
+            })),
+          }),
+        });
+        const createResult = await createRes.json();
+        if (!createResult.success) {
+          toast.error(createResult.message || "Failed to create product");
+          return;
+        }
+        productId = createResult.data.product.id;
+        setCreatedProductId(productId);
+      }
+
+      // Generate AI image (deducts credit)
+      const genRes = await fetch('/api/products/images/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -192,17 +248,25 @@ export default function NewProductPage() {
           action: 'auto-generate-and-attach',
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        toast.success('AI image generated successfully!');
-        return true;
+      const genData = await genRes.json();
+
+      if (genData.success) {
+        toast.success('AI image generated! Credit deducted.');
+        // Add generated image to gallery with ID
+        setImages(prev => [...prev, { 
+          url: genData.data.url, 
+          id: genData.data.imageId || null, 
+          source: 'AI_GENERATED' 
+        }]);
+        // Refresh credits
+        fetch("/api/supplier/ai-credits").then(r => r.json()).then(d => { 
+          if (d.success) setAiCredits(d.data); 
+        }).catch(() => {});
       } else {
-        console.error('Image generation failed:', data.error);
-        return false;
+        toast.error(genData.error || 'Failed to generate image');
       }
     } catch (error) {
-      console.error('Image generation error:', error);
-      return false;
+      toast.error('Failed to generate image');
     } finally {
       setGeneratingImage(false);
     }
@@ -219,14 +283,11 @@ export default function NewProductPage() {
   const handleSaveDraft = async () => {
     if (!name || !categoryId) { toast.error("Name and category required for draft"); return; }
     if (!weight) { toast.error("Weight is required"); return; }
-    if (!warehouseId) { toast.error("Please select a pickup location"); return; }
-    if (!stockQty || parseInt(stockQty) < 0) { toast.error("Stock quantity is required"); return; }
 
     setLoading(true);
     const pricing = pricingTiers.filter(t => t.mrp && t.sellingPrice).map(t => ({
       priceType: t.priceType, mrp: parseFloat(t.mrp), sellingPrice: parseFloat(t.sellingPrice), minQty: parseInt(t.minQty) || 1,
     }));
-    // Price optional for draft
 
     try {
       let finalBrandId = brandId || null;
@@ -266,7 +327,7 @@ export default function NewProductPage() {
       });
       const result = await res.json();
       if (result.success) {
-        toast.success("Draft saved! Add image later to submit for approval.");
+        toast.success("Draft saved!");
         router.push('/dashboard/supplier/products');
       } else {
         toast.error(result.message || result.error);
@@ -306,87 +367,92 @@ export default function NewProductPage() {
             body: JSON.stringify({ name: newBrandName.trim(), isActive: true }),
           });
           const brandData = await brandRes.json();
-          if (brandData.id) {
-            finalBrandId = brandData.id;
-          }
-        } catch (err) {
-          console.error('Brand creation error:', err);
-        }
+          if (brandData.id) finalBrandId = brandData.id;
+        } catch (err) {}
       }
 
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name, categoryId, brandId: finalBrandId, description, longDescription: description,
-          metaTitle, metaDescription,
-          sku, hsnCode, barcode, unit,
-          weight: weight ? parseFloat(weight) : null,
-          length: length || null, width: width || null, height: height || null,
-          warranty: warranty || null, countryOfOrigin: countryOfOrigin || "India",
-          pricing, warehouseId, stockQty: parseInt(stockQty) || 0,
-          isActive: true,
-          isApproved: false,
-          variants: variants.filter(v => v.value.trim()).map(v => ({
-            type: variantType || 'Variant',
-            value: v.value.trim(),
-            mrp: parseFloat(v.mrp) || null,
-            sellingPrice: parseFloat(v.sellingPrice) || null,
-            minQty: parseInt(v.minQty) || 1,
-          })),
-        }),
-      });
-      const result = await res.json();
+      // If product was already created (for AI generation), update it
+      let productId = createdProductId;
       
-      if (result.success) {
-        const productId = result.data.product.id;
-        
-        // Upload images if any were selected
-        if (images.length > 0) {
-          setSubmitStage('generating');
-          await uploadImagesForProduct(productId);
-        } 
-        // Auto-generate AI image
-        else if (autoGenerateImage) {
-          setSubmitStage('generating');
-          setGeneratingImage(true);
-          
-          try {
-            const genRes = await fetch('/api/products/images/generate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                productId,
-                action: 'auto-generate-and-attach',
-              }),
-            });
-            const genData = await genRes.json();
-            
-            if (genData.success) {
-              toast.success('AI image generated!');
-            } else {
-              toast.warning('Product submitted. AI image generation failed.');
-            }
-          } catch (genError) {
-            console.error('Image generation error:', genError);
-            toast.warning('Product submitted. AI image generation failed.');
-          }
-          
-          setGeneratingImage(false);
+      if (productId) {
+        // Update existing draft product
+        const updateRes = await fetch(`/api/products/${productId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name, categoryId, brandId: finalBrandId, description,
+            longDescription: description,
+            metaTitle, metaDescription,
+            sku, hsnCode, barcode, unit,
+            weight: weight ? parseFloat(weight) : null,
+            length: length || null, width: width || null, height: height || null,
+            warranty: warranty || null, countryOfOrigin: countryOfOrigin || "India",
+            pricing,
+            warehouseId: warehouseId || null,
+            stockQty: stockQty ? parseInt(stockQty) : null,
+            isActive: true,
+            isApproved: false,
+            rejectionReason: null,
+            variants: variants.filter(v => v.value.trim()).map(v => ({
+              type: variantType || 'Variant',
+              value: v.value.trim(),
+              mrp: parseFloat(v.mrp) || null,
+              sellingPrice: parseFloat(v.sellingPrice) || null,
+              minQty: parseInt(v.minQty) || 1,
+            })),
+          }),
+        });
+        const updateResult = await updateRes.json();
+        if (!updateResult.success) {
+          toast.error(updateResult.message || "Failed to update");
+          setSubmitStage('idle');
+          return;
         }
-        
-        setSubmitStage('done');
-        toast.success("Product created and submitted for approval!");
-        
-        // Small delay so user sees the success state
-        setTimeout(() => {
-          router.push('/dashboard/supplier/products');
-        }, 1500);
-        
       } else {
-        toast.error(result.message || result.error);
-        setSubmitStage('idle');
+        // Create new product
+        const createRes = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name, categoryId, brandId: finalBrandId, description, longDescription: description,
+            metaTitle, metaDescription,
+            sku, hsnCode, barcode, unit,
+            weight: weight ? parseFloat(weight) : null,
+            length: length || null, width: width || null, height: height || null,
+            warranty: warranty || null, countryOfOrigin: countryOfOrigin || "India",
+            pricing, warehouseId, stockQty: parseInt(stockQty) || 0,
+            isActive: true,
+            isApproved: false,
+            variants: variants.filter(v => v.value.trim()).map(v => ({
+              type: variantType || 'Variant',
+              value: v.value.trim(),
+              mrp: parseFloat(v.mrp) || null,
+              sellingPrice: parseFloat(v.sellingPrice) || null,
+              minQty: parseInt(v.minQty) || 1,
+            })),
+          }),
+        });
+        const createResult = await createRes.json();
+        if (!createResult.success) {
+          toast.error(createResult.message || "Failed to create");
+          setSubmitStage('idle');
+          return;
+        }
+        productId = createResult.data.product.id;
       }
+
+      // Upload own images (FREE)
+      if (images.filter(img => img.file).length > 0) {
+        await uploadImagesForProduct(productId);
+      }
+      
+      setSubmitStage('done');
+      toast.success("Product submitted for approval!");
+      
+      setTimeout(() => {
+        router.push('/dashboard/supplier/products');
+      }, 1500);
+      
     } catch { 
       toast.error("Failed"); 
       setSubmitStage('idle');
@@ -497,59 +563,67 @@ export default function NewProductPage() {
 
           {/* Product Images */}
           <div className="bg-background rounded-xl border p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">Product Images <span className="text-xs text-gray-400 font-normal">(Optional - AI will auto-generate if empty)</span></h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Product Images</h3>
             
-            {/* Auto-Generate Toggle */}
-            {images.length === 0 && (
-              <div className="mb-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoGenerateImage}
-                    onChange={(e) => setAutoGenerateImage(e.target.checked)}
-                    className="h-4 w-4 text-purple-600 rounded border-purple-300"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-purple-800 flex items-center gap-1.5">
-                      <ImageIcon className="h-4 w-4" />
-                      Auto-generate AI image
-                    </p>
-                    <p className="text-xs text-purple-600 mt-0.5">
-                      AI creates image using product name, description, weight, and category
-                    </p>
-                    {aiCredits !== null && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <Coins className="h-3.5 w-3.5 text-purple-500" />
-                        <span className="text-xs text-purple-700 font-medium">
-                          {aiCredits.creditsRemaining} credits remaining
-                        </span>
-                        <span className="text-xs text-purple-400">•</span>
-                        <span className="text-xs text-purple-600">
-                          Costs {aiCredits.creditCostPerGeneration} credit(s)
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </label>
+            {/* Credits Info */}
+            {aiCredits !== null && (
+              <div className="mb-3 bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center gap-2">
+                <Coins className="h-4 w-4 text-purple-500 shrink-0" />
+                <span className="text-xs text-purple-700 font-medium">
+                  {aiCredits.creditsRemaining} credits remaining
+                </span>
+                <span className="text-xs text-purple-400">•</span>
+                <span className="text-xs text-purple-600">
+                  AI image costs {aiCredits.creditCostPerGeneration} credit(s)
+                </span>
               </div>
             )}
             
-            <div className="flex flex-wrap gap-3">
+            {/* Image Gallery */}
+            <div className="flex flex-wrap gap-3 mb-3">
               {images.map((img, i) => (
                 <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200">
-                  <img src={img.previewUrl} alt="" className="w-full h-full object-cover" />
-                  <button type="button" onClick={() => removeImage(i)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5">
+                  <img src={img.previewUrl || img.url} alt="" className="w-full h-full object-cover" />
+                  {img.source === 'AI_GENERATED' && (
+                    <span className="absolute bottom-0 left-0 right-0 text-[8px] bg-purple-500 text-white text-center py-0.5">
+                      AI
+                    </span>
+                  )}
+                  <button type="button" onClick={() => removeImage(i, img.id)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5">
                     <X className="h-3 w-3" />
                   </button>
                 </div>
               ))}
+              
+              {/* Upload Button */}
               <label className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition">
                 <Upload className="h-5 w-5 text-gray-400" />
                 <span className="text-[10px] text-gray-400 mt-1">Upload</span>
                 <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageSelect} />
               </label>
             </div>
-            <p className="text-xs text-gray-400 mt-2">Max 5MB each. JPG, PNG, or WebP. Upload your own or let AI generate.</p>
+
+            {/* Generate AI Button */}
+            <button
+              type="button"
+              onClick={handleGenerateAIImage}
+              disabled={generatingImage}
+              className="w-full py-3 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {generatingImage ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating AI Image...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Generate AI Image (1 credit)
+                </>
+              )}
+            </button>
+            
+            <p className="text-xs text-gray-400 mt-2">Upload your own photos FREE or generate AI images using credits.</p>
           </div>
 
           {/* Weight & Dimensions */}
@@ -619,7 +693,7 @@ export default function NewProductPage() {
             )}
           </div>
 
-          {/* Variants — below Pricing */}
+          {/* Variants */}
           <div className="bg-background rounded-xl border">
             <button type="button" onClick={() => setShowVariants(!showVariants)} className="w-full p-4 flex items-center justify-between font-semibold text-lg">
               <span className="flex items-center gap-2"><Tags className="h-5 w-5" /> Variants (Optional)</span>{showVariants ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -656,7 +730,7 @@ export default function NewProductPage() {
             )}
           </div>
 
-          {/* Advanced — Specifications & SEO (collapsed by default) */}
+          {/* Advanced */}
           <div className="bg-background rounded-xl border">
             <button type="button" onClick={() => setShowAdvanced(!showAdvanced)} className="w-full p-4 flex items-center justify-between font-semibold text-lg">
               <span>Specifications & SEO</span>{showAdvanced ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -673,19 +747,6 @@ export default function NewProductPage() {
               </div>
             )}
           </div>
-
-          {/* Generating Status Banner */}
-          {submitStage === 'generating' && (
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-center gap-3">
-              <Loader2 className="h-5 w-5 text-purple-600 animate-spin shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-purple-800">Generating AI image...</p>
-                <p className="text-xs text-purple-600 mt-0.5">
-                  Creating "{name}" using {selectedCategory?.name || 'category'} category, {weight}kg weight{description ? ', and description' : ''}
-                </p>
-              </div>
-            </div>
-          )}
 
           <div className="flex gap-3">
             <Button 
@@ -707,22 +768,13 @@ export default function NewProductPage() {
               {submitStage === 'saving' ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving Product...
-                </>
-              ) : submitStage === 'generating' ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Generating AI Image...
+                  Saving...
                 </>
               ) : submitStage === 'done' ? (
                 <>
                   <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
                   Submitted!
                 </>
-              ) : images.length === 0 && autoGenerateImage ? (
-                "Submit with AI Image"
-              ) : images.length === 0 && !autoGenerateImage ? (
-                "Submit without Image"
               ) : (
                 "Submit for Approval"
               )}

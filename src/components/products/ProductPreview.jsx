@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Package, ShieldCheck, Clock, MapPin, Scale, Box, Barcode, Globe, ChevronRight } from "lucide-react";
 
 const ORANGE = '#F97316';
@@ -24,6 +24,16 @@ export default function ProductPreview({ product, mode = 'detail', supplierName 
   }
 
   const images = product.images?.length > 0 ? product.images : [{ url: null }];
+
+  // Auto-scroll images every 3 seconds
+  useEffect(() => {
+    if (images.length > 1) {
+      const interval = setInterval(() => {
+        setSelectedImage(prev => (prev + 1) % images.length);
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [images.length]);
   const pricing = product.pricing?.filter(p => p.sellingPrice) || [];
   const selectedPricing = pricing[selectedPricingIndex] || pricing[0] || {};
   const price = Number(selectedPricing.sellingPrice) || Number(product.price) || 0;
