@@ -142,41 +142,73 @@ export class ImageGeneratorService {
   }
 
   /**
-   * Build smart prompt from product details
+   * Build smart prompt from product details - fully dynamic, scales to 2000+ categories
    */
-  static buildPrompt(productName, category, description = '', weight = '', unit = '') {
+  static buildPrompt(productName, category, description = '', weight = '', unit = '', brand = '') {
     const parts = [];
     
-    // Product name (most important)
+    // Product name (most important - contains type, material, size info)
     if (productName) {
       parts.push(productName);
     }
     
-    // Description (adds context)
+    // Brand (adds brand identity if available)
+    if (brand && brand.trim()) {
+      parts.push(`${brand} brand product`);
+    }
+    
+    // Category (product classification)
+    if (category && category.toLowerCase() !== 'general' && category.toLowerCase() !== 'other') {
+      parts.push(`${category} category`);
+    }
+    
+    // Description (supplier knows exact product details)
     if (description && description.trim()) {
-      // Take first 100 chars of description
-      const shortDesc = description.trim().substring(0, 100);
+      const shortDesc = description.trim().substring(0, 150);
       parts.push(shortDesc);
     }
     
-    // Weight + unit (adds size context)
+    // Unit context for measurement understanding
+    if (unit) {
+      const unitContext = {
+        'PCS': 'single unit',
+        'KG': 'by weight in kilograms',
+        'LTR': 'by volume in liters',
+        'MTR': 'by length in meters',
+        'BOX': 'packaged in a box',
+        'SET': 'complete set',
+        'BAG': 'packaged in a bag',
+        'ROLL': 'in roll form',
+        'PAIR': 'pair of items',
+        'DOZEN': 'dozen pack',
+      };
+      if (unitContext[unit]) parts.push(unitContext[unit]);
+    }
+    
+    // Weight for size reference
     if (weight && parseFloat(weight) > 0) {
-      parts.push(`${weight}${unit ? ' ' + unit.toLowerCase() : ''}`);
+      const w = parseFloat(weight);
+      if (w < 0.1) parts.push('tiny lightweight item');
+      else if (w < 0.5) parts.push('very small item');
+      else if (w < 1) parts.push('small item');
+      else if (w < 5) parts.push('handheld-sized item');
+      else if (w < 20) parts.push('medium-sized item');
+      else if (w < 100) parts.push('large item');
+      else parts.push('heavy industrial-sized item');
     }
     
-    // Category (adds product type context)
-    if (category) {
-      parts.push(`${category} category product`);
-    }
-    
-    // Quality modifiers
-    parts.push('professional product photography');
-    parts.push('white background');
-    parts.push('commercial product image');
-    parts.push('high quality');
-    parts.push('studio lighting');
-    parts.push('detailed product shot');
-    parts.push('centered composition');
+    // Photography instructions (universal for all products)
+    parts.push('isolated product shot');
+    parts.push('pure white background');
+    parts.push('e-commerce product photography');
+    parts.push('professional studio lighting');
+    parts.push('sharp focus');
+    parts.push('high resolution');
+    parts.push('no people');
+    parts.push('no hands');
+    parts.push('no text');
+    parts.push('no watermark');
+    parts.push('no logo overlay');
     
     return parts.join(', ');
   }
@@ -184,9 +216,9 @@ export class ImageGeneratorService {
   /**
    * Generate AI image using Pollinations.ai (FREE, no API key)
    */
-  static async generateAI(productName, category, description = '', weight = '', unit = '') {
+  static async generateAI(productName, category, description = '', weight = '', unit = '', brand = '') {
     try {
-      const prompt = this.buildPrompt(productName, category, description, weight, unit);
+      const prompt = this.buildPrompt(productName, category, description, weight, unit, brand);
       
       // Pollinations.ai - free, no API key needed
       // Add seed for consistency
@@ -211,11 +243,11 @@ export class ImageGeneratorService {
   /**
    * Generate multiple AI image variations
    */
-  static async generateAIVariations(productName, category, description = '', weight = '', unit = '', count = 3) {
+  static async generateAIVariations(productName, category, description = '', weight = '', unit = '', count = 3, brand = '') {
     const variations = [];
     
     for (let i = 0; i < count; i++) {
-      const basePrompt = this.buildPrompt(productName, category, description, weight, unit);
+      const basePrompt = this.buildPrompt(productName, category, description, weight, unit, brand);
       const anglePrompt = `${basePrompt}, angle ${i + 1}, view ${i + 1}`;
       const seed = Math.floor(Math.random() * 10000);
       
@@ -348,6 +380,70 @@ export class ImageGeneratorService {
   }
 
   /**
+   * Find existing image from identical product (same name, category, brand, weight)
+   */
+  static async findExistingImage(product) {
+    try {
+      // Search for identical products (any supplier) with images
+      const identicalProduct = await prisma.product.findFirst({
+        where: {
+          name: { equals: product.name },
+          categoryId: product.categoryId,
+          brandId: product.brandId || null,
+          weight: product.weight,
+          images: { some: {} }, // Has at least one image
+          id: { not: product.id }, // Not the same product
+        },
+        include: {
+          images: { take: 1, orderBy: { sortOrder: 'asc' } },
+        },
+        orderBy: { createdAt: 'asc' }, // Oldest first (most established image)
+      });
+
+      if (identicalProduct && identicalProduct.images.length > 0) {
+        return {
+          success: true,
+          imageUrl: identicalProduct.images[0].url,
+          source: 'REUSED',
+          sourceProductId: identicalProduct.id,
+          sourceProductName: identicalProduct.name,
+        };
+      }
+
+      // Also check by SKU if provided
+      if (product.sku) {
+        const skuMatch = await prisma.product.findFirst({
+          where: {
+            sku: { equals: product.sku },
+            images: { some: {} },
+            id: { not: product.id },
+          },
+          include: {
+            images: { take: 1, orderBy: { sortOrder: 'asc' } },
+          },
+        });
+
+        if (skuMatch && skuMatch.images.length > 0) {
+          return {
+            success: true,
+            imageUrl: skuMatch.images[0].url,
+            source: 'REUSED',
+            sourceProductId: skuMatch.id,
+            sourceProductName: skuMatch.name,
+          };
+        }
+      }
+
+      return {
+        success: false,
+      };
+    } catch (error) {
+      console.error('Find existing image error:', error);
+      return { success: false };
+    }
+  }
+
+  /**
    * Auto-generate image for product with credit check
    */
   static async autoGenerateForProduct(product, supplierName = '') {
@@ -368,13 +464,63 @@ export class ImageGeneratorService {
       
       const settings = await this.getSettings();
       
+      // Check if identical product already has an image (reuse - no credit cost)
+      const existingImage = await this.findExistingImage(product);
+      
+      if (existingImage.success) {
+        // Attach existing image to this product
+        await prisma.productImage.create({
+          data: {
+            productId: product.id,
+            url: existingImage.imageUrl,
+            alt: product.name,
+            sortOrder: 0,
+            isPrimary: true,
+          },
+        });
+        
+        // Save to Media library
+        await prisma.media.create({
+          data: {
+            fileName: existingImage.imageUrl.split('/').pop(),
+            originalName: `${product.name}-reused.jpg`,
+            fileUrl: existingImage.imageUrl,
+            fileType: 'image/jpeg',
+            fileSize: 0,
+            entityType: 'PRODUCT',
+            entityId: product.id,
+          },
+        });
+        
+        // Log reuse (no credit deduction)
+        await this.logGeneration(
+          product.supplierId,
+          product.id,
+          'REUSE',
+          `Reused image from product: ${existingImage.sourceProductName}`,
+          existingImage.imageUrl,
+          'SUCCESS'
+        );
+        
+        return {
+          success: true,
+          source: 'REUSED',
+          url: existingImage.imageUrl,
+          prompt: `Reused from ${existingImage.sourceProductName}`,
+          creditsDeducted: 0,
+          creditsRemaining: check.creditsRemaining,
+          reusedFrom: existingImage.sourceProductName,
+        };
+      }
+      
       // Try AI generation first with full product details
       const aiResult = await this.generateAI(
         product.name,
         product.category?.name || 'Product',
         product.description || '',
         product.weight ? String(product.weight) : '',
-        product.unit || 'PCS'
+        product.unit || 'PCS',
+        product.brand?.name || ''
       );
       
       if (aiResult.success) {
