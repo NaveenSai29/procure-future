@@ -217,25 +217,41 @@ export class ImageGeneratorService {
   /**
    * Generate AI image using Pollinations.ai (FREE, no API key)
    */
-  static async generateAI(productName, category, description = '', weight = '', unit = '', brand = '') {
+  static async generateAI(productName, category, description = '', weight = '', unit = '', brand = '', angleIndex = 0) {
     try {
       const prompt = this.buildPrompt(productName, category, description, weight, unit, brand);
       
-      // Enhanced prompt with negative instructions for better quality
-      const enhancedPrompt = `${prompt}, ultra sharp, crisp details, realistic product, professional quality, 8k resolution`;
+      // Angle-specific descriptions (same product, different views)
+      const anglePrompts = [
+        'front view, straight on shot',
+        'side view, profile angle',
+        'back view, rear shot',
+        'top view, overhead shot',
+        '45 degree angle, three-quarter view',
+        'close-up detail shot, macro view',
+      ];
+      
+      const anglePrompt = anglePrompts[angleIndex % anglePrompts.length];
+      
+      // Enhanced prompt with angle context
+      const enhancedPrompt = `${prompt}, ${anglePrompt}, ultra sharp, crisp details, realistic product, professional quality, 8k resolution`;
       
       // Negative prompt to avoid common AI issues
       const negativePrompt = 'blurry, distorted, cartoon, illustration, sketch, low quality, pixelated, grainy, deformed, ugly, bad proportions, extra fingers, cropped, out of frame';
       
-      // Pollinations.ai - with quality parameters
-      const seed = Math.floor(Math.random() * 10000);
-      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=1024&height=1024&nologo=true&seed=${seed}&negative_prompt=${encodeURIComponent(negativePrompt)}&model=flux`;
+      // Use consistent seed for same product (based on product name hash)
+      const baseSeed = this.getProductSeed(productName);
+      const angleSeed = baseSeed + angleIndex * 100;
+      
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=1024&height=1024&nologo=true&seed=${angleSeed}&negative_prompt=${encodeURIComponent(negativePrompt)}&model=flux`;
       
       return {
         success: true,
         imageUrl,
         source: 'AI_GENERATED',
         prompt: enhancedPrompt,
+        angleIndex,
+        angleLabel: anglePrompt,
       };
     } catch (error) {
       console.error('AI generation error:', error);
@@ -244,6 +260,20 @@ export class ImageGeneratorService {
         error: error.message,
       };
     }
+  }
+
+  /**
+   * Generate consistent seed from product name (so same product = same base image)
+   */
+  static getProductSeed(productName) {
+    let hash = 0;
+    const str = productName || 'product';
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash) % 10000;
   }
 
   /**
@@ -522,14 +552,25 @@ export class ImageGeneratorService {
         };
       }
       
-      // Try AI generation first with full product details
+      // Get current generation count for angle tracking
+      const existingGenerations = await prisma.aIGenerationLog.count({
+        where: {
+          supplierId: product.supplierId,
+          productId: product.id,
+          status: 'SUCCESS',
+          action: 'GENERATE',
+        },
+      });
+      
+      // Try AI generation with angle based on generation count
       const aiResult = await this.generateAI(
         product.name,
         product.category?.name || 'Product',
         product.description || '',
         product.weight ? String(product.weight) : '',
         product.unit || 'PCS',
-        product.brand?.name || ''
+        product.brand?.name || '',
+        existingGenerations // 0=front, 1=side, 2=back, etc.
       );
       
       if (aiResult.success) {

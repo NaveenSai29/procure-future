@@ -398,6 +398,12 @@ export default function EditProductPage() {
       currentPricingKey === originalPricingKey
     );
 
+    // Check if NO actual change was made (stock also unchanged)
+    const isNoChange = (
+      isStockOnlyUpdate &&
+      String(stockQty || '') === String(currentStock || '')
+    );
+
     setSaving(true);
     setSubmittingForApproval(true);
     setSubmitStage('saving');
@@ -434,7 +440,7 @@ export default function EditProductPage() {
           warehouseId: warehouseId || null,
           stockQty: stockQty ? parseInt(stockQty) : null,
           isActive: true,
-          isApproved: isStockOnlyUpdate ? (productStatus.isApproved || false) : false,
+          isApproved: isNoChange || isStockOnlyUpdate ? (productStatus.isApproved || false) : false,
           rejectionReason: null,
           variants: variants.filter(v => v.value.trim()).map(v => ({
             type: variantType || 'Variant',
@@ -448,7 +454,9 @@ export default function EditProductPage() {
       const result = await res.json();
       if (result.success) { 
         setSubmitStage('done');
-        if (isStockOnlyUpdate) {
+        if (isNoChange) {
+          toast.info("No changes detected. Product remains live."); 
+        } else if (isStockOnlyUpdate) {
           toast.success("Stock updated! Product is still live."); 
         } else {
           toast.success("Product updated! Waiting for admin approval."); 
