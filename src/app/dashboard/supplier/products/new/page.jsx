@@ -6,11 +6,47 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ArrowLeft, Package, Plus, X, ChevronDown, ChevronUp, Building, MonitorSmartphone, Tags, Upload } from "lucide-react";
+import { ArrowLeft, Package, Plus, X, ChevronDown, ChevronUp, Building, MonitorSmartphone, Tags, Upload, AlertTriangle } from "lucide-react";
 import AIGenerateButton from "@/components/products/AIGenerateButton";
 import SEOSection from "@/components/products/SEOSection";
 import HsnSearchInput from "@/components/products/HsnSearchInput";
 import ProductPreview from "@/components/products/ProductPreview";
+
+// Custom Confirm Popup Component
+function ConfirmPopup({ isOpen, title, message, confirmText, cancelText, onConfirm, onCancel, type = 'warning' }) {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-start gap-3">
+          <div className={`p-2 rounded-full ${type === 'danger' ? 'bg-red-100' : type === 'success' ? 'bg-green-100' : 'bg-yellow-100'}`}>
+            <AlertTriangle className={`h-5 w-5 ${type === 'danger' ? 'text-red-600' : type === 'success' ? 'text-green-600' : 'text-yellow-600'}`} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+            <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <Button 
+            variant="outline" 
+            className="flex-1"
+            onClick={onCancel}
+          >
+            {cancelText || "Cancel"}
+          </Button>
+          <Button 
+            className={`flex-1 ${type === 'danger' ? 'bg-red-600 hover:bg-red-700' : type === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+            onClick={onConfirm}
+          >
+            {confirmText || "Confirm"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -56,11 +92,28 @@ export default function NewProductPage() {
     { priceType: "RETAIL", mrp: "", sellingPrice: "", minQty: "1" },
   ]);
 
+  // Confirm popup state
+  const [confirmPopup, setConfirmPopup] = useState(null);
+
   useEffect(() => {
     fetch("/api/categories").then(r => r.json()).then(d => { if (d.success) setCategories(d.data); });
     fetch("/api/admin/brands").then(r => r.json()).then(d => { if (d.brands) setBrands(d.brands); }).catch(() => {});
     fetch("/api/warehouses").then(r => r.text()).then(text => { if (!text) return; try { const d = JSON.parse(text); if (d.success) setWarehouses(d.data || []); else if (Array.isArray(d)) setWarehouses(d); } catch {} }).catch(() => {});
   }, []);
+
+  // Ctrl+S keyboard shortcut for Save Draft
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (!loading) {
+          handleSaveDraft();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [name, categoryId, brandId, newBrandName, description, metaTitle, metaDescription, sku, hsnCode, barcode, unit, weight, length, width, height, warranty, countryOfOrigin, warehouseId, stockQty, pricingTiers, variants, images, loading]);
 
   const addTier = () => setPricingTiers([...pricingTiers, { priceType: "WHOLESALE", mrp: "", sellingPrice: "", minQty: "10" }]);
   const removeTier = (i) => setPricingTiers(pricingTiers.filter((_, idx) => idx !== i));
@@ -256,7 +309,6 @@ export default function NewProductPage() {
     name,
     brand: selectedBrand?.name || newBrandName || '',
     description,
-    highlights,
     images: images.map(img => ({ url: img.previewUrl || img.url })),
     pricing: pricingTiers.filter(t => t.sellingPrice),
     stockQty: parseInt(stockQty) || 0,
@@ -275,6 +327,17 @@ export default function NewProductPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      {/* Custom Confirm Popup */}
+      <ConfirmPopup 
+        isOpen={!!confirmPopup}
+        title={confirmPopup?.title}
+        message={confirmPopup?.message}
+        confirmText={confirmPopup?.confirmText}
+        type={confirmPopup?.type}
+        onConfirm={confirmPopup?.onConfirm}
+        onCancel={confirmPopup?.onCancel}
+      />
+
       <div className="flex items-center justify-between">
         <Link href="/dashboard/supplier/products" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Back
@@ -283,6 +346,11 @@ export default function NewProductPage() {
           <button type="button" onClick={() => setPreviewMode('detail')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${previewMode === 'detail' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Detail View</button>
           <button type="button" onClick={() => setPreviewMode('card')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${previewMode === 'card' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Card View</button>
         </div>
+      </div>
+
+      {/* Ctrl+S Hint */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-xs text-blue-700">
+        💡 Tip: Press <kbd className="bg-white px-1.5 py-0.5 rounded border font-bold">Ctrl</kbd> + <kbd className="bg-white px-1.5 py-0.5 rounded border font-bold">S</kbd> to quickly save as draft
       </div>
 
       <div className="flex gap-6 items-start">

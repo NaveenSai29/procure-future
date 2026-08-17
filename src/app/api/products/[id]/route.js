@@ -114,6 +114,7 @@ export async function PATCH(request, { params }) {
       weight, length, width, height, warranty, countryOfOrigin,
       metaTitle, metaDescription, pricing, attributes,
       isActive, isApproved, rejectionReason,
+      warehouseId, stockQty, variants,
     } = body;
 
     // Build dimensions string
@@ -121,8 +122,14 @@ export async function PATCH(request, { params }) {
       ? `${length || 0}x${width || 0}x${height || 0} cm`
       : undefined;
 
+    // Build slug if name is being updated
+    const slug = name !== undefined
+      ? name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" + Date.now().toString(36)
+      : undefined;
+
     const updateData = {
       ...(name !== undefined && { name }),
+      ...(slug !== undefined && { slug }),
       ...(categoryId !== undefined && { categoryId }),
       ...(brandId !== undefined && { brandId: brandId || null }),
       ...(isActive !== undefined && { isActive }),
@@ -150,7 +157,8 @@ export async function PATCH(request, { params }) {
       });
     }
 
-    if (pricing) {
+    // Handle pricing updates
+    if (pricing !== undefined) {
       await prisma.productPricing.deleteMany({ where: { productId: id } });
       if (pricing.length > 0) {
         await prisma.productPricing.createMany({
@@ -165,7 +173,8 @@ export async function PATCH(request, { params }) {
       }
     }
 
-    if (attributes) {
+    // Handle attributes updates
+    if (attributes !== undefined) {
       await prisma.productAttribute.deleteMany({ where: { productId: id } });
       if (attributes.length > 0) {
         await prisma.productAttribute.createMany({
@@ -174,9 +183,117 @@ export async function PATCH(request, { params }) {
       }
     }
 
-    return successResponse({ message: "Updated" });
+    // Handle variants updates
+    if (variants !== undefined) {
+      // Delete existing variants that are not in the new list
+      const existingVariants = await prisma.productVariant.findMany({
+        where: { productId: id },
+        select: { id: true },
+      });
+      
+      // Delete all existing variants
+      await prisma.productVariant.deleteMany({ where: { productId: id } });
+      
+      // Create new variants
+      if (variants.length > 0) {
+        await prisma.productVariant.createMany({
+          data: variants.map(v => ({
+            productId: id,
+            name: v.value || v.name || 'Variant',
+            sku: v.sku || null,
+            price: v.sellingPrice ? parseFloat(v.sellingPrice) : null,
+            stock: 0,
+            isActive: true,
+            attributes: { type: v.type || 'Variant' },
+          })),
+        });
+      }
+    }
+
+    // Handle stock/inventory updates
+    if (warehouseId !== undefined && stockQty !== undefined) {
+      const stockQtyNum = stockQty ? parseInt(stockQty) : 0;
+      
+      if (warehouseId) {
+        // Check if inventory exists for this warehouse + product
+        const existingInventory = await prisma.warehouseInventory.findFirst({
+          where: {
+            warehouseId,
+            productId: id,
+            variantId: null,
+          },
+        });
+
+        if (existingInventory) {
+          // Update stock
+          const oldQty = existingInventory.availableQty;
+          const difference = stockQtyNum - oldQty;
+          
+          await prisma.warehouseInventory.update({
+            where: { id: existingInventory.id },
+            data: { availableQty: stockQtyNum },
+          });
+
+          // Log inventory movement
+          if (difference !== 0) {
+            await prisma.inventoryMovement.create({
+              data: {
+                inventoryId: existingInventory.id,
+                type: difference > 0 ? 'STOCK_ADDED' : 'STOCK_REMOVED',
+                quantity: Math.abs(difference),
+                referenceType: 'PRODUCT_UPDATE',
+                referenceId: id,
+                notes: difference > 0 
+                  ? `Stock updated: +${difference} (${oldQty} → ${stockQtyNum})` 
+                  : `Stock updated: ${difference} (${oldQty} → ${stockQtyNum})`,
+              },
+            });
+          }
+        } else {
+          // Create new inventory
+          const newInventory = await prisma.warehouseInventory.create({
+            data: {
+              warehouseId,
+              productId: id,
+              availableQty: stockQtyNum,
+              minStockLevel: 10,
+              maxStockLevel: 1000,
+            },
+          });
+
+          if (stockQtyNum > 0) {
+            await prisma.inventoryMovement.create({
+              data: {
+                inventoryId: newInventory.id,
+                type: 'STOCK_ADDED',
+                quantity: stockQtyNum,
+                referenceType: 'PRODUCT_UPDATE',
+                referenceId: id,
+                notes: `Initial stock set to ${stockQtyNum}`,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    // Fetch updated product with all relations
+    const updatedProduct = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        category: true,
+        brand: { select: { id: true, name: true } },
+        pricing: true,
+        images: true,
+        variants: true,
+        inventory: { include: { warehouse: { select: { id: true, name: true } } } },
+      },
+    });
+
+    return successResponse({ message: "Updated", product: updatedProduct });
   } catch (error) {
-    return errorResponse("Failed to update", 500);
+    console.error("Update product error:", error);
+    return errorResponse(error.message || "Failed to update", 500);
   }
 }
 
