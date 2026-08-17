@@ -7,7 +7,7 @@ import {
   Package, Store, LayoutDashboard, ShoppingCart, Warehouse,
   Truck, DollarSign, Users, Settings, BarChart3, ChevronLeft,
   FileText, RotateCcw, Bell, TrendingUp, Megaphone, Building2, Building, MessageSquare, Brain,
-  LogOut,
+  LogOut, Coins,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ const menuItems = [
     group: "Catalog",
     items: [
       { title: "Products", href: "/dashboard/supplier/products", icon: Package },
+      { title: "AI Credits", href: "/dashboard/supplier/ai-credits", icon: Coins },
       { title: "Pickup Locations", href: "/dashboard/warehouse", icon: Warehouse },
     ],
   },

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { ProductImportService } from '@/services/product-import.service';
+import { ImageGeneratorService } from '@/services/image-generator.service';
 import { MAX_FILE_SIZE, ALLOWED_MIME_TYPES } from '@/validators/product-import.validator';
 
 // POST - Import products from file
@@ -13,7 +14,8 @@ export async function POST(request) {
     }
 
     const supplierStaff = await prisma.supplierStaff.findFirst({
-      where: { userId: user.id }
+      where: { userId: user.id },
+      include: { supplier: { select: { businessName: true } } },
     });
 
     if (!supplierStaff) {
@@ -24,6 +26,7 @@ export async function POST(request) {
     const file = formData.get('file');
     const importMode = formData.get('importMode') || 'CREATE';
     const validateOnly = formData.get('validateOnly') === 'true';
+    const autoGenerateImages = formData.get('autoGenerateImages') === 'true';
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
@@ -108,6 +111,52 @@ export async function POST(request) {
       importMode
     );
 
+    // Auto-generate images for imported products
+    let imageResults = null;
+    const importedProductIds = importResult.products.map(p => p.id);
+    
+    if (importedProductIds.length > 0 && autoGenerateImages) {
+      // Fetch products that need images
+      const productsNeedingImages = await prisma.product.findMany({
+        where: {
+          id: { in: importedProductIds },
+          supplierId: supplierStaff.supplierId,
+          images: { none: {} },
+        },
+        include: { category: { select: { name: true } } },
+      });
+
+      if (productsNeedingImages.length > 0) {
+        // Generate images for all products
+        const generationResults = await ImageGeneratorService.bulkAutoGenerate(
+          productsNeedingImages,
+          supplierStaff.supplier.businessName
+        );
+
+        imageResults = generationResults;
+
+        // Auto-submit products that have mandatory fields + images
+        for (const product of productsNeedingImages) {
+          // Check mandatory fields
+          const hasPricing = await prisma.productPricing.count({ where: { productId: product.id } });
+          const hasInventory = await prisma.warehouseInventory.count({ where: { productId: product.id } });
+          const hasImage = await prisma.productImage.count({ where: { productId: product.id } });
+
+          if (product.name && product.categoryId && product.weight && hasPricing > 0 && hasInventory > 0 && hasImage > 0) {
+            // Auto-submit for approval
+            await prisma.product.update({
+              where: { id: product.id },
+              data: {
+                isActive: true,
+                isApproved: false,
+                rejectionReason: null,
+              },
+            });
+          }
+        }
+      }
+    }
+
     // Log audit
     await prisma.auditLog.create({
       data: {
@@ -122,6 +171,9 @@ export async function POST(request) {
           updated: importResult.updated,
           skipped: importResult.skipped,
           errors: importResult.errors.length,
+          autoGenerateImages,
+          imagesGenerated: imageResults?.success || 0,
+          imagesFailed: imageResults?.failed || 0,
         },
         ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
       }
@@ -138,6 +190,11 @@ export async function POST(request) {
         errors: importResult.errors,
         products: importResult.products.slice(0, 100), // Return first 100
       },
+      images: imageResults ? {
+        generated: imageResults.success,
+        failed: imageResults.failed,
+        products: imageResults.products,
+      } : null,
     });
 
   } catch (error) {

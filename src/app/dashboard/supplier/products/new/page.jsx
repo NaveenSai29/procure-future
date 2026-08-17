@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { ArrowLeft, Package, Plus, X, ChevronDown, ChevronUp, Building, MonitorSmartphone, Tags, Upload, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Package, Plus, X, ChevronDown, ChevronUp, Building, MonitorSmartphone, Tags, Upload, AlertTriangle, Image as ImageIcon, Loader2, CheckCircle, Coins } from "lucide-react";
 import AIGenerateButton from "@/components/products/AIGenerateButton";
 import SEOSection from "@/components/products/SEOSection";
 import HsnSearchInput from "@/components/products/HsnSearchInput";
@@ -52,6 +52,8 @@ export default function NewProductPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [submittingForApproval, setSubmittingForApproval] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [submitStage, setSubmitStage] = useState('idle'); // idle, saving, generating, done
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -84,6 +86,12 @@ export default function NewProductPage() {
   const [images, setImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
 
+  // Auto-generate image toggle
+  const [autoGenerateImage, setAutoGenerateImage] = useState(true);
+
+  // AI Credits state
+  const [aiCredits, setAiCredits] = useState(null);
+
   // Variants state
   const [variantType, setVariantType] = useState("");
   const [variants, setVariants] = useState([]);
@@ -99,6 +107,11 @@ export default function NewProductPage() {
     fetch("/api/categories").then(r => r.json()).then(d => { if (d.success) setCategories(d.data); });
     fetch("/api/admin/brands").then(r => r.json()).then(d => { if (d.brands) setBrands(d.brands); }).catch(() => {});
     fetch("/api/warehouses").then(r => r.text()).then(text => { if (!text) return; try { const d = JSON.parse(text); if (d.success) setWarehouses(d.data || []); else if (Array.isArray(d)) setWarehouses(d); } catch {} }).catch(() => {});
+    
+    // Fetch AI credits
+    fetch("/api/supplier/ai-credits").then(r => r.json()).then(d => { 
+      if (d.success) setAiCredits(d.data); 
+    }).catch(() => {});
   }, []);
 
   // Ctrl+S keyboard shortcut for Save Draft
@@ -164,6 +177,34 @@ export default function NewProductPage() {
       toast.error('Some images failed to upload');
     } finally {
       setUploadingImages(false);
+    }
+  };
+
+  // Auto-generate image for product
+  const autoGenerateForProduct = async (productId, productName, categoryName) => {
+    setGeneratingImage(true);
+    try {
+      const res = await fetch('/api/products/images/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productId,
+          action: 'auto-generate-and-attach',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('AI image generated successfully!');
+        return true;
+      } else {
+        console.error('Image generation failed:', data.error);
+        return false;
+      }
+    } catch (error) {
+      console.error('Image generation error:', error);
+      return false;
+    } finally {
+      setGeneratingImage(false);
     }
   };
 
@@ -240,14 +281,20 @@ export default function NewProductPage() {
     if (!weight) { toast.error("Weight is required for delivery"); return; }
     if (!warehouseId) { toast.error("Please select a pickup location for initial stock"); return; }
     if (!stockQty || parseInt(stockQty) < 0) { toast.error("Initial stock quantity is required"); return; }
-    if (images.length === 0) { toast.error("Please upload at least one product image"); return; }
 
     setLoading(true);
     setSubmittingForApproval(true);
+    setSubmitStage('saving');
     const pricing = pricingTiers.filter(t => t.mrp && t.sellingPrice).map(t => ({
       priceType: t.priceType, mrp: parseFloat(t.mrp), sellingPrice: parseFloat(t.sellingPrice), minQty: parseInt(t.minQty) || 1,
     }));
-    if (pricing.length === 0) { toast.error("Add at least one price"); setLoading(false); return; }
+    if (pricing.length === 0) { 
+      toast.error("Add at least one price"); 
+      setLoading(false); 
+      setSubmittingForApproval(false); 
+      setSubmitStage('idle');
+      return; 
+    }
 
     try {
       let finalBrandId = brandId || null;
@@ -278,7 +325,7 @@ export default function NewProductPage() {
           length: length || null, width: width || null, height: height || null,
           warranty: warranty || null, countryOfOrigin: countryOfOrigin || "India",
           pricing, warehouseId, stockQty: parseInt(stockQty) || 0,
-          isActive: images.length > 0,
+          isActive: true,
           isApproved: false,
           variants: variants.filter(v => v.value.trim()).map(v => ({
             type: variantType || 'Variant',
@@ -290,19 +337,64 @@ export default function NewProductPage() {
         }),
       });
       const result = await res.json();
+      
       if (result.success) {
         const productId = result.data.product.id;
+        
         // Upload images if any were selected
         if (images.length > 0) {
+          setSubmitStage('generating');
           await uploadImagesForProduct(productId);
+        } 
+        // Auto-generate AI image
+        else if (autoGenerateImage) {
+          setSubmitStage('generating');
+          setGeneratingImage(true);
+          
+          try {
+            const genRes = await fetch('/api/products/images/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                productId,
+                action: 'auto-generate-and-attach',
+              }),
+            });
+            const genData = await genRes.json();
+            
+            if (genData.success) {
+              toast.success('AI image generated!');
+            } else {
+              toast.warning('Product submitted. AI image generation failed.');
+            }
+          } catch (genError) {
+            console.error('Image generation error:', genError);
+            toast.warning('Product submitted. AI image generation failed.');
+          }
+          
+          setGeneratingImage(false);
         }
-        toast.success("Product created successfully!");
-        router.push('/dashboard/supplier/products');
+        
+        setSubmitStage('done');
+        toast.success("Product created and submitted for approval!");
+        
+        // Small delay so user sees the success state
+        setTimeout(() => {
+          router.push('/dashboard/supplier/products');
+        }, 1500);
+        
       } else {
         toast.error(result.message || result.error);
+        setSubmitStage('idle');
       }
-    } catch { toast.error("Failed"); }
-    finally { setLoading(false); setSubmittingForApproval(false); }
+    } catch { 
+      toast.error("Failed"); 
+      setSubmitStage('idle');
+    }
+    finally { 
+      setLoading(false); 
+      setSubmittingForApproval(false); 
+    }
   };
 
   const previewData = {
@@ -405,7 +497,43 @@ export default function NewProductPage() {
 
           {/* Product Images */}
           <div className="bg-background rounded-xl border p-6">
-            <h3 className="font-semibold text-gray-900 mb-3">Product Images * <span className="text-xs text-gray-400 font-normal">(At least 1 required)</span></h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Product Images <span className="text-xs text-gray-400 font-normal">(Optional - AI will auto-generate if empty)</span></h3>
+            
+            {/* Auto-Generate Toggle */}
+            {images.length === 0 && (
+              <div className="mb-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoGenerateImage}
+                    onChange={(e) => setAutoGenerateImage(e.target.checked)}
+                    className="h-4 w-4 text-purple-600 rounded border-purple-300"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-purple-800 flex items-center gap-1.5">
+                      <ImageIcon className="h-4 w-4" />
+                      Auto-generate AI image
+                    </p>
+                    <p className="text-xs text-purple-600 mt-0.5">
+                      AI creates image using product name, description, weight, and category
+                    </p>
+                    {aiCredits !== null && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <Coins className="h-3.5 w-3.5 text-purple-500" />
+                        <span className="text-xs text-purple-700 font-medium">
+                          {aiCredits.creditsRemaining} credits remaining
+                        </span>
+                        <span className="text-xs text-purple-400">•</span>
+                        <span className="text-xs text-purple-600">
+                          Costs {aiCredits.creditCostPerGeneration} credit(s)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </label>
+              </div>
+            )}
+            
             <div className="flex flex-wrap gap-3">
               {images.map((img, i) => (
                 <div key={i} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200">
@@ -421,7 +549,7 @@ export default function NewProductPage() {
                 <input type="file" multiple accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageSelect} />
               </label>
             </div>
-            <p className="text-xs text-gray-400 mt-2">Max 5MB each. JPG, PNG, or WebP.</p>
+            <p className="text-xs text-gray-400 mt-2">Max 5MB each. JPG, PNG, or WebP. Upload your own or let AI generate.</p>
           </div>
 
           {/* Weight & Dimensions */}
@@ -546,6 +674,19 @@ export default function NewProductPage() {
             )}
           </div>
 
+          {/* Generating Status Banner */}
+          {submitStage === 'generating' && (
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-center gap-3">
+              <Loader2 className="h-5 w-5 text-purple-600 animate-spin shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-purple-800">Generating AI image...</p>
+                <p className="text-xs text-purple-600 mt-0.5">
+                  Creating "{name}" using {selectedCategory?.name || 'category'} category, {weight}kg weight{description ? ', and description' : ''}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <Button 
               type="button" 
@@ -553,7 +694,7 @@ export default function NewProductPage() {
               className="flex-1" 
               size="lg"
               onClick={handleSaveDraft}
-              disabled={loading}
+              disabled={loading || generatingImage}
             >
               Save as Draft
             </Button>
@@ -561,10 +702,30 @@ export default function NewProductPage() {
               type="submit" 
               className="flex-1" 
               size="lg" 
-              loading={loading && submittingForApproval}
-              disabled={loading}
+              disabled={loading || generatingImage}
             >
-              {images.length === 0 ? "Upload Image to Submit" : "Submit for Approval"}
+              {submitStage === 'saving' ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving Product...
+                </>
+              ) : submitStage === 'generating' ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating AI Image...
+                </>
+              ) : submitStage === 'done' ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                  Submitted!
+                </>
+              ) : images.length === 0 && autoGenerateImage ? (
+                "Submit with AI Image"
+              ) : images.length === 0 && !autoGenerateImage ? (
+                "Submit without Image"
+              ) : (
+                "Submit for Approval"
+              )}
             </Button>
           </div>
         </form>

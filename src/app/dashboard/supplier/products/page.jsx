@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { 
   Plus, Package, Search, Edit, Trash2, Eye, EyeOff, X,
   Upload, Download, FileSpreadsheet, FileCode, Tags,
-  ArrowUpDown, CheckSquare, Square, AlertTriangle
+  ArrowUpDown, CheckSquare, Square, AlertTriangle, Coins
 } from "lucide-react";
 import BulkImportDialog from "@/components/shared/BulkImportDialog";
 
@@ -66,10 +66,16 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState("date");
   const [sortOrder, setSortOrder] = useState("desc");
 
+  // AI Credits state
+  const [aiCredits, setAiCredits] = useState(null);
+
   // Confirm popup state
   const [confirmPopup, setConfirmPopup] = useState(null); // { title, message, confirmText, type, onConfirm }
 
-  useEffect(() => { fetchProducts(); }, []);
+  useEffect(() => { 
+    fetchProducts(); 
+    fetchAiCredits();
+  }, []);
 
   const fetchProducts = async () => {
     try {
@@ -81,6 +87,16 @@ export default function ProductsPage() {
       if (data.success) setProducts(data.data.products);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
+  };
+
+  const fetchAiCredits = async () => {
+    try {
+      const res = await fetch('/api/supplier/ai-credits');
+      const data = await res.json();
+      if (data.success) {
+        setAiCredits(data.data);
+      }
+    } catch (err) { console.error('Failed to fetch AI credits:', err); }
   };
 
   const toggleActive = async (productId, currentStatus) => {
@@ -465,6 +481,33 @@ export default function ProductsPage() {
             <Button size="sm" variant="ghost" onClick={() => { setSelectedIds([]); setSelectAll(false); }}>
               <X className="h-4 w-4 mr-1" /> Clear
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* AI Credits Bar */}
+      {aiCredits !== null && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <Coins className="h-5 w-5 text-purple-600" />
+            <div>
+              <p className="text-sm font-semibold text-purple-800">
+                AI Credits: {aiCredits.creditsRemaining} remaining
+              </p>
+              <p className="text-xs text-purple-600 mt-0.5">
+                {aiCredits.maxGenerationsPerProduct} AI images per product allowed
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-purple-600">
+            <span>Used: {aiCredits.totalGenerationsUsed}</span>
+            <span className="w-px h-4 bg-purple-300"></span>
+            <span>Cost: {aiCredits.creditCostPerGeneration} credit(s)/image</span>
+            {aiCredits.creditsRemaining <= 10 && (
+              <span className="bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
+                Low balance
+              </span>
+            )}
           </div>
         </div>
       )}

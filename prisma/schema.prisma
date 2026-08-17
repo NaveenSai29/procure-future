@@ -326,6 +326,8 @@ model Supplier {
   processingSlaHours Int                 @default(4)
   pickupSlaHours    Int                  @default(2)
   autoCancelEnabled Boolean              @default(true)
+  aiCredits       Int                 @default(100)
+  aiGenerationsUsed Int               @default(0)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   deletedAt      DateTime?
@@ -355,6 +357,8 @@ model Supplier {
   customerMessages CustomerMessage[]
   dedicatedAgents   SupplierAgent[]
   orderSLAs         OrderSLA[]
+  aiGenerationLogs  AIGenerationLog[]
+  aiCreditPurchases AICreditPurchase[]
 }
 
 model SupplierBranch {
@@ -604,6 +608,7 @@ model Product {
   warehouseBins    WarehouseBin[]
   offerProducts    OfferProduct[]
   sponsoredEntries SponsoredProduct[]
+  aiGenerationLogs AIGenerationLog[]
   
 
   @@unique([supplierId, slug])
@@ -1967,6 +1972,57 @@ model DeliveryChatMessage {
   
   @@index([deliveryId])
   @@index([senderId])
+}
+
+// ============================================
+// AI GENERATION MODULE
+// ============================================
+
+model AIGenerationLog {
+  id          String   @id @default(uuid())
+  supplierId  String
+  productId   String
+  action      String   // GENERATE, REGENERATE
+  prompt      String?  @db.Text
+  imageUrl    String?
+  status      String   @default("SUCCESS") // SUCCESS, FAILED
+  errorMessage String? @db.Text
+  createdAt   DateTime @default(now())
+
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId, productId])
+  @@index([supplierId, createdAt])
+  @@index([productId])
+}
+
+model AIGenerationSetting {
+  id                        String   @id @default(uuid())
+  freeCredits               Int      @default(100)
+  maxGenerationsPerProduct  Int      @default(3)
+  creditCostPerGeneration   Int      @default(1)
+  creditPricePerUnit        Float    @default(1.0)
+  isEnabled                 Boolean  @default(true)
+  updatedAt                 DateTime @updatedAt
+  createdAt                 DateTime @default(now())
+}
+
+model AICreditPurchase {
+  id              String   @id @default(uuid())
+  supplierId      String
+  creditsPurchased Int
+  amount          Float
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  status          String   @default("PENDING") // PENDING, COMPLETED, FAILED
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  supplier        Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@index([status])
 }
 
 // ============================================

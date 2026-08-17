@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import {
   Upload, Download, FileSpreadsheet, X, CheckCircle,
   AlertTriangle, XCircle, FileText, Loader2, Eye, ArrowRight,
-  Info, FileCode
+  Info, FileCode, Image as ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ImportProgress from './ImportProgress';
@@ -15,6 +15,7 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess, mode = 'c
   const [file, setFile] = useState(null);
   const [importMode, setImportMode] = useState('CREATE');
   const [validateOnly, setValidateOnly] = useState(false);
+  const [autoGenerateImages, setAutoGenerateImages] = useState(true);
   const [validationResult, setValidationResult] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const [progress, setProgress] = useState(0);
@@ -85,6 +86,7 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess, mode = 'c
     const formData = new FormData();
     formData.append('file', file);
     formData.append('importMode', importMode);
+    formData.append('autoGenerateImages', autoGenerateImages ? 'true' : 'false');
 
     try {
       // Simulate progress
@@ -262,6 +264,30 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess, mode = 'c
                 </select>
               </div>
 
+              {/* Auto-Generate Images Toggle */}
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoGenerateImages}
+                    onChange={(e) => setAutoGenerateImages(e.target.checked)}
+                    className="mt-1 h-4 w-4 text-purple-600 rounded border-purple-300 focus:ring-purple-500"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4 text-purple-600" />
+                      <span className="text-sm font-semibold text-purple-800">
+                        Auto-Generate Product Images
+                      </span>
+                    </div>
+                    <p className="text-xs text-purple-700 mt-1">
+                      Products without images will get AI-generated images automatically. 
+                      Products with all mandatory fields will auto-submit for approval.
+                    </p>
+                  </div>
+                </label>
+              </div>
+
               {/* Drop Zone */}
               <div
                 onDragOver={(e) => e.preventDefault()}
@@ -404,7 +430,9 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess, mode = 'c
               <div className="text-center">
                 <Loader2 className="h-12 w-12 text-blue-500 animate-spin mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900">Importing Products...</h3>
-                <p className="text-sm text-gray-500 mt-1">Please wait while we process your file</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {autoGenerateImages ? 'Importing and generating images...' : 'Please wait while we process your file'}
+                </p>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                 <div
@@ -438,6 +466,22 @@ export default function BulkImportDialog({ isOpen, onClose, onSuccess, mode = 'c
                   <p className="text-sm text-gray-600">Skipped</p>
                 </div>
               </div>
+
+              {/* Image Generation Results */}
+              {importResult.images && (
+                <div className="bg-purple-50 rounded-xl p-4">
+                  <p className="text-sm font-semibold text-purple-800 flex items-center gap-2">
+                    <ImageIcon className="h-4 w-4" /> Image Generation
+                  </p>
+                  <p className="text-sm text-purple-700 mt-1">
+                    ✅ {importResult.images.generated} images generated
+                    {importResult.images.failed > 0 && ` | ⚠️ ${importResult.images.failed} failed`}
+                  </p>
+                  <p className="text-xs text-purple-600 mt-1">
+                    Products with all mandatory fields have been auto-submitted for approval.
+                  </p>
+                </div>
+              )}
 
               {importResult.import.errors.length > 0 && (
                 <ImportErrors
