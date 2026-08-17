@@ -21,7 +21,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { productId, action } = body; // action: 'generate' | 'search' | 'variations'
+    const { productId, action } = body;
 
     if (!productId) {
       return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
@@ -33,7 +33,7 @@ export async function POST(request) {
         id: productId,
         supplierId: supplierStaff.supplierId,
       },
-      include: { category: { select: { name: true } } },
+      include: { category: { select: { name: true } }, brand: { select: { name: true } } },
     });
 
     if (!product) {
@@ -73,6 +73,79 @@ export async function POST(request) {
         return NextResponse.json({
           success: result.success,
           data: result,
+        });
+      }
+
+      case 'generate-temp': {
+        // Check generation allowed (credits + per-product limit)
+        const check = await ImageGeneratorService.checkGenerationAllowed(
+          supplierStaff.supplierId,
+          productId
+        );
+
+        if (!check.allowed) {
+          return NextResponse.json({
+            success: false,
+            error: check.reason,
+            blocked: true,
+            data: {
+              creditsRemaining: check.creditsRemaining || 0,
+              generationsUsed: check.generationsUsed,
+              maxGenerations: check.maxGenerations,
+            },
+          }, { status: 403 });
+        }
+
+        // Get current generation count for angle tracking
+        const existingGenerations = await prisma.aIGenerationLog.count({
+          where: {
+            supplierId: supplierStaff.supplierId,
+            productId,
+            status: 'SUCCESS',
+            action: 'GENERATE',
+          },
+        });
+
+        // Generate AI image (temporary - not saved to database)
+        const result = await ImageGeneratorService.generateAI(
+          product.name,
+          product.category?.name || 'Product',
+          product.description || '',
+          product.weight ? String(product.weight) : '',
+          product.unit || 'PCS',
+          product.brand?.name || '',
+          existingGenerations
+        );
+
+        if (!result.success) {
+          return NextResponse.json({ error: result.error }, { status: 500 });
+        }
+
+        // Deduct credit immediately
+        const settings = await ImageGeneratorService.getSettings();
+        await ImageGeneratorService.deductCredits(supplierStaff.supplierId, settings.creditCostPerGeneration);
+        
+        // Log generation (status: PENDING_Save - will update on submit)
+        await ImageGeneratorService.logGeneration(
+          supplierStaff.supplierId,
+          productId,
+          'GENERATE',
+          result.prompt,
+          result.imageUrl,
+          'SUCCESS'
+        );
+
+        // Get updated credits
+        const creditInfo = await ImageGeneratorService.getSupplierCredits(supplierStaff.supplierId);
+
+        return NextResponse.json({
+          success: true,
+          data: {
+            ...result,
+            imageUrl: result.imageUrl,
+            creditsRemaining: creditInfo.creditsRemaining,
+            creditsDeducted: settings.creditCostPerGeneration,
+          },
         });
       }
 
@@ -124,6 +197,59 @@ export async function POST(request) {
         return NextResponse.json({
           success: true,
           data: { images },
+        });
+      }
+
+      case 'save-generated': {
+        // Save all generated images to product (called on submit)
+        const imageUrls = body.imageUrls || [];
+        
+        if (imageUrls.length === 0) {
+          return NextResponse.json({ error: 'No images to save' }, { status: 400 });
+        }
+
+        const savedImages = [];
+        
+        for (const imageUrl of imageUrls) {
+          // Download and save to server
+          const savedImage = await ImageGeneratorService.downloadAndSaveImage(
+            imageUrl,
+            productId,
+            'AI_GENERATED'
+          );
+
+          if (savedImage.success) {
+            // Attach to product
+            const productImage = await prisma.productImage.create({
+              data: {
+                productId,
+                url: savedImage.url,
+                alt: product.name,
+                sortOrder: 0,
+                isPrimary: false,
+              },
+            });
+            
+            // Save to Media library
+            await prisma.media.create({
+              data: {
+                fileName: savedImage.url.split('/').pop(),
+                originalName: `${product.name}-ai-generated.jpg`,
+                fileUrl: savedImage.url,
+                fileType: 'image/jpeg',
+                fileSize: 0,
+                entityType: 'PRODUCT',
+                entityId: productId,
+              },
+            });
+            
+            savedImages.push(productImage);
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          data: { images: savedImages },
         });
       }
 
@@ -204,7 +330,6 @@ export async function POST(request) {
         );
 
         if (!result.success) {
-          // Check if blocked (credits/limit issue)
           if (result.blocked) {
             return NextResponse.json({
               success: false,
@@ -225,7 +350,6 @@ export async function POST(request) {
           }, { status: 500 });
         }
 
-        // Fetch the created image to get its ID
         const createdImage = await prisma.productImage.findFirst({
           where: { 
             productId,
@@ -244,7 +368,6 @@ export async function POST(request) {
       }
 
       case 'credits': {
-        // Get supplier credit info
         const creditInfo = await ImageGeneratorService.getSupplierCredits(supplierStaff.supplierId);
         
         return NextResponse.json({

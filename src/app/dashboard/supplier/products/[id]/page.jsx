@@ -94,6 +94,12 @@ export default function EditProductPage() {
   // Images state
   const [images, setImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(false);
+  
+  // Temporary AI-generated images (not yet saved to database)
+  const [tempGeneratedImages, setTempGeneratedImages] = useState([]);
+  
+  // Track if there are unsaved changes
+  const [hasUnsavedImages, setHasUnsavedImages] = useState(false);
 
   // AI Credits state
   const [aiCredits, setAiCredits] = useState(null);
@@ -275,7 +281,7 @@ export default function EditProductPage() {
     }
   };
 
-  // Generate AI image NOW (deduct credit immediately)
+  // Generate AI image NOW (deduct credit, temporary - not saved until submit)
   const handleGenerateAIImage = async () => {
     setGeneratingImage(true);
     try {
@@ -284,18 +290,20 @@ export default function EditProductPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: id,
-          action: 'auto-generate-and-attach',
+          action: 'generate-temp',
         }),
       });
       const data = await res.json();
       if (data.success) {
-        toast.success('AI image generated! Credit deducted.');
-        // Add generated image to gallery with ID
+        toast.success('AI image generated! Click Save/Submit to keep it.');
+        // Add to temporary gallery (not saved to database yet)
         setImages(prev => [...prev, { 
-          url: data.data.url, 
-          id: data.data.imageId || null, 
-          source: 'AI_GENERATED' 
+          url: data.data.imageUrl, 
+          source: 'AI_GENERATED',
+          temp: true,
         }]);
+        setTempGeneratedImages(prev => [...prev, data.data.imageUrl]);
+        setHasUnsavedImages(true);
         // Refresh credits
         fetch("/api/supplier/ai-credits").then(r => r.json()).then(d => { 
           if (d.success) setAiCredits(d.data); 
@@ -369,6 +377,20 @@ export default function EditProductPage() {
       });
       const result = await res.json();
       if (result.success) { 
+        // Save temporary AI-generated images
+        if (tempGeneratedImages.length > 0) {
+          await fetch('/api/products/images/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              productId: id,
+              action: 'save-generated',
+              imageUrls: tempGeneratedImages,
+            }),
+          });
+          setTempGeneratedImages([]);
+          setHasUnsavedImages(false);
+        }
         toast.success("Draft saved!"); 
         router.push("/dashboard/supplier/products"); 
       }
@@ -453,6 +475,21 @@ export default function EditProductPage() {
       });
       const result = await res.json();
       if (result.success) { 
+        // Save temporary AI-generated images to database
+        if (tempGeneratedImages.length > 0) {
+          await fetch('/api/products/images/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              productId: id,
+              action: 'save-generated',
+              imageUrls: tempGeneratedImages,
+            }),
+          });
+          setTempGeneratedImages([]);
+          setHasUnsavedImages(false);
+        }
+        
         setSubmitStage('done');
         if (isNoChange) {
           toast.info("No changes detected. Product remains live."); 
@@ -524,9 +561,31 @@ export default function EditProductPage() {
       />
 
       <div className="flex items-center justify-between">
-        <Link href="/dashboard/supplier/products" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <button 
+          type="button"
+          onClick={() => {
+            if (hasUnsavedImages || tempGeneratedImages.length > 0) {
+              setConfirmPopup({
+                title: "Unsaved AI Images",
+                message: `You have ${tempGeneratedImages.length} unsaved AI-generated image(s). ${tempGeneratedImages.length} credit(s) will be wasted if you leave without saving.`,
+                confirmText: "Discard & Leave",
+                cancelText: "Stay & Save",
+                type: 'danger',
+                onConfirm: () => {
+                  setTempGeneratedImages([]);
+                  setHasUnsavedImages(false);
+                  router.push('/dashboard/supplier/products');
+                },
+                onCancel: () => setConfirmPopup(null),
+              });
+            } else {
+              router.push('/dashboard/supplier/products');
+            }
+          }}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft className="h-4 w-4" /> Back to Products
-        </Link>
+        </button>
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
           <button type="button" onClick={() => setPreviewMode('detail')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${previewMode === 'detail' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Detail View</button>
           <button type="button" onClick={() => setPreviewMode('card')} className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${previewMode === 'card' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>Card View</button>
