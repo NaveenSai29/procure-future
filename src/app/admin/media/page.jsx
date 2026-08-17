@@ -8,6 +8,35 @@ import {
 import { toast } from "sonner";
 import MediaGrid from "@/components/media/MediaGrid";
 
+// Custom Confirm Popup
+function ConfirmPopup({ isOpen, title, message, confirmText, onConfirm, onCancel, type = 'warning' }) {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-start gap-3">
+          <div className={`p-2 rounded-full ${type === 'danger' ? 'bg-red-100' : 'bg-yellow-100'}`}>
+            <AlertTriangle className={`h-5 w-5 ${type === 'danger' ? 'text-red-600' : 'text-yellow-600'}`} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+            <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button onClick={onCancel} className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition">
+            Cancel
+          </button>
+          <button onClick={onConfirm} className={`flex-1 px-4 py-2.5 text-white rounded-lg text-sm font-medium transition ${type === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+            {confirmText || "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function formatSize(bytes) {
   if (!bytes) return "0 KB";
   if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
@@ -26,6 +55,7 @@ export default function AdminMediaPage() {
   const [previewFile, setPreviewFile] = useState(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [confirmPopup, setConfirmPopup] = useState(null);
 
   // Upload state
   const [showUpload, setShowUpload] = useState(false);
@@ -121,19 +151,28 @@ export default function AdminMediaPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Delete ${selectedIds.length} files permanently? This cannot be undone.`)) return;
-
-    setBulkDeleting(true);
-    try {
-      await fetch(`/api/admin/media?ids=${selectedIds.join(",")}`, { method: "DELETE" });
-      toast.success(`${selectedIds.length} files deleted`);
-      setSelectedIds([]);
-      fetchMedia();
-    } catch {
-      toast.error("Failed to delete");
-    } finally {
-      setBulkDeleting(false);
-    }
+    
+    setConfirmPopup({
+      title: "Delete Files",
+      message: `Delete ${selectedIds.length} files permanently? This cannot be undone.`,
+      confirmText: "Delete",
+      type: 'danger',
+      onConfirm: async () => {
+        setBulkDeleting(true);
+        try {
+          await fetch(`/api/admin/media?ids=${selectedIds.join(",")}`, { method: "DELETE" });
+          toast.success(`${selectedIds.length} files deleted`);
+          setSelectedIds([]);
+          fetchMedia();
+        } catch {
+          toast.error("Failed to delete");
+        } finally {
+          setBulkDeleting(false);
+        }
+        setConfirmPopup(null);
+      },
+      onCancel: () => setConfirmPopup(null),
+    });
   };
 
   const stats = data?.stats || {};
@@ -143,6 +182,16 @@ export default function AdminMediaPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Custom Confirm Popup */}
+      <ConfirmPopup 
+        isOpen={!!confirmPopup}
+        title={confirmPopup?.title}
+        message={confirmPopup?.message}
+        confirmText={confirmPopup?.confirmText}
+        type={confirmPopup?.type}
+        onConfirm={confirmPopup?.onConfirm}
+        onCancel={confirmPopup?.onCancel}
+      />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -392,6 +392,19 @@ export class ImageGeneratorService {
             },
           });
           
+          // Save to Media library
+          await prisma.media.create({
+            data: {
+              fileName: savedImage.url.split('/').pop(),
+              originalName: `${product.name}-ai-generated.jpg`,
+              fileUrl: savedImage.url,
+              fileType: 'image/jpeg',
+              fileSize: 0,
+              entityType: 'PRODUCT',
+              entityId: product.id,
+            },
+          });
+          
           // Deduct credits
           await this.deductCredits(product.supplierId, settings.creditCostPerGeneration);
           
@@ -439,6 +452,19 @@ export class ImageGeneratorService {
             alt: product.name,
             sortOrder: 0,
             isPrimary: true,
+          },
+        });
+        
+        // Save to Media library
+        await prisma.media.create({
+          data: {
+            fileName: savedPlaceholder.url.split('/').pop(),
+            originalName: `${product.name}-placeholder.svg`,
+            fileUrl: savedPlaceholder.url,
+            fileType: 'image/svg+xml',
+            fileSize: 0,
+            entityType: 'PRODUCT',
+            entityId: product.id,
           },
         });
         

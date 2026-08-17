@@ -20,6 +20,7 @@ export async function GET(req) {
       where.rejectionReason = null;
     } else if (status === "APPROVED") {
       where.isApproved = true;
+      where.isActive = true;
     } else if (status === "INACTIVE") {
       where.isActive = false;
     } else if (status === "REJECTED") {
@@ -33,7 +34,11 @@ export async function GET(req) {
       where.OR = [
         { name: { contains: search } },
         { sku: { contains: search } },
+        { barcode: { contains: search } },
+        { hsnCode: { contains: search } },
         { supplier: { businessName: { contains: search } } },
+        { category: { name: { contains: search } } },
+        { brand: { name: { contains: search } } },
       ];
     }
 
@@ -41,10 +46,11 @@ export async function GET(req) {
       prisma.product.findMany({
         where,
         include: {
-          supplier: { select: { id: true, businessName: true, isVerified: true } },
+          supplier: { select: { id: true, businessName: true, isVerified: true, email: true, mobile: true } },
           category: { select: { id: true, name: true } },
           brand: { select: { id: true, name: true } },
-          pricing: { take: 1, orderBy: { minQty: "asc" } },
+          pricing: { orderBy: { minQty: "asc" } },
+          images: { take: 1, orderBy: { sortOrder: "asc" } },
           inventory: { select: { availableQty: true, warehouse: { select: { name: true } } } },
           _count: { select: { variants: true, images: true } },
         },
@@ -100,7 +106,7 @@ export async function PATCH(request) {
       } else if (action === "REJECT") {
         updateData.isApproved = false;
         updateData.isActive = false;
-        updateData.rejectionReason = "Rejected by admin";
+        updateData.rejectionReason = rejectionReason || "Rejected by admin";
       } else if (action === "ACTIVATE") {
         updateData.isActive = true;
       } else if (action === "DEACTIVATE") {
@@ -115,6 +121,34 @@ export async function PATCH(request) {
         where: { id: { in: productIds } },
         data: updateData,
       });
+
+      // Notify suppliers for approve/reject
+      if (action === "APPROVE" || action === "REJECT") {
+        const affectedProducts = await prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, name: true, supplierId: true },
+        });
+        
+        for (const product of affectedProducts) {
+          const supplierStaff = await prisma.supplierStaff.findFirst({
+            where: { supplierId: product.supplierId },
+            select: { userId: true },
+          });
+          
+          if (supplierStaff) {
+            await prisma.notification.create({
+              data: {
+                userId: supplierStaff.userId,
+                type: action === "APPROVE" ? "PRODUCT_APPROVED" : "PRODUCT_REJECTED",
+                title: action === "APPROVE" ? "Product Approved ✅" : "Product Rejected ❌",
+                message: action === "APPROVE" 
+                  ? `Your product "${product.name}" has been approved and is now live.`
+                  : `Your product "${product.name}" was rejected. Reason: ${updateData.rejectionReason}`,
+              },
+            });
+          }
+        }
+      }
 
       // Log audit
       await prisma.auditLog.create({
@@ -147,6 +181,9 @@ export async function PATCH(request) {
     const product = await prisma.product.update({
       where: { id: productId },
       data: updateData,
+      include: {
+        supplier: { select: { id: true, businessName: true } },
+      },
     });
 
     // Notify supplier if approved
@@ -178,7 +215,7 @@ export async function PATCH(request) {
           data: {
             userId: supplierStaff.userId,
             type: "PRODUCT_REJECTED",
-            title: "Product Rejected",
+            title: "Product Rejected ❌",
             message: `Your product "${product.name}" was rejected. Reason: ${rejectionReason}`,
           },
         });
@@ -199,5 +236,36 @@ export async function PATCH(request) {
   } catch (error) {
     console.error("Product update error:", error);
     return errorResponse("Failed to update product", 500);
+  }
+}
+
+// DELETE - Delete product
+export async function DELETE(request) {
+  try {
+    const session = await getSessionUser();
+    if (!session) return errorResponse("Not authenticated", 401);
+
+    const { searchParams } = new URL(request.url);
+    const productId = searchParams.get("productId");
+
+    if (!productId) return errorResponse("productId is required", 400);
+
+    await prisma.product.delete({
+      where: { id: productId },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: session.userId,
+        action: "PRODUCT_DELETED",
+        entity: "Product",
+        entityId: productId,
+      },
+    });
+
+    return successResponse({ message: "Product deleted" });
+  } catch (error) {
+    console.error("Product delete error:", error);
+    return errorResponse("Failed to delete product", 500);
   }
 }

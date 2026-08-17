@@ -4,8 +4,47 @@ import { useEffect, useState } from "react";
 import {
   Package, CheckCircle, XCircle, Search,
   Ban, AlertCircle, Loader2, Store, Boxes,
+  Image as ImageIcon, ArrowUpDown, Trash2, Eye,
+  Download, AlertTriangle, ChevronDown, ChevronUp
 } from "lucide-react";
 import { toast } from "sonner";
+
+// Custom Confirm Popup
+function ConfirmPopup({ isOpen, title, message, confirmText, onConfirm, onCancel, type = 'warning' }) {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+        <div className="flex items-start gap-3">
+          <div className={`p-2 rounded-full ${type === 'danger' ? 'bg-red-100' : 'bg-yellow-100'}`}>
+            <AlertTriangle className={`h-5 w-5 ${type === 'danger' ? 'text-red-600' : 'text-yellow-600'}`} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+            <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{message}</p>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`flex-1 px-4 py-2.5 text-white rounded-lg text-sm font-medium transition ${
+              type === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {confirmText || "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminProductsPage() {
   const [data, setData] = useState(null);
@@ -14,11 +53,25 @@ export default function AdminProductsPage() {
   const [supplierFilter, setSupplierFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectLoading, setRejectLoading] = useState(false);
+  
+  // Sort state
+  const [sortBy, setSortBy] = useState("date");
+  const [sortOrder, setSortOrder] = useState("desc");
+  
+  // Detail modal state
+  const [detailProduct, setDetailProduct] = useState(null);
+  
+  // Confirm popup state
+  const [confirmPopup, setConfirmPopup] = useState(null);
+  
+  // Delete state
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -28,7 +81,7 @@ export default function AdminProductsPage() {
       if (supplierFilter) params.set("supplierId", supplierFilter);
       if (searchTerm) params.set("search", searchTerm);
       params.set("page", page.toString());
-      params.set("limit", "20");
+      params.set("limit", limit.toString());
 
       const res = await fetch(`/api/admin/products?${params.toString()}`);
       const json = await res.json();
@@ -40,7 +93,7 @@ export default function AdminProductsPage() {
     }
   };
 
-  useEffect(() => { fetchProducts(); }, [statusFilter, supplierFilter, page]);
+  useEffect(() => { fetchProducts(); }, [statusFilter, supplierFilter, page, limit]);
   useEffect(() => { setPage(1); }, [statusFilter, supplierFilter]);
 
   const handleSearch = () => {
@@ -91,7 +144,7 @@ export default function AdminProductsPage() {
     }
   };
 
-  const handleBulkAction = async (action) => {
+  const handleBulkAction = (action) => {
     if (selectedIds.length === 0) {
       toast.error("Select products first");
       return;
@@ -104,26 +157,92 @@ export default function AdminProductsPage() {
       DEACTIVATE: "deactivate",
     };
 
-    if (!confirm(`Are you sure you want to ${actionLabels[action]} ${selectedIds.length} products?`)) return;
-
-    setBulkLoading(true);
-    try {
-      const res = await fetch("/api/admin/products", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productIds: selectedIds, action }),
+    if (action === "REJECT") {
+      // Show reject modal for bulk
+      setConfirmPopup({
+        title: "Bulk Reject Products",
+        message: `Reject ${selectedIds.length} product(s)? This will deactivate them.`,
+        confirmText: "Reject All",
+        type: 'danger',
+        onConfirm: async () => {
+          setBulkLoading(true);
+          try {
+            const res = await fetch("/api/admin/products", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ productIds: selectedIds, action: "REJECT" }),
+            });
+            const json = await res.json();
+            if (json.success) {
+              toast.success(`${selectedIds.length} products rejected!`);
+              setSelectedIds([]);
+              fetchProducts();
+            }
+          } catch {
+            toast.error("Bulk action failed");
+          } finally {
+            setBulkLoading(false);
+          }
+          setConfirmPopup(null);
+        },
+        onCancel: () => setConfirmPopup(null),
       });
-      const json = await res.json();
-      if (json.success) {
-        toast.success(`${selectedIds.length} products updated!`);
-        setSelectedIds([]);
-        fetchProducts();
-      }
-    } catch {
-      toast.error("Bulk action failed");
-    } finally {
-      setBulkLoading(false);
+      return;
     }
+
+    setConfirmPopup({
+      title: `Bulk ${actionLabels[action]}`,
+      message: `${actionLabels[action].charAt(0).toUpperCase() + actionLabels[action].slice(1)} ${selectedIds.length} product(s)?`,
+      confirmText: actionLabels[action],
+      type: action === "APPROVE" ? 'success' : 'warning',
+      onConfirm: async () => {
+        setBulkLoading(true);
+        try {
+          const res = await fetch("/api/admin/products", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ productIds: selectedIds, action }),
+          });
+          const json = await res.json();
+          if (json.success) {
+            toast.success(`${selectedIds.length} products updated!`);
+            setSelectedIds([]);
+            fetchProducts();
+          }
+        } catch {
+          toast.error("Bulk action failed");
+        } finally {
+          setBulkLoading(false);
+        }
+        setConfirmPopup(null);
+      },
+      onCancel: () => setConfirmPopup(null),
+    });
+  };
+
+  const handleDeleteProduct = (product) => {
+    setConfirmPopup({
+      title: "Delete Product",
+      message: `Permanently delete "${product.name}"? This action cannot be undone.`,
+      confirmText: "Delete",
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/products/${product.id}`, { method: "DELETE" });
+          const json = await res.json();
+          if (json.success) {
+            toast.success("Product deleted");
+            fetchProducts();
+          } else {
+            toast.error("Failed to delete");
+          }
+        } catch {
+          toast.error("Failed to delete");
+        }
+        setConfirmPopup(null);
+      },
+      onCancel: () => setConfirmPopup(null),
+    });
   };
 
   const toggleSelect = (id) => {
@@ -133,15 +252,39 @@ export default function AdminProductsPage() {
   };
 
   const toggleSelectAll = () => {
-    const products = data?.products || [];
-    if (selectedIds.length === products.length) {
+    const sortedProducts = getSortedProducts();
+    if (selectedIds.length === sortedProducts.length && sortedProducts.length > 0) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(products.map((p) => p.id));
+      setSelectedIds(sortedProducts.map((p) => p.id));
     }
   };
 
-  const products = data?.products || [];
+  // Sort products client-side
+  const getSortedProducts = () => {
+    const products = data?.products || [];
+    const multiplier = sortOrder === "asc" ? 1 : -1;
+    
+    return [...products].sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return multiplier * (a.name || "").localeCompare(b.name || "");
+        case "price":
+          const priceA = a.pricing?.[0]?.sellingPrice || 0;
+          const priceB = b.pricing?.[0]?.sellingPrice || 0;
+          return multiplier * (priceA - priceB);
+        case "stock":
+          const stockA = a.inventory?.reduce((s, i) => s + (i.availableQty || 0), 0) || 0;
+          const stockB = b.inventory?.reduce((s, i) => s + (i.availableQty || 0), 0) || 0;
+          return multiplier * (stockA - stockB);
+        case "date":
+        default:
+          return multiplier * (new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+      }
+    });
+  };
+
+  const products = getSortedProducts();
   const suppliers = data?.suppliers || [];
   const stats = data?.stats || {};
   const pagination = data?.pagination || {};
@@ -149,27 +292,44 @@ export default function AdminProductsPage() {
   const tabs = [
     { value: "ALL", label: "All", count: stats.total || 0 },
     { value: "PENDING", label: "Pending", count: stats.pending || 0 },
-    { value: "APPROVED", label: "Approved", count: stats.approved || 0 },
+    { value: "APPROVED", label: "Live", count: stats.approved || 0 },
+    { value: "REJECTED", label: "Rejected", count: stats.rejected || 0 },
     { value: "INACTIVE", label: "Inactive", count: stats.inactive || 0 },
   ];
 
+  const isLowStock = (p) => {
+    const totalStock = p.inventory?.reduce((s, i) => s + (i.availableQty || 0), 0) || 0;
+    return totalStock > 0 && totalStock <= 10;
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Custom Confirm Popup */}
+      <ConfirmPopup 
+        isOpen={!!confirmPopup}
+        title={confirmPopup?.title}
+        message={confirmPopup?.message}
+        confirmText={confirmPopup?.confirmText}
+        type={confirmPopup?.type}
+        onConfirm={confirmPopup?.onConfirm}
+        onCancel={confirmPopup?.onCancel}
+      />
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Package className="h-7 w-7 text-blue-600" />
             Products
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            {stats.total || 0} total • {stats.pending || 0} pending approval
+            {stats.total || 0} total • {stats.pending || 0} pending • {stats.rejected || 0} rejected
           </p>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="bg-white rounded-xl border p-4">
           <p className="text-2xl font-bold">{stats.total || 0}</p>
           <p className="text-sm text-gray-500">Total</p>
@@ -183,66 +343,110 @@ export default function AdminProductsPage() {
           <p className="text-sm text-green-600">Live</p>
         </div>
         <div className="bg-white rounded-xl border border-red-200 p-4">
-          <p className="text-2xl font-bold text-red-700">{stats.inactive || 0}</p>
-          <p className="text-sm text-red-600">Inactive</p>
+          <p className="text-2xl font-bold text-red-700">{stats.rejected || 0}</p>
+          <p className="text-sm text-red-600">Rejected</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-2xl font-bold text-gray-700">{stats.inactive || 0}</p>
+          <p className="text-sm text-gray-500">Inactive</p>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setStatusFilter(tab.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                statusFilter === tab.value
-                  ? "bg-white shadow-sm text-gray-900"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1 flex-wrap">
+            {tabs.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setStatusFilter(tab.value)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                  statusFilter === tab.value
+                    ? "bg-white shadow-sm text-gray-900"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {tab.label} ({tab.count})
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto flex-wrap">
+            <select
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
             >
-              {tab.label} ({tab.count})
-            </button>
-          ))}
+              <option value="">All Suppliers</option>
+              {suppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.businessName}</option>
+              ))}
+            </select>
+            <div className="relative flex-1 sm:w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+
+        {/* Sort Controls + Limit */}
+        <div className="flex items-center gap-3 flex-wrap">
           <select
-            value={supplierFilter}
-            onChange={(e) => setSupplierFilter(e.target.value)}
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
             className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
           >
-            <option value="">All Suppliers</option>
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>{s.businessName}</option>
-            ))}
+            <option value="date">Sort by Date</option>
+            <option value="name">Sort by Name</option>
+            <option value="price">Sort by Price</option>
+            <option value="stock">Sort by Stock</option>
           </select>
-          <div className="relative flex-1 sm:w-56">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <button
+            onClick={() => setSortOrder(prev => prev === "asc" ? "desc" : "asc")}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50 flex items-center gap-1"
+          >
+            <ArrowUpDown className="h-4 w-4" />
+            {sortOrder === "asc" ? "Ascending" : "Descending"}
+          </button>
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(parseInt(e.target.value)); setPage(1); }}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+          >
+            <option value={20}>20 per page</option>
+            <option value={50}>50 per page</option>
+            <option value={100}>100 per page</option>
+            <option value={9999}>Show All</option>
+          </select>
         </div>
       </div>
 
       {/* Bulk Actions */}
       {selectedIds.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center justify-between flex-wrap gap-2">
           <span className="text-sm font-medium text-blue-700">
             {selectedIds.length} product{selectedIds.length > 1 ? "s" : ""} selected
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => handleBulkAction("APPROVE")}
               disabled={bulkLoading}
               className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition flex items-center gap-1"
             >
               <CheckCircle className="h-4 w-4" /> Approve All
+            </button>
+            <button
+              onClick={() => handleBulkAction("REJECT")}
+              disabled={bulkLoading}
+              className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition flex items-center gap-1"
+            >
+              <XCircle className="h-4 w-4" /> Reject All
             </button>
             <button
               onClick={() => handleBulkAction("ACTIVATE")}
@@ -294,7 +498,6 @@ export default function AdminProductsPage() {
                   </th>
                   <th className="text-left p-4">Product</th>
                   <th className="text-left p-4">Supplier</th>
-                  <th className="text-left p-4">Brand</th>
                   <th className="text-left p-4">Category</th>
                   <th className="text-left p-4">Price</th>
                   <th className="text-left p-4">Stock</th>
@@ -306,8 +509,10 @@ export default function AdminProductsPage() {
                 {products.map((p) => {
                   const totalStock = p.inventory?.reduce((s, i) => s + (i.availableQty || 0), 0) || 0;
                   const warehouseName = p.inventory?.[0]?.warehouse?.name;
+                  const lowStock = isLowStock(p);
+                  const noImage = p._count?.images === 0;
                   return (
-                    <tr key={p.id} className={`border-b last:border-0 hover:bg-gray-50 transition ${!p.isApproved ? "bg-yellow-50/30" : ""}`}>
+                    <tr key={p.id} className={`border-b last:border-0 hover:bg-gray-50 transition ${!p.isApproved && !p.rejectionReason ? "bg-yellow-50/30" : ""}`}>
                       <td className="p-4">
                         <input
                           type="checkbox"
@@ -317,19 +522,39 @@ export default function AdminProductsPage() {
                         />
                       </td>
                       <td className="p-4">
-                        <div>
-                          <p className="font-medium text-gray-900">{p.name}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            SKU: {p.sku || "N/A"} • {p._count?.images || 0} images • {p._count?.variants || 0} variants
-                          </p>
-                          {p.rejectionReason && (
-                            <p className="text-xs text-red-600 mt-1">Rejected: {p.rejectionReason}</p>
-                          )}
+                        <div className="flex items-center gap-3">
+                          {/* Image Thumbnail */}
+                          <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                            {p.images?.[0]?.url ? (
+                              <img src={p.images[0].url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <ImageIcon className="h-5 w-5 text-gray-300" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <button
+                              onClick={() => setDetailProduct(p)}
+                              className="font-medium text-gray-900 hover:text-blue-600 transition text-left truncate max-w-[200px]"
+                            >
+                              {p.name}
+                            </button>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              SKU: {p.sku || "N/A"} • {p._count?.images || 0} images • {p._count?.variants || 0} variants
+                            </p>
+                            {p.rejectionReason && (
+                              <p className="text-xs text-red-600 mt-1">❌ {p.rejectionReason}</p>
+                            )}
+                            {noImage && (
+                              <span className="inline-block mt-1 text-[10px] px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full font-medium">
+                                ⚠️ No Image
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2">
-                          <Store className="h-4 w-4 text-gray-400" />
+                          <Store className="h-4 w-4 text-gray-400 shrink-0" />
                           <div>
                             <p className="text-sm font-medium">{p.supplier?.businessName || "N/A"}</p>
                             {p.supplier?.isVerified && (
@@ -338,7 +563,6 @@ export default function AdminProductsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-4 text-sm text-gray-600">{p.brand?.name || "-"}</td>
                       <td className="p-4 text-sm text-gray-600">{p.category?.name || "N/A"}</td>
                       <td className="p-4">
                         <p className="font-medium">₹{p.pricing?.[0]?.sellingPrice || "N/A"}</p>
@@ -348,13 +572,18 @@ export default function AdminProductsPage() {
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-1.5">
-                          <Boxes className="h-4 w-4 text-gray-400" />
+                          <Boxes className="h-4 w-4 text-gray-400 shrink-0" />
                           <div>
-                            <p className={`text-sm font-medium ${totalStock === 0 ? 'text-red-600' : totalStock < 10 ? 'text-orange-600' : 'text-green-600'}`}>
+                            <p className={`text-sm font-medium ${totalStock === 0 ? 'text-red-600' : lowStock ? 'text-orange-600' : 'text-green-600'}`}>
                               {totalStock} units
                             </p>
                             {warehouseName && (
                               <p className="text-xs text-gray-400">{warehouseName}</p>
+                            )}
+                            {lowStock && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full font-medium">
+                                Low Stock
+                              </span>
                             )}
                           </div>
                         </div>
@@ -363,7 +592,7 @@ export default function AdminProductsPage() {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {p.isApproved ? (
                             <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1">
-                              <CheckCircle className="h-3 w-3" /> Approved
+                              <CheckCircle className="h-3 w-3" /> Live
                             </span>
                           ) : p.rejectionReason ? (
                             <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1">
@@ -383,6 +612,15 @@ export default function AdminProductsPage() {
                       </td>
                       <td className="p-4">
                         <div className="flex gap-1.5 flex-wrap">
+                          {/* View */}
+                          <button
+                            onClick={() => setDetailProduct(p)}
+                            className="p-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 transition"
+                            title="View Details"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                          
                           {!p.isApproved && (
                             <>
                               <button
@@ -415,6 +653,13 @@ export default function AdminProductsPage() {
                               <Ban className="h-3.5 w-3.5" /> Deactivate
                             </button>
                           )}
+                          <button
+                            onClick={() => handleDeleteProduct(p)}
+                            className="p-2 bg-red-50 text-red-500 rounded-lg text-xs font-medium hover:bg-red-100 transition"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -437,7 +682,7 @@ export default function AdminProductsPage() {
             Previous
           </button>
           <span className="text-sm text-gray-500">
-            Page {page} of {pagination.totalPages}
+            Page {page} of {pagination.totalPages} ({pagination.total} products)
           </span>
           <button
             onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
@@ -454,14 +699,12 @@ export default function AdminProductsPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full">
             <h3 className="text-lg font-bold text-gray-900">Reject Product</h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {rejectModal.name}
-            </p>
+            <p className="text-sm text-gray-500 mt-1">{rejectModal.name}</p>
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={4}
-              placeholder="Enter rejection reason (e.g., Poor quality image, Incorrect pricing, Incomplete description)"
+              placeholder="Enter rejection reason..."
               className="w-full mt-4 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
               autoFocus
             />
@@ -478,6 +721,113 @@ export default function AdminProductsPage() {
                 className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition disabled:opacity-50"
               >
                 {rejectLoading ? "Rejecting..." : "Reject Product"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Detail Modal */}
+      {detailProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-start justify-between">
+                <h3 className="text-lg font-bold text-gray-900">{detailProduct.name}</h3>
+                <button onClick={() => setDetailProduct(null)} className="p-1 hover:bg-gray-100 rounded-lg">
+                  <XCircle className="h-5 w-5 text-gray-400" />
+                </button>
+              </div>
+              
+              {/* Images */}
+              <div className="mt-4 flex gap-2 flex-wrap">
+                {detailProduct.images?.length > 0 ? (
+                  detailProduct.images.map((img, i) => (
+                    <img key={i} src={img.url} alt="" className="w-20 h-20 rounded-lg object-cover border" />
+                  ))
+                ) : (
+                  <div className="w-20 h-20 rounded-lg border flex items-center justify-center bg-gray-50">
+                    <ImageIcon className="h-8 w-8 text-gray-300" />
+                  </div>
+                )}
+              </div>
+
+              {/* Details */}
+              <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500">SKU</p>
+                  <p className="font-medium">{detailProduct.sku || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Barcode</p>
+                  <p className="font-medium">{detailProduct.barcode || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">HSN Code</p>
+                  <p className="font-medium">{detailProduct.hsnCode || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Unit</p>
+                  <p className="font-medium">{detailProduct.unit || "PCS"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Weight</p>
+                  <p className="font-medium">{detailProduct.weight ? `${detailProduct.weight} kg` : "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Supplier</p>
+                  <p className="font-medium">{detailProduct.supplier?.businessName || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Brand</p>
+                  <p className="font-medium">{detailProduct.brand?.name || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Category</p>
+                  <p className="font-medium">{detailProduct.category?.name || "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Created</p>
+                  <p className="font-medium">{detailProduct.createdAt ? new Date(detailProduct.createdAt).toLocaleDateString('en-IN') : "N/A"}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Status</p>
+                  <p className="font-medium">
+                    {detailProduct.isApproved ? "✅ Live" : detailProduct.rejectionReason ? "❌ Rejected" : "⏳ Pending"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Description */}
+              {detailProduct.description && (
+                <div className="mt-4">
+                  <p className="text-gray-500 text-sm">Description</p>
+                  <p className="text-sm text-gray-700 mt-1 whitespace-pre-line">{detailProduct.description}</p>
+                </div>
+              )}
+
+              {/* Pricing */}
+              {detailProduct.pricing?.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-gray-500 text-sm">Pricing Tiers</p>
+                  <div className="mt-2 space-y-2">
+                    {detailProduct.pricing.map((p, i) => (
+                      <div key={i} className="flex justify-between text-sm border-b pb-2">
+                        <span className="font-medium">{p.priceType}</span>
+                        <span>₹{p.sellingPrice} (MRP: ₹{p.mrp})</span>
+                        <span className="text-gray-500">Min: {p.minQty}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Close button */}
+              <button
+                onClick={() => setDetailProduct(null)}
+                className="w-full mt-6 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+              >
+                Close
               </button>
             </div>
           </div>
