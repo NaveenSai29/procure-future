@@ -38,6 +38,24 @@ export async function POST(request) {
       select: { name: true, email: true },
     });
 
+    // Get AI generation settings for free credits (admin controlled)
+    let aiSettings = await prisma.aIGenerationSetting.findFirst();
+    
+    // Create default settings if not exist (will be updated by admin later)
+    if (!aiSettings) {
+      aiSettings = await prisma.aIGenerationSetting.create({
+        data: {
+          freeCredits: 100,
+          maxGenerationsPerProduct: 3,
+          creditCostPerGeneration: 1,
+          creditPricePerUnit: 1.0,
+          isEnabled: true,
+        },
+      });
+    }
+    
+    const freeCredits = aiSettings.freeCredits;
+
     const supplier = await prisma.supplier.create({
       data: {
         businessName,
@@ -47,6 +65,7 @@ export async function POST(request) {
         pan: pan || null,
         mobile,
         email: email || user?.email || null,
+        aiCredits: freeCredits,
         staff: {
           create: {
             userId: session.userId,
