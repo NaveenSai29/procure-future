@@ -100,7 +100,21 @@ export async function PUT(request) {
     if (!supplierStaff) return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
 
     const body = await request.json();
-    const { businessName, email, mobile, gstin, pan, businessType, tags, website } = body;
+    const { businessName, email, mobile, gstin, pan, businessType, tags, website, logo, banner } = body;
+
+    // Allow partial update for logo/banner only
+    if (logo !== undefined || banner !== undefined) {
+      const data = {};
+      if (logo !== undefined) data.logo = logo;
+      if (banner !== undefined) data.banner = banner;
+      
+      await prisma.supplier.update({
+        where: { id: supplierStaff.supplierId },
+        data,
+      });
+      
+      return NextResponse.json({ success: true, supplier: data });
+    }
 
     if (!businessName || !mobile || !businessType) {
       return NextResponse.json({ error: 'Business name, mobile, and business type are required' }, { status: 400 });

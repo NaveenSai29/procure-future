@@ -36,6 +36,11 @@ function BusinessInfoForm({ supplier, onUpdate }) {
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [pendingLogo, setPendingLogo] = useState(null);
   const [pendingBanner, setPendingBanner] = useState(null);
+  const [pendingLogoRemove, setPendingLogoRemove] = useState(false);
+  const [pendingBannerRemove, setPendingBannerRemove] = useState(false);
+  const [pendingVideoRemove, setPendingVideoRemove] = useState(false);
+  const [pendingPhotosRemove, setPendingPhotosRemove] = useState([]);
+  const [pendingPhotos, setPendingPhotos] = useState([]);
   const [form, setForm] = useState({
     businessName: '',
     email: '',
@@ -182,34 +187,90 @@ function BusinessInfoForm({ supplier, onUpdate }) {
   };
 
   const handleRemoveLogo = () => {
+    setPendingLogoRemove(true);
     setPendingLogo(null);
-    // Also need to update form to set logo null on save
   };
 
   const handleRemoveBanner = () => {
+    setPendingBannerRemove(true);
     setPendingBanner(null);
+  };
+
+  const handleRemoveVideo = () => {
+    setPendingVideoRemove(true);
+  };
+
+  const handlePhotoRemove = (photoId) => {
+    setPendingPhotosRemove(prev => [...prev, photoId]);
+  };
+
+  const handlePhotoUploadPending = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      const res = await fetch('/api/supplier/photos', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPendingPhotos(prev => [...prev, data.photo]);
+        toast.success('Photo added! Click Save Branding to apply.');
+      } else {
+        toast.error(data.error || 'Failed to upload');
+      }
+    } catch {
+      toast.error('Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const handleSaveBranding = async () => {
     try {
+      // 1. Update logo/banner
       const payload = {};
-      if (pendingLogo !== null) payload.logo = pendingLogo;
-      if (pendingBanner !== null) payload.banner = pendingBanner;
-      
-      const res = await fetch('/api/supplier/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Branding saved!');
-        setPendingLogo(null);
-        setPendingBanner(null);
-        onUpdate?.();
-      } else {
-        toast.error(data.error || 'Failed to save branding');
+      if (pendingLogoRemove) payload.logo = null;
+      else if (pendingLogo !== null) payload.logo = pendingLogo;
+      if (pendingBannerRemove) payload.banner = null;
+      else if (pendingBanner !== null) payload.banner = pendingBanner;
+
+      if (Object.keys(payload).length > 0) {
+        const res = await fetch('/api/supplier/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || 'Failed to save branding');
+          return;
+        }
       }
+
+      // 2. Delete cover video if marked
+      if (pendingVideoRemove) {
+        await fetch('/api/supplier/photos?deleteVideo=true', { method: 'DELETE' });
+      }
+
+      // 3. Delete marked photos
+      for (const photoId of pendingPhotosRemove) {
+        await fetch(`/api/supplier/photos?photoId=${photoId}`, { method: 'DELETE' });
+      }
+
+      toast.success('Branding saved!');
+      setPendingLogo(null);
+      setPendingBanner(null);
+      setPendingLogoRemove(false);
+      setPendingBannerRemove(false);
+      setPendingVideoRemove(false);
+      setPendingPhotosRemove([]);
+      setPendingPhotos([]);
+      fetchPhotos();
+      onUpdate?.();
     } catch {
       toast.error('Failed to save branding');
     }
@@ -441,16 +502,25 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                 </div>
               </div>
             </div>
-            {(pendingLogo !== null || pendingBanner !== null) && (
+            {(pendingLogo !== null || pendingBanner !== null || pendingLogoRemove || pendingBannerRemove || pendingVideoRemove || pendingPhotosRemove.length > 0 || pendingPhotos.length > 0) && (
               <div className="flex gap-2 mt-3">
                 <button
                   onClick={handleSaveBranding}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-1"
                 >
-                  Save Branding
+                  <Save className="h-4 w-4" /> Save Branding
                 </button>
                 <button
-                  onClick={() => { setPendingLogo(null); setPendingBanner(null); }}
+                  onClick={() => {
+                    setPendingLogo(null);
+                    setPendingBanner(null);
+                    setPendingLogoRemove(false);
+                    setPendingBannerRemove(false);
+                    setPendingVideoRemove(false);
+                    setPendingPhotosRemove([]);
+                    setPendingPhotos([]);
+                    fetchPhotos();
+                  }}
                   className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
                 >
                   Cancel
@@ -471,9 +541,9 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                     className="w-24 h-24 object-cover rounded-lg border"
                   />
                   <button
-                    onClick={() => handlePhotoDelete(photo.id)}
+                    onClick={() => handlePhotoRemove(photo.id)}
                     className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
-                    title="Delete photo"
+                    title="Remove photo"
                   >
                     ×
                   </button>
@@ -493,7 +563,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={handlePhotoUpload}
+                    onChange={handlePhotoUploadPending}
                     disabled={uploadingPhoto}
                   />
                 </label>
@@ -506,7 +576,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
             <label className="text-sm text-gray-500">Cover Video (Optional)</label>
             <p className="text-xs text-gray-400 mt-1">Add an intro video of your shop. Shows on your supplier page hero banner.</p>
             <div className="mt-2">
-              {coverVideo ? (
+              {coverVideo && !pendingVideoRemove ? (
                 <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border">
                   <video src={coverVideo} className="w-32 h-20 object-cover rounded-lg border" />
                   <div className="flex-1">
@@ -514,10 +584,10 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                     <p className="text-xs text-gray-500">Plays on your supplier page</p>
                   </div>
                   <button
-                    onClick={handleVideoDelete}
+                    onClick={handleRemoveVideo}
                     className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 transition"
                   >
-                    Delete
+                    Remove
                   </button>
                 </div>
               ) : (
