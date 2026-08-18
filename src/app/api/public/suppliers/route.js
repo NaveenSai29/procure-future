@@ -85,6 +85,7 @@ export async function GET(request) {
           isActive: true,
           createdAt: true,
           tags: true,
+          coverVideo: true,
           settings: {
             select: {
               shopOpenTime: true,
@@ -186,6 +187,7 @@ export async function GET(request) {
         isVerified: true,
         isActive: true,
         tags: true,
+        coverVideo: true,
         photos: {
           orderBy: { sortOrder: 'asc' },
           take: 5,
