@@ -483,7 +483,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                 <label className="text-xs text-gray-500">Store Logo</label>
                 <div className="flex items-center gap-3 mt-1">
                   {pendingLogo || supplier?.logo ? (
-                    <img src={pendingLogo || supplier.logo} alt="Logo" className="w-16 h-16 object-cover rounded-lg border" />
+                    <img src={(pendingLogo || supplier.logo)?.startsWith('http') ? (pendingLogo || supplier.logo) : `https://vantagemarketspvt.com${pendingLogo || supplier.logo}`} alt="Logo" className="w-16 h-16 object-cover rounded-lg border" />
                   ) : (
                     <div className="w-16 h-16 bg-gray-100 rounded-lg border flex items-center justify-center text-gray-400">Logo</div>
                   )}
@@ -505,7 +505,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                 <label className="text-xs text-gray-500">Cover Banner</label>
                 <div className="flex items-center gap-3 mt-1">
                   {pendingBanner || supplier?.banner ? (
-                    <img src={pendingBanner || supplier.banner} alt="Banner" className="w-24 h-14 object-cover rounded-lg border" />
+                    <img src={(pendingBanner || supplier.banner)?.startsWith('http') ? (pendingBanner || supplier.banner) : `https://vantagemarketspvt.com${pendingBanner || supplier.banner}`} alt="Banner" className="w-24 h-14 object-cover rounded-lg border" />
                   ) : (
                     <div className="w-24 h-14 bg-gray-100 rounded-lg border flex items-center justify-center text-gray-400 text-xs">Banner</div>
                   )}
@@ -530,10 +530,10 @@ function BusinessInfoForm({ supplier, onUpdate }) {
           <div className="col-span-2 mt-4">
             <label className="text-sm text-gray-500">Shop Photos (Max 5)</label>
             <div className="flex gap-3 mt-2 flex-wrap">
-              {photos.map((photo) => (
+              {photos.filter(p => !pendingPhotosRemove.includes(p.id)).map((photo) => (
                 <div key={photo.id} className="relative group">
                   <img
-                    src={photo.url}
+                    src={photo.url?.startsWith('http') ? photo.url : `https://vantagemarketspvt.com${photo.url}`}
                     alt="Shop"
                     className="w-24 h-24 object-cover rounded-lg border"
                   />
@@ -546,6 +546,18 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                   </button>
                 </div>
               ))}
+
+              {/* ADD PENDING PHOTOS HERE */}
+              {pendingPhotos.map((photo, idx) => (
+                <div key={`pending-${idx}`} className="relative group">
+                  <img
+                    src={photo.url?.startsWith('http') ? photo.url : `https://vantagemarketspvt.com${photo.url}`}
+                    alt="New Photo"
+                    className="w-24 h-24 object-cover rounded-lg border"
+                  />
+                </div>
+              ))}
+
               {photos.length < 5 && (
                 <label className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition">
                   {uploadingPhoto ? (
@@ -573,9 +585,9 @@ function BusinessInfoForm({ supplier, onUpdate }) {
             <label className="text-sm text-gray-500">Cover Video (Optional)</label>
             <p className="text-xs text-gray-400 mt-1">Add an intro video of your shop. Shows on your supplier page hero banner.</p>
             <div className="mt-2">
-              {coverVideo && !pendingVideoRemove ? (
+              {(coverVideo || pendingVideoUrl) && !pendingVideoRemove ? (
                 <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border">
-                  <video src={coverVideo} className="w-32 h-20 object-cover rounded-lg border" />
+                  <video src={pendingVideoUrl || coverVideo} className="w-32 h-20 object-cover rounded-lg border" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-700">Video uploaded ✓</p>
                     <p className="text-xs text-gray-500">Plays on your supplier page</p>
