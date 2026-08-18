@@ -50,11 +50,17 @@ export async function POST(request) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Handle video upload (cover video)
+    // Handle video upload (cover video) - Accept all video formats
     if (type === 'video') {
+      // Validate file size - max 50MB
+      const maxSizeMB = 50;
+      if (file.size > maxSizeMB * 1024 * 1024) {
+        return NextResponse.json({ error: `Video too large. Maximum size is ${maxSizeMB}MB.` }, { status: 400 });
+      }
+
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
-      const fileExt = file.name?.split('.').pop() || 'mp4';
+      const fileExt = file.name?.split('.').pop()?.toLowerCase() || 'mp4';
       const filename = `supplier-cover-${supplierStaff.supplierId}-${Date.now()}.${fileExt}`;
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'suppliers', 'videos');
       await mkdir(uploadDir, { recursive: true });

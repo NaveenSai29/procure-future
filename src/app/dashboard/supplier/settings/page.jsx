@@ -125,6 +125,13 @@ function BusinessInfoForm({ supplier, onUpdate }) {
   const handleVideoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Validate size (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('Video too large. Maximum size is 50MB.');
+      return;
+    }
+
     setUploadingVideo(true);
     try {
       const formData = new FormData();
@@ -136,6 +143,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
       });
       const data = await res.json();
       if (res.ok) {
+        console.log('Video URL:', data.coverVideo);
         setPendingVideoUrl(data.coverVideo);
         toast.success('Video selected! Click Save Branding to apply.');
       } else {
@@ -593,10 +601,12 @@ function BusinessInfoForm({ supplier, onUpdate }) {
               {(coverVideo || pendingVideoUrl) && !pendingVideoRemove ? (
                 <div className="bg-gray-50 rounded-lg p-4 border">
                   <video 
+                    key={pendingVideoUrl || coverVideo}
                     src={(pendingVideoUrl || coverVideo)?.startsWith('http') ? (pendingVideoUrl || coverVideo) : `https://vantagemarketspvt.com${pendingVideoUrl || coverVideo}`} 
-                    className="w-full h-48 object-cover rounded-lg border mb-3" 
+                    className="w-full h-48 object-cover rounded-lg border mb-3 bg-black" 
                     controls
                     playsInline
+                    preload="metadata"
                   />
                   <div className="flex items-center justify-between">
                     <div>
@@ -622,11 +632,11 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                   )}
                   <div>
                     <p className="text-sm font-medium text-gray-700">Upload Cover Video</p>
-                    <p className="text-xs text-gray-500">MP4 format recommended. Max 30 seconds.</p>
+                    <p className="text-xs text-gray-500">All video formats accepted. Max 50MB.</p>
                   </div>
                   <input
                     type="file"
-                    accept="video/mp4,video/quicktime,video/webm"
+                    accept="video/*"
                     className="hidden"
                     onChange={handleVideoUpload}
                     disabled={uploadingVideo}
