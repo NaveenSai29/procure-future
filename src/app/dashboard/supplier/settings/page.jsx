@@ -32,6 +32,8 @@ function BusinessInfoForm({ supplier, onUpdate }) {
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [coverVideo, setCoverVideo] = useState(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [form, setForm] = useState({
     businessName: '',
     email: '',
@@ -63,7 +65,10 @@ function BusinessInfoForm({ supplier, onUpdate }) {
     try {
       const res = await fetch('/api/supplier/photos');
       const data = await res.json();
-      if (res.ok) setPhotos(data.photos || []);
+      if (res.ok) {
+        setPhotos(data.photos || []);
+        setCoverVideo(data.coverVideo || null);
+      }
     } catch {}
   };
 
@@ -104,6 +109,99 @@ function BusinessInfoForm({ supplier, onUpdate }) {
       }
     } catch {
       toast.error('Failed to delete photo');
+    }
+  };
+
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingVideo(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      formData.append('type', 'video');
+      const res = await fetch('/api/supplier/photos', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Cover video uploaded!');
+        fetchPhotos();
+      } else {
+        toast.error(data.error || 'Failed to upload video');
+      }
+    } catch {
+      toast.error('Failed to upload video');
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
+  const handleVideoDelete = async () => {
+    try {
+      const res = await fetch('/api/supplier/photos?deleteVideo=true', { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Video deleted');
+        fetchPhotos();
+      } else {
+        toast.error(data.error || 'Failed to delete video');
+      }
+    } catch {
+      toast.error('Failed to delete video');
+    }
+  };
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingVideo(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'logo');
+      const res = await fetch('/api/supplier/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Logo updated!');
+        onUpdate?.();
+      } else {
+        toast.error(data.error || 'Failed to upload logo');
+      }
+    } catch {
+      toast.error('Failed to upload logo');
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
+  const handleBannerUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingVideo(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'banner');
+      const res = await fetch('/api/supplier/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Banner updated!');
+        onUpdate?.();
+      } else {
+        toast.error(data.error || 'Failed to upload banner');
+      }
+    } catch {
+      toast.error('Failed to upload banner');
+    } finally {
+      setUploadingVideo(false);
     }
   };
 
@@ -258,6 +356,43 @@ function BusinessInfoForm({ supplier, onUpdate }) {
             </div>
           )}
 
+          {/* Logo & Banner Upload */}
+          <div className="col-span-2 mt-4 border-t pt-4">
+            <label className="text-sm text-gray-500">Store Branding</label>
+            <div className="grid grid-cols-2 gap-4 mt-2">
+              {/* Logo */}
+              <div>
+                <label className="text-xs text-gray-500">Store Logo</label>
+                <div className="flex items-center gap-3 mt-1">
+                  {supplier?.logo ? (
+                    <img src={supplier.logo} alt="Logo" className="w-16 h-16 object-cover rounded-lg border" />
+                  ) : (
+                    <div className="w-16 h-16 bg-gray-100 rounded-lg border flex items-center justify-center text-gray-400">Logo</div>
+                  )}
+                  <label className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-blue-100 transition">
+                    {uploadingVideo ? 'Uploading...' : 'Upload Logo'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingVideo} />
+                  </label>
+                </div>
+              </div>
+              {/* Banner */}
+              <div>
+                <label className="text-xs text-gray-500">Cover Banner</label>
+                <div className="flex items-center gap-3 mt-1">
+                  {supplier?.banner ? (
+                    <img src={supplier.banner} alt="Banner" className="w-24 h-14 object-cover rounded-lg border" />
+                  ) : (
+                    <div className="w-24 h-14 bg-gray-100 rounded-lg border flex items-center justify-center text-gray-400 text-xs">Banner</div>
+                  )}
+                  <label className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-blue-100 transition">
+                    {uploadingVideo ? 'Uploading...' : 'Upload Banner'}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={uploadingVideo} />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Shop Photos */}
           <div className="col-span-2 mt-4">
             <label className="text-sm text-gray-500">Shop Photos (Max 5)</label>
@@ -294,6 +429,48 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                     className="hidden"
                     onChange={handlePhotoUpload}
                     disabled={uploadingPhoto}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+
+          {/* Cover Video */}
+          <div className="col-span-2 mt-4">
+            <label className="text-sm text-gray-500">Cover Video (Optional)</label>
+            <p className="text-xs text-gray-400 mt-1">Add an intro video of your shop. Shows on your supplier page hero banner.</p>
+            <div className="mt-2">
+              {coverVideo ? (
+                <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border">
+                  <video src={coverVideo} className="w-32 h-20 object-cover rounded-lg border" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-700">Video uploaded ✓</p>
+                    <p className="text-xs text-gray-500">Plays on your supplier page</p>
+                  </div>
+                  <button
+                    onClick={handleVideoDelete}
+                    className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 transition"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-3 bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-300 cursor-pointer hover:border-blue-400 transition">
+                  {uploadingVideo ? (
+                    <Loader2 className="h-6 w-6 text-blue-500 animate-spin" />
+                  ) : (
+                    <Upload className="h-6 w-6 text-gray-400" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Upload Cover Video</p>
+                    <p className="text-xs text-gray-500">MP4 format recommended. Max 30 seconds.</p>
+                  </div>
+                  <input
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/webm"
+                    className="hidden"
+                    onChange={handleVideoUpload}
+                    disabled={uploadingVideo}
                   />
                 </label>
               )}

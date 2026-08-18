@@ -1,3 +1,4 @@
+// src\app\api\supplier\photos\route.js
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
@@ -20,7 +21,12 @@ export async function GET() {
       select: { id: true, url: true, sortOrder: true },
     });
 
-    return NextResponse.json({ success: true, photos });
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierStaff.supplierId },
+      select: { coverVideo: true },
+    });
+
+    return NextResponse.json({ success: true, photos, coverVideo: supplier?.coverVideo || null });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -38,11 +44,33 @@ export async function POST(request) {
 
     const formData = await request.formData();
     const file = formData.get('photo');
+    const type = formData.get('type') || 'photo'; // 'photo' or 'video'
 
     if (!file) {
-      return NextResponse.json({ error: 'No photo provided' }, { status: 400 });
+      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
+    // Handle video upload (cover video)
+    if (type === 'video') {
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      const fileExt = file.name?.split('.').pop() || 'mp4';
+      const filename = `supplier-cover-${supplierStaff.supplierId}-${Date.now()}.${fileExt}`;
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'suppliers', 'videos');
+      await mkdir(uploadDir, { recursive: true });
+      const filePath = path.join(uploadDir, filename);
+      await writeFile(filePath, buffer);
+
+      const url = `/uploads/suppliers/videos/${filename}`;
+      await prisma.supplier.update({
+        where: { id: supplierStaff.supplierId },
+        data: { coverVideo: url },
+      });
+
+      return NextResponse.json({ success: true, coverVideo: url });
+    }
+
+    // Handle photo upload (existing logic)
     // Check photo count
     const existingCount = await prisma.supplierPhoto.count({
       where: { supplierId: supplierStaff.supplierId },
@@ -55,7 +83,8 @@ export async function POST(request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const filename = `supplier-${supplierStaff.supplierId}-${Date.now()}.jpg`;
+    const fileExt = file.name?.split('.').pop() || 'jpg';
+    const filename = `supplier-${supplierStaff.supplierId}-${Date.now()}.${fileExt}`;
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'suppliers');
     await mkdir(uploadDir, { recursive: true });
 
@@ -79,7 +108,7 @@ export async function POST(request) {
 
     return NextResponse.json({ success: true, photo });
   } catch (error) {
-    console.error('Photo upload error:', error);
+    console.error('Upload error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -96,6 +125,16 @@ export async function DELETE(request) {
 
     const { searchParams } = new URL(request.url);
     const photoId = searchParams.get('photoId');
+    const deleteVideo = searchParams.get('deleteVideo');
+
+    // Delete cover video
+    if (deleteVideo === 'true') {
+      await prisma.supplier.update({
+        where: { id: supplierStaff.supplierId },
+        data: { coverVideo: null },
+      });
+      return NextResponse.json({ success: true, message: 'Video deleted' });
+    }
 
     if (!photoId) {
       return NextResponse.json({ error: 'Photo ID required' }, { status: 400 });

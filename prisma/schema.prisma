@@ -307,6 +307,7 @@ model Supplier {
   tags           String?             @db.Text
   logo           String?
   banner         String?
+  coverVideo     String?
   email          String              @unique
   mobile         String              @unique
   website        String?
