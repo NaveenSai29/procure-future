@@ -46,7 +46,7 @@ function getShopStatus(settings, isActive) {
 
   // If today is not an open day
   if (!openDays.includes(today)) {
-    return { isOpen: false, reason: 'day_off', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, closesIn: null };
+    return { isOpen: false, reason: 'day_off', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
   }
 
   // Check if within open hours
@@ -58,11 +58,11 @@ function getShopStatus(settings, isActive) {
 
   // Shop is closed - find next open time
   if (now >= todayClose) {
-    return { isOpen: false, reason: 'closed', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, closesIn: null };
+    return { isOpen: false, reason: 'closed', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
   }
 
   // Before opening time today
-  return { isOpen: false, reason: 'not_open_yet', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, closesIn: null };
+  return { isOpen: false, reason: 'not_open_yet', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Today', closesIn: null };
 }
 
 export async function GET(request) {
