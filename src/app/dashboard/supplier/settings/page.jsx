@@ -591,24 +591,27 @@ function BusinessInfoForm({ supplier, onUpdate }) {
             <p className="text-xs text-gray-400 mt-1">Add an intro video of your shop. Shows on your supplier page hero banner.</p>
             <div className="mt-2">
               {(coverVideo || pendingVideoUrl) && !pendingVideoRemove ? (
-                <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border">
+                <div className="bg-gray-50 rounded-lg p-4 border">
                   <video 
                     src={(pendingVideoUrl || coverVideo)?.startsWith('http') ? (pendingVideoUrl || coverVideo) : `https://vantagemarketspvt.com${pendingVideoUrl || coverVideo}`} 
-                    className="w-32 h-20 object-cover rounded-lg border" 
+                    className="w-full h-48 object-cover rounded-lg border mb-3" 
                     controls
+                    playsInline
                   />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-700">
-                      {pendingVideoUrl ? 'New video selected ✓' : 'Video uploaded ✓'}
-                    </p>
-                    <p className="text-xs text-gray-500">Plays on your supplier page</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">
+                        {pendingVideoUrl ? '🎬 New video selected ✓' : '🎬 Video uploaded ✓'}
+                      </p>
+                      <p className="text-xs text-gray-500">This plays on your supplier page hero banner</p>
+                    </div>
+                    <button
+                      onClick={handleRemoveVideo}
+                      className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 transition"
+                    >
+                      Remove
+                    </button>
                   </div>
-                  <button
-                    onClick={handleRemoveVideo}
-                    className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 transition"
-                  >
-                    Remove
-                  </button>
                 </div>
               ) : (
                 <label className="flex items-center gap-3 bg-gray-50 rounded-lg p-4 border-2 border-dashed border-gray-300 cursor-pointer hover:border-blue-400 transition">

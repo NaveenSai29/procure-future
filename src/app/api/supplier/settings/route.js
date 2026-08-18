@@ -1,3 +1,4 @@
+// src\app\api\supplier\settings\route.js
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
@@ -17,7 +18,7 @@ export async function GET() {
       select: {
         id: true, businessName: true, businessType: true, isActive: true, isVerified: true,
         email: true, mobile: true, website: true, tags: true, gstin: true, pan: true,
-        logo: true, createdAt: true,
+        logo: true, banner: true, createdAt: true,
         gstVerified: true, gstBusinessName: true, gstVerificationDate: true,
       }
     });
@@ -103,7 +104,7 @@ export async function PUT(request) {
     const { businessName, email, mobile, gstin, pan, businessType, tags, website, logo, banner } = body;
 
     // Allow partial update for logo/banner only
-    if (logo !== undefined || banner !== undefined) {
+    if ((logo !== undefined || banner !== undefined) && (businessName === undefined && businessType === undefined)) {
       const data = {};
       if (logo !== undefined) data.logo = logo;
       if (banner !== undefined) data.banner = banner;
@@ -112,8 +113,40 @@ export async function PUT(request) {
         where: { id: supplierStaff.supplierId },
         data,
       });
+
+      // Save logo to Media library
+      if (logo !== undefined && logo !== null) {
+        await prisma.media.create({
+          data: {
+            fileName: logo.split('/').pop(),
+            originalName: logo.split('/').pop(),
+            fileUrl: logo,
+            fileType: 'SUPPLIER_LOGO',
+            fileSize: 0,
+            entityType: 'SUPPLIER',
+            entityId: supplierStaff.supplierId,
+            uploadedBy: user.id,
+          },
+        }).catch(() => {});
+      }
+
+      // Save banner to Media library
+      if (banner !== undefined && banner !== null) {
+        await prisma.media.create({
+          data: {
+            fileName: banner.split('/').pop(),
+            originalName: banner.split('/').pop(),
+            fileUrl: banner,
+            fileType: 'SUPPLIER_BANNER',
+            fileSize: 0,
+            entityType: 'SUPPLIER',
+            entityId: supplierStaff.supplierId,
+            uploadedBy: user.id,
+          },
+        }).catch(() => {});
+      }
       
-      return NextResponse.json({ success: true, supplier: data });
+      return NextResponse.json({ success: true });
     }
 
     if (!businessName || !mobile || !businessType) {
@@ -144,6 +177,7 @@ export async function PUT(request) {
       select: {
         id: true, businessName: true, businessType: true, isActive: true, isVerified: true,
         email: true, mobile: true, website: true, tags: true, gstin: true, pan: true,
+        logo: true, banner: true,
         gstVerified: true, gstBusinessName: true, gstVerificationDate: true,
       }
     });
@@ -156,7 +190,7 @@ export async function PUT(request) {
         entityId: supplierStaff.supplierId,
         newValue: { businessName, email, mobile, gstin, pan, businessType, tags },
       }
-    });
+    }).catch(() => {});
 
     return NextResponse.json({ success: true, supplier: updated });
   } catch (error) {
