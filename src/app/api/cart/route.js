@@ -338,32 +338,58 @@ export async function DELETE(request) {
 
     const { searchParams } = new URL(request.url);
     const itemId = searchParams.get("itemId");
+    const supplierId = searchParams.get("supplierId");
 
+    const buyerProfile = await prisma.buyerProfile.findUnique({
+      where: { userId: session.userId },
+      select: { id: true },
+    });
+
+    if (!buyerProfile) {
+      return successResponse({ message: "Cart already empty" });
+    }
+
+    // Delete single item
     if (itemId) {
-      // Delete single item
       await prisma.cartItem.delete({ where: { id: itemId } });
       return successResponse({ message: "Removed" });
-    } else {
-      // Clear all carts for this buyer
-      const buyerProfile = await prisma.buyerProfile.findUnique({
-        where: { userId: session.userId },
+    }
+
+    // Clear specific supplier's cart
+    if (supplierId) {
+      const cart = await prisma.cart.findUnique({
+        where: {
+          buyerId_supplierId: {
+            buyerId: buyerProfile.id,
+            supplierId,
+          },
+        },
         select: { id: true },
       });
 
-      if (buyerProfile) {
-        const carts = await prisma.cart.findMany({
-          where: { buyerId: buyerProfile.id },
-          select: { id: true },
-        });
-
-        const cartIds = carts.map(c => c.id);
+      if (cart) {
         await prisma.cartItem.deleteMany({
-          where: { cartId: { in: cartIds } },
+          where: { cartId: cart.id },
         });
       }
 
-      return successResponse({ message: "All carts cleared" });
+      return successResponse({ message: "Supplier cart cleared" });
     }
+
+    // Clear all carts for this buyer
+    const carts = await prisma.cart.findMany({
+      where: { buyerId: buyerProfile.id },
+      select: { id: true },
+    });
+
+    if (carts.length > 0) {
+      const cartIds = carts.map(c => c.id);
+      await prisma.cartItem.deleteMany({
+        where: { cartId: { in: cartIds } },
+      });
+    }
+
+    return successResponse({ message: "All carts cleared" });
   } catch (error) {
     return errorResponse("Failed to remove", 500);
   }
