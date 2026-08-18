@@ -27,9 +27,15 @@ export async function GET(request) {
       select: {
         id: true,
         name: true,
+        brand: { select: { name: true } },
+        unit: true,
+        weight: true,
+        isActive: true,
+        isApproved: true,
         images: { take: 1, orderBy: { sortOrder: "asc" } },
         pricing: { take: 1, orderBy: { minQty: "asc" } },
         supplier: { select: { id: true, businessName: true, isVerified: true } },
+        inventory: { select: { availableQty: true } },
       },
     });
 
@@ -39,17 +45,27 @@ export async function GET(request) {
     const items = buyerProfile.wishlist.items.map(item => {
       const product = productMap[item.productId];
       if (!product) return null;
+      const totalStock = (product.inventory || []).reduce((sum, inv) => sum + (inv.availableQty || 0), 0);
+      const hasInventory = product.inventory && product.inventory.length > 0;
+      
       return {
         id: item.id,
         productId: item.productId,
         addedAt: item.addedAt,
         name: product.name,
+        brandName: product.brand?.name || null,
+        unit: product.unit || null,
+        weight: product.weight || null,
         image: product.images[0]?.url || null,
         price: product.pricing[0]?.sellingPrice || 0,
         mrp: product.pricing[0]?.mrp || 0,
+        minQty: product.pricing[0]?.minQty || 1,
         supplierId: product.supplier?.id,
         supplierName: product.supplier?.businessName,
         isVerified: product.supplier?.isVerified,
+        isAvailable: product.isActive && product.isApproved,
+        stock: hasInventory ? totalStock : null,
+        isOutOfStock: hasInventory && totalStock <= 0,
       };
     }).filter(Boolean);
 
