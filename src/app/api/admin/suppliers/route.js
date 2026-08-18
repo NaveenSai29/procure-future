@@ -11,7 +11,7 @@ export async function GET() {
         id: true,
         businessName: true,
         businessType: true,
-        description: true,
+        tags: true,
         logo: true,
         banner: true,
         email: true,

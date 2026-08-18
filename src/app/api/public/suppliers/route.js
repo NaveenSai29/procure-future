@@ -74,7 +74,6 @@ export async function GET(request) {
           id: true,
           businessName: true,
           businessType: true,
-          description: true,
           logo: true,
           banner: true,
           email: true,
