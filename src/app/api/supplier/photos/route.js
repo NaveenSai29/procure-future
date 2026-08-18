@@ -62,6 +62,21 @@ export async function POST(request) {
       await writeFile(filePath, buffer);
 
       const url = `/uploads/suppliers/videos/${filename}`;
+      
+      // Save to Media library
+      await prisma.media.create({
+        data: {
+          fileName: filename,
+          originalName: file.name || filename,
+          fileUrl: url,
+          fileType: 'SUPPLIER_VIDEO',
+          fileSize: buffer.length,
+          entityType: 'SUPPLIER',
+          entityId: supplierStaff.supplierId,
+          uploadedBy: user.id,
+        },
+      });
+
       await prisma.supplier.update({
         where: { id: supplierStaff.supplierId },
         data: { coverVideo: url },
@@ -103,6 +118,20 @@ export async function POST(request) {
         supplierId: supplierStaff.supplierId,
         url,
         sortOrder: (maxSortOrder?.sortOrder || 0) + 1,
+      },
+    });
+
+    // Save to Media library
+    await prisma.media.create({
+      data: {
+        fileName: filename,
+        originalName: file.name || filename,
+        fileUrl: url,
+        fileType: 'SUPPLIER_PHOTO',
+        fileSize: buffer.length,
+        entityType: 'SUPPLIER',
+        entityId: supplierStaff.supplierId,
+        uploadedBy: user.id,
       },
     });
 
