@@ -39,6 +39,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
   const [pendingLogoRemove, setPendingLogoRemove] = useState(false);
   const [pendingBannerRemove, setPendingBannerRemove] = useState(false);
   const [pendingVideoRemove, setPendingVideoRemove] = useState(false);
+  const [pendingVideoUrl, setPendingVideoUrl] = useState(null);
   const [pendingPhotosRemove, setPendingPhotosRemove] = useState([]);
   const [pendingPhotos, setPendingPhotos] = useState([]);
   const [form, setForm] = useState({
@@ -133,8 +134,8 @@ function BusinessInfoForm({ supplier, onUpdate }) {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success('Cover video uploaded!');
-        fetchPhotos();
+        setPendingVideoUrl(data.coverVideo);
+        toast.success('Video selected! Click Save Branding to apply.');
       } else {
         toast.error(data.error || 'Failed to upload video');
       }
@@ -229,9 +230,9 @@ function BusinessInfoForm({ supplier, onUpdate }) {
     }
   };
 
-  const handleSaveBranding = async () => {
+    const handleSaveBranding = async () => {
     try {
-      // 1. Update logo/banner
+      // 1. Save logo/banner via settings API
       const payload = {};
       if (pendingLogoRemove) payload.logo = null;
       else if (pendingLogo !== null) payload.logo = pendingLogo;
@@ -251,9 +252,13 @@ function BusinessInfoForm({ supplier, onUpdate }) {
         }
       }
 
-      // 2. Delete cover video if marked
-      if (pendingVideoRemove) {
-        await fetch('/api/supplier/photos?deleteVideo=true', { method: 'DELETE' });
+      // 2. Save photos
+      for (const photo of pendingPhotos) {
+        await fetch('/api/supplier/photos/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: photo.url }),
+        });
       }
 
       // 3. Delete marked photos
@@ -261,12 +266,28 @@ function BusinessInfoForm({ supplier, onUpdate }) {
         await fetch(`/api/supplier/photos?photoId=${photoId}`, { method: 'DELETE' });
       }
 
+      // 4. Save cover video
+      if (pendingVideoUrl) {
+        await fetch('/api/supplier/photos/save-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: pendingVideoUrl }),
+        });
+      }
+
+      // 5. Delete video if marked
+      if (pendingVideoRemove) {
+        await fetch('/api/supplier/photos?deleteVideo=true', { method: 'DELETE' });
+      }
+
       toast.success('Branding saved!');
+      // Reset all pending states
       setPendingLogo(null);
       setPendingBanner(null);
       setPendingLogoRemove(false);
       setPendingBannerRemove(false);
       setPendingVideoRemove(false);
+      setPendingVideoUrl(null);
       setPendingPhotosRemove([]);
       setPendingPhotos([]);
       fetchPhotos();

@@ -38,26 +38,8 @@ export async function POST(request) {
 
     const url = `/uploads/suppliers/${filename}`;
 
-    // Save to Media library
-    await prisma.media.create({
-      data: {
-        fileName: filename,
-        originalName: file.name || filename,
-        fileUrl: url,
-        fileType: type === 'logo' ? 'SUPPLIER_LOGO' : 'SUPPLIER_BANNER',
-        fileSize: buffer.length,
-        entityType: 'SUPPLIER',
-        entityId: supplierStaff.supplierId,
-        uploadedBy: user.id,
-      },
-    });
-
-    const data = type === 'logo' ? { logo: url } : { banner: url };
-    await prisma.supplier.update({
-      where: { id: supplierStaff.supplierId },
-      data,
-    });
-
+    // Just return the URL - DON'T save to DB yet
+    // Will be saved when "Save Branding" is clicked
     return NextResponse.json({ success: true, url, type });
   } catch (error) {
     console.error('Upload error:', error);
