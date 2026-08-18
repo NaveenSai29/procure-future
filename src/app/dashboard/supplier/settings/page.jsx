@@ -34,6 +34,8 @@ function BusinessInfoForm({ supplier, onUpdate }) {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [coverVideo, setCoverVideo] = useState(null);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [pendingLogo, setPendingLogo] = useState(null);
+  const [pendingBanner, setPendingBanner] = useState(null);
   const [form, setForm] = useState({
     businessName: '',
     email: '',
@@ -167,8 +169,8 @@ function BusinessInfoForm({ supplier, onUpdate }) {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success('Logo updated!');
-        onUpdate?.();
+        setPendingLogo(data.url);
+        toast.success('Logo selected! Click Save to apply.');
       } else {
         toast.error(data.error || 'Failed to upload logo');
       }
@@ -176,6 +178,40 @@ function BusinessInfoForm({ supplier, onUpdate }) {
       toast.error('Failed to upload logo');
     } finally {
       setUploadingVideo(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setPendingLogo(null);
+    // Also need to update form to set logo null on save
+  };
+
+  const handleRemoveBanner = () => {
+    setPendingBanner(null);
+  };
+
+  const handleSaveBranding = async () => {
+    try {
+      const payload = {};
+      if (pendingLogo !== null) payload.logo = pendingLogo;
+      if (pendingBanner !== null) payload.banner = pendingBanner;
+      
+      const res = await fetch('/api/supplier/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Branding saved!');
+        setPendingLogo(null);
+        setPendingBanner(null);
+        onUpdate?.();
+      } else {
+        toast.error(data.error || 'Failed to save branding');
+      }
+    } catch {
+      toast.error('Failed to save branding');
     }
   };
 
@@ -193,8 +229,8 @@ function BusinessInfoForm({ supplier, onUpdate }) {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success('Banner updated!');
-        onUpdate?.();
+        setPendingBanner(data.url);
+        toast.success('Banner selected! Click Save to apply.');
       } else {
         toast.error(data.error || 'Failed to upload banner');
       }
@@ -364,33 +400,63 @@ function BusinessInfoForm({ supplier, onUpdate }) {
               <div>
                 <label className="text-xs text-gray-500">Store Logo</label>
                 <div className="flex items-center gap-3 mt-1">
-                  {supplier?.logo ? (
-                    <img src={supplier.logo} alt="Logo" className="w-16 h-16 object-cover rounded-lg border" />
+                  {pendingLogo || supplier?.logo ? (
+                    <img src={pendingLogo || supplier.logo} alt="Logo" className="w-16 h-16 object-cover rounded-lg border" />
                   ) : (
                     <div className="w-16 h-16 bg-gray-100 rounded-lg border flex items-center justify-center text-gray-400">Logo</div>
                   )}
-                  <label className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-blue-100 transition">
-                    {uploadingVideo ? 'Uploading...' : 'Upload Logo'}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingVideo} />
-                  </label>
+                  <div className="flex flex-col gap-1">
+                    <label className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-blue-100 transition text-center">
+                      {uploadingVideo ? 'Uploading...' : 'Upload Logo'}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingVideo} />
+                    </label>
+                    {(pendingLogo || supplier?.logo) && (
+                      <button onClick={handleRemoveLogo} className="px-3 py-1 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition">
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               {/* Banner */}
               <div>
                 <label className="text-xs text-gray-500">Cover Banner</label>
                 <div className="flex items-center gap-3 mt-1">
-                  {supplier?.banner ? (
-                    <img src={supplier.banner} alt="Banner" className="w-24 h-14 object-cover rounded-lg border" />
+                  {pendingBanner || supplier?.banner ? (
+                    <img src={pendingBanner || supplier.banner} alt="Banner" className="w-24 h-14 object-cover rounded-lg border" />
                   ) : (
                     <div className="w-24 h-14 bg-gray-100 rounded-lg border flex items-center justify-center text-gray-400 text-xs">Banner</div>
                   )}
-                  <label className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-blue-100 transition">
-                    {uploadingVideo ? 'Uploading...' : 'Upload Banner'}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={uploadingVideo} />
-                  </label>
+                  <div className="flex flex-col gap-1">
+                    <label className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-blue-100 transition text-center">
+                      {uploadingVideo ? 'Uploading...' : 'Upload Banner'}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={uploadingVideo} />
+                    </label>
+                    {(pendingBanner || supplier?.banner) && (
+                      <button onClick={handleRemoveBanner} className="px-3 py-1 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition">
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
+            {(pendingLogo !== null || pendingBanner !== null) && (
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleSaveBranding}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                >
+                  Save Branding
+                </button>
+                <button
+                  onClick={() => { setPendingLogo(null); setPendingBanner(null); }}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Shop Photos */}
