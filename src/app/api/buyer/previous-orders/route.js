@@ -1,4 +1,7 @@
 import prisma from "@/lib/prisma";
+
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com';
+function getFullImageUrl(path) { if (!path) return null; if (path.startsWith('http')) return path; return `${BASE_URL}${path}`; }
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 
 export async function GET(request) {
@@ -41,7 +44,7 @@ export async function GET(request) {
         uniqueProducts.push({
           id: order.product.id,
           name: order.product.name,
-          image: order.product.images[0]?.url || null,
+          image: getFullImageUrl(order.product.images[0]?.url),
           price: order.product.pricing[0]?.sellingPrice || 0,
           mrp: order.product.pricing[0]?.mrp || 0,
           lastOrdered: order.createdAt,

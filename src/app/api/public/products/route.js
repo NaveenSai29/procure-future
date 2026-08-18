@@ -1,6 +1,9 @@
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com';
+function getFullImageUrl(path) { if (!path) return null; if (path.startsWith('http')) return path; return `${BASE_URL}${path}`; }
+
 // Haversine distance in km
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -215,7 +218,7 @@ export async function GET(request) {
         gstVerified: product.supplier?.gstVerified,
         shopStatus,
         shopHours,
-        image: product.images[0]?.url || null,
+        image: getFullImageUrl(product.images[0]?.url),
         price: product.pricing[0]?.sellingPrice || 0,
         mrp: product.pricing[0]?.mrp || 0,
         priceType: product.pricing[0]?.priceType || "RETAIL",

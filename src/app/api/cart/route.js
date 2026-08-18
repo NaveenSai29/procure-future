@@ -1,6 +1,9 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com';
+function getFullImageUrl(path) { if (!path) return null; if (path.startsWith('http')) return path; return `${BASE_URL}${path}`; }
+
 // Helper to get or create cart for a user + supplier
 async function getOrCreateCart(userId, supplierId) {
   // Get buyer profile
@@ -162,7 +165,7 @@ export async function GET(request) {
           supplier: productSupplier?.businessName || cart.supplier?.businessName,
           supplierId: productSupplier?.id || cart.supplierId,
           isVerified: productSupplier?.isVerified || cart.supplier?.isVerified,
-          image: item.product?.images[0]?.url || null,
+          image: getFullImageUrl(item.product?.images[0]?.url),
           price: (hasCustomPrice && !isExpired) ? item.customPrice : (item.product?.pricing[0]?.sellingPrice || 0),
           mrp: item.product?.pricing[0]?.mrp || 0,
           isRfqPrice: hasCustomPrice && !isExpired,
