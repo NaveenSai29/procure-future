@@ -14,7 +14,7 @@ import Link from "next/link";
 const supplierSchema = z.object({
   businessName: z.string().min(2, "Business name required").max(200),
   businessType: z.enum(["RETAIL", "WHOLESALE", "DISTRIBUTOR", "MANUFACTURER", "IMPORTER"]),
-  description: z.string().max(500).optional(),
+  tags: z.string().max(200).optional(),
   gstin: z.string().min(15, "Valid GSTIN required").max(15),
   pan: z.string().min(10, "Valid PAN required").max(10).optional().or(z.literal("")),
   email: z.string().email("Valid email required"),
@@ -56,10 +56,14 @@ export default function BecomeSupplierPage() {
   const onSubmit = async (data) => {
     setLoading(true);
     try {
+      const payload = {
+        ...data,
+        tags: data.tags ? JSON.stringify(data.tags.split(',').map(t => t.trim()).filter(Boolean)) : null,
+      };
       const res = await fetch("/api/supplier/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       const result = await res.json();
@@ -149,8 +153,9 @@ export default function BecomeSupplierPage() {
           </div>
 
           <div>
-            <label className="text-sm font-medium">Description</label>
-            <textarea {...register("description")} rows={2} placeholder="Brief description of your business" className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1 resize-none" />
+            <label className="text-sm font-medium">Tags</label>
+            <Input {...register("tags")} placeholder="BBQ, Chicken, North Indian (comma separated)" className="mt-1" />
+            <p className="text-xs text-gray-400 mt-1">Separate tags with commas. Max 5 tags recommended.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

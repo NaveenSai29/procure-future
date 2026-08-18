@@ -304,7 +304,7 @@ model Supplier {
   id             String              @id @default(uuid())
   businessName   String
   businessType   String
-  description    String?
+  tags           String?             @db.Text
   logo           String?
   banner         String?
   email          String              @unique
@@ -341,6 +341,7 @@ model Supplier {
   rfqResponses   RFQResponse[]
   quotations     Quotation[]
   returnRequests ReturnRequest[]    @relation("SupplierReturns")
+  photos         SupplierPhoto[]
   invoices       Invoice[]
   settlements    Settlement[]
   wallet         SupplierWallet?
@@ -359,6 +360,16 @@ model Supplier {
   orderSLAs         OrderSLA[]
   aiGenerationLogs  AIGenerationLog[]
   aiCreditPurchases AICreditPurchase[]
+}
+
+model SupplierPhoto {
+  id         String   @id @default(uuid())
+  supplierId String
+  url        String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 }
 
 model SupplierBranch {

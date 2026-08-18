@@ -30,6 +30,8 @@ const DAYS = [
 function BusinessInfoForm({ supplier, onUpdate }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [photos, setPhotos] = useState([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [form, setForm] = useState({
     businessName: '',
     email: '',
@@ -37,7 +39,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
     gstin: '',
     pan: '',
     businessType: '',
-    description: '',
+    tags: '',
     website: '',
   });
 
@@ -50,11 +52,60 @@ function BusinessInfoForm({ supplier, onUpdate }) {
         gstin: supplier.gstin || '',
         pan: supplier.pan || '',
         businessType: supplier.businessType || '',
-        description: supplier.description || '',
+        tags: supplier.tags || '',
         website: supplier.website || '',
       });
+      fetchPhotos();
     }
   }, [supplier]);
+
+  const fetchPhotos = async () => {
+    try {
+      const res = await fetch('/api/supplier/photos');
+      const data = await res.json();
+      if (res.ok) setPhotos(data.photos || []);
+    } catch {}
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      const res = await fetch('/api/supplier/photos', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Photo uploaded!');
+        fetchPhotos();
+      } else {
+        toast.error(data.error || 'Failed to upload');
+      }
+    } catch {
+      toast.error('Failed to upload photo');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handlePhotoDelete = async (photoId) => {
+    try {
+      const res = await fetch(`/api/supplier/photos?photoId=${photoId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('Photo deleted');
+        fetchPhotos();
+      } else {
+        toast.error(data.error || 'Failed to delete');
+      }
+    } catch {
+      toast.error('Failed to delete photo');
+    }
+  };
 
   const handleSave = async () => {
     if (!form.businessName.trim()) { toast.error('Business name is required'); return; }
@@ -66,7 +117,10 @@ function BusinessInfoForm({ supplier, onUpdate }) {
       const res = await fetch('/api/supplier/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          tags: form.tags ? JSON.stringify(form.tags.split(',').map(t => t.trim()).filter(Boolean)) : null,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -191,12 +245,60 @@ function BusinessInfoForm({ supplier, onUpdate }) {
               <p className="font-medium">{new Date(supplier.gstVerificationDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
             </div>
           )}
-          {supplier?.description && (
+          {supplier?.tags && (
             <div className="col-span-2">
-              <label className="text-sm text-gray-500">Description</label>
-              <p className="font-medium text-sm">{supplier.description}</p>
+              <label className="text-sm text-gray-500">Tags</label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {(typeof supplier.tags === 'string' ? JSON.parse(supplier.tags) : supplier.tags).map((tag, i) => (
+                  <span key={i} className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                    {tag}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Shop Photos */}
+          <div className="col-span-2 mt-4">
+            <label className="text-sm text-gray-500">Shop Photos (Max 5)</label>
+            <div className="flex gap-3 mt-2 flex-wrap">
+              {photos.map((photo) => (
+                <div key={photo.id} className="relative group">
+                  <img
+                    src={photo.url}
+                    alt="Shop"
+                    className="w-24 h-24 object-cover rounded-lg border"
+                  />
+                  <button
+                    onClick={() => handlePhotoDelete(photo.id)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                    title="Delete photo"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {photos.length < 5 && (
+                <label className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 transition">
+                  {uploadingPhoto ? (
+                    <Loader2 className="h-6 w-6 text-blue-500 animate-spin" />
+                  ) : (
+                    <>
+                      <Upload className="h-5 w-5 text-gray-400" />
+                      <span className="text-xs text-gray-400 mt-1">Add Photo</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handlePhotoUpload}
+                    disabled={uploadingPhoto}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
         </div>
       ) : (
         /* Edit Mode */
@@ -274,14 +376,15 @@ function BusinessInfoForm({ supplier, onUpdate }) {
             />
           </div>
           <div className="col-span-2">
-            <label className="text-sm text-gray-500 font-medium">Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            <label className="text-sm text-gray-500 font-medium">Tags</label>
+            <input
+              type="text"
+              value={form.tags}
+              onChange={(e) => setForm({ ...form, tags: e.target.value })}
               className="w-full mt-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows={3}
-              placeholder="Brief description of your business..."
+              placeholder="BBQ, Chicken, North Indian (comma separated)"
             />
+            <p className="text-xs text-gray-400 mt-1">Separate tags with commas. Max 5 tags recommended.</p>
           </div>
         </div>
       )}

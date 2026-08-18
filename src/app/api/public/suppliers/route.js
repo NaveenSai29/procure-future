@@ -85,6 +85,7 @@ export async function GET(request) {
           isVerified: true,
           isActive: true,
           createdAt: true,
+          tags: true,
           settings: {
             select: {
               shopOpenTime: true,
@@ -104,6 +105,11 @@ export async function GET(request) {
               mobile: true,
               email: true,
             },
+          },
+          photos: {
+            orderBy: { sortOrder: 'asc' },
+            take: 5,
+            select: { id: true, url: true },
           },
           warehouses: {
             where: { isActive: true, isPickupLocation: true },
@@ -146,11 +152,17 @@ export async function GET(request) {
 
       const { products, settings, ...supplierData } = supplier;
       const shopStatus = getShopStatus(settings, supplier.isActive);
+      
+      let parsedTags = [];
+      try {
+        parsedTags = supplier.tags ? JSON.parse(supplier.tags) : [];
+      } catch { parsedTags = []; }
 
       return NextResponse.json({
         success: true,
         data: {
           ...supplierData,
+          tags: parsedTags,
           categories,
           shopStatus,
           shopHours: settings ? {
@@ -175,6 +187,12 @@ export async function GET(request) {
         gstVerified: true,
         isVerified: true,
         isActive: true,
+        tags: true,
+        photos: {
+          orderBy: { sortOrder: 'asc' },
+          take: 5,
+          select: { id: true, url: true },
+        },
         settings: {
           select: {
             shopOpenTime: true,
@@ -221,7 +239,11 @@ export async function GET(request) {
         if (buyerLat && buyerLng && warehouse?.latitude && warehouse?.longitude) {
           distance = haversineDistance(buyerLat, buyerLng, warehouse.latitude, warehouse.longitude);
         }
-        return { ...rest, categories, shopStatus, distance, isDeliverable: distance !== null ? distance <= maxDistance : null };
+        let parsedTags = [];
+        try {
+          parsedTags = supplier.tags ? JSON.parse(supplier.tags) : [];
+        } catch { parsedTags = []; }
+        return { ...rest, tags: parsedTags, categories, shopStatus, distance, isDeliverable: distance !== null ? distance <= maxDistance : null };
       })
       .filter(supplier => {
         // If buyer location provided, only show deliverable suppliers

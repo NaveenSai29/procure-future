@@ -16,7 +16,7 @@ export async function GET() {
       where: { id: supplierStaff.supplierId },
       select: {
         id: true, businessName: true, businessType: true, isActive: true, isVerified: true,
-        email: true, mobile: true, website: true, description: true, gstin: true, pan: true,
+        email: true, mobile: true, website: true, tags: true, gstin: true, pan: true,
         logo: true, createdAt: true,
         gstVerified: true, gstBusinessName: true, gstVerificationDate: true,
       }
@@ -100,7 +100,7 @@ export async function PUT(request) {
     if (!supplierStaff) return NextResponse.json({ error: 'Supplier not found' }, { status: 404 });
 
     const body = await request.json();
-    const { businessName, email, mobile, gstin, pan, businessType, description, website } = body;
+    const { businessName, email, mobile, gstin, pan, businessType, tags, website } = body;
 
     if (!businessName || !mobile || !businessType) {
       return NextResponse.json({ error: 'Business name, mobile, and business type are required' }, { status: 400 });
@@ -124,12 +124,12 @@ export async function PUT(request) {
         gstin: gstin || null,
         pan: pan || null,
         businessType,
-        description: description || null,
+        tags: tags || null,
         website: website || null,
       },
       select: {
         id: true, businessName: true, businessType: true, isActive: true, isVerified: true,
-        email: true, mobile: true, website: true, description: true, gstin: true, pan: true,
+        email: true, mobile: true, website: true, tags: true, gstin: true, pan: true,
         gstVerified: true, gstBusinessName: true, gstVerificationDate: true,
       }
     });
@@ -140,7 +140,7 @@ export async function PUT(request) {
         action: 'SUPPLIER_PROFILE_UPDATED',
         entity: 'Supplier',
         entityId: supplierStaff.supplierId,
-        newValue: { businessName, email, mobile, gstin, pan, businessType },
+        newValue: { businessName, email, mobile, gstin, pan, businessType, tags },
       }
     });
 

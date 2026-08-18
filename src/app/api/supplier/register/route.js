@@ -12,7 +12,7 @@ export async function POST(request) {
 
     const body = await request.json();
     const { 
-      businessName, businessType, description, gstin, pan, mobile, email,
+      businessName, businessType, tags, gstin, pan, mobile, email,
       storageType, storageName, storageAddress, storageCity, storageState, storagePincode 
     } = body;
 
@@ -60,7 +60,7 @@ export async function POST(request) {
       data: {
         businessName,
         businessType,
-        description,
+        tags,
         gstin,
         pan: pan || null,
         mobile,
