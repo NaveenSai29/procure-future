@@ -502,31 +502,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
                 </div>
               </div>
             </div>
-            {(pendingLogo !== null || pendingBanner !== null || pendingLogoRemove || pendingBannerRemove || pendingVideoRemove || pendingPhotosRemove.length > 0 || pendingPhotos.length > 0) && (
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={handleSaveBranding}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-1"
-                >
-                  <Save className="h-4 w-4" /> Save Branding
-                </button>
-                <button
-                  onClick={() => {
-                    setPendingLogo(null);
-                    setPendingBanner(null);
-                    setPendingLogoRemove(false);
-                    setPendingBannerRemove(false);
-                    setPendingVideoRemove(false);
-                    setPendingPhotosRemove([]);
-                    setPendingPhotos([]);
-                    fetchPhotos();
-                  }}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+            {/* Save Branding button - will be moved to bottom */}
           </div>
 
           {/* Shop Photos */}
@@ -612,6 +588,33 @@ function BusinessInfoForm({ supplier, onUpdate }) {
               )}
             </div>
           </div>
+
+          {/* Save Branding - Common button at bottom */}
+          {(pendingLogo !== null || pendingBanner !== null || pendingLogoRemove || pendingBannerRemove || pendingVideoRemove || pendingPhotosRemove.length > 0 || pendingPhotos.length > 0) && (
+            <div className="col-span-2 mt-4 border-t pt-4 flex gap-2">
+              <button
+                onClick={handleSaveBranding}
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-1"
+              >
+                <Save className="h-4 w-4" /> Save Branding
+              </button>
+              <button
+                onClick={() => {
+                  setPendingLogo(null);
+                  setPendingBanner(null);
+                  setPendingLogoRemove(false);
+                  setPendingBannerRemove(false);
+                  setPendingVideoRemove(false);
+                  setPendingPhotosRemove([]);
+                  setPendingPhotos([]);
+                  fetchPhotos();
+                }}
+                className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         /* Edit Mode */
