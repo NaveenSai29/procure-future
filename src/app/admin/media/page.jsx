@@ -408,16 +408,26 @@ export default function AdminMediaPage() {
               </div>
             </div>
             <div className="p-4 bg-gray-100 flex items-center justify-center min-h-[300px] max-h-[70vh] overflow-auto">
-              {previewFile.fileType?.startsWith("image/") ? (
-                <img src={previewFile.fileUrl} alt={previewFile.originalName} className="max-w-full max-h-[65vh] object-contain rounded-lg" />
-              ) : (
-                <div className="text-center p-8">
-                  <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                  <a href={previewFile.fileUrl} target="_blank" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition inline-flex items-center gap-2">
-                    <ExternalLink className="h-4 w-4" /> Open File
-                  </a>
-                </div>
-              )}
+              {(() => {
+                const fullUrl = previewFile.fileUrl?.startsWith('http') 
+                  ? previewFile.fileUrl 
+                  : `https://vantagemarketspvt.com${previewFile.fileUrl}`;
+                
+                if (previewFile.fileType?.startsWith("image/")) {
+                  return <img src={fullUrl} alt={previewFile.originalName} className="max-w-full max-h-[65vh] object-contain rounded-lg" />;
+                } else if (previewFile.fileType?.startsWith("video/") || previewFile.fileType === 'SUPPLIER_VIDEO') {
+                  return <video src={fullUrl} controls className="max-w-full max-h-[65vh] rounded-lg" />;
+                } else {
+                  return (
+                    <div className="text-center p-8">
+                      <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                      <a href={fullUrl} target="_blank" className="px-6 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition inline-flex items-center gap-2">
+                        <ExternalLink className="h-4 w-4" /> Open File
+                      </a>
+                    </div>
+                  );
+                }
+              })()}
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, Trash2, Download, FileText, Image, ExternalLink, Loader2, AlertTriangle } from "lucide-react";
+import { Eye, Trash2, Download, FileText, Image, ExternalLink, Loader2, AlertTriangle, Video } from "lucide-react";
 
 const ENTITY_LABELS = {
   KYC: "KYC Document",
@@ -12,6 +12,7 @@ const ENTITY_LABELS = {
   VARIANT: "Variant",
   GENERAL: "General",
   AI_GENERATED: "AI Generated",
+  SUPPLIER: "Supplier",
 };
 
 function formatSize(bytes) {
@@ -21,10 +22,18 @@ function formatSize(bytes) {
   return (bytes / 1048576).toFixed(1) + " MB";
 }
 
+function getFullUrl(url) {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `https://vantagemarketspvt.com${url}`;
+}
+
 export default function MediaCard({ media, onDelete, onPreview }) {
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const isImage = media.fileType?.startsWith("image/");
+  const isImage = media.fileType?.startsWith("image/") || media.fileType === 'SUPPLIER_LOGO' || media.fileType === 'SUPPLIER_BANNER' || media.fileType === 'SUPPLIER_PHOTO';
+  const isVideo = media.fileType?.startsWith("video/") || media.fileType === 'SUPPLIER_VIDEO';
+  const fullUrl = getFullUrl(media.fileUrl);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -49,11 +58,24 @@ export default function MediaCard({ media, onDelete, onPreview }) {
         >
           {isImage ? (
             <img
-              src={media.fileUrl}
+              src={fullUrl}
               alt={media.originalName}
               className="w-full h-full object-cover"
               loading="lazy"
+              onError={(e) => { e.target.src = 'https://via.placeholder.com/150?text=No+Image'; }}
             />
+          ) : isVideo ? (
+            <div className="relative w-full h-full flex items-center justify-center">
+              <video
+                src={fullUrl}
+                className="w-full h-full object-cover"
+                preload="metadata"
+                muted
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Video className="h-8 w-8 text-white drop-shadow-lg" />
+              </div>
+            </div>
           ) : (
             <div className="text-center p-4">
               <FileText className="h-10 w-10 text-gray-400 mx-auto mb-2" />
@@ -68,6 +90,13 @@ export default function MediaCard({ media, onDelete, onPreview }) {
           {media.entityType === 'PRODUCT' && media.originalName.includes('ai-generated') && (
             <span className="absolute top-2 left-2 text-[9px] px-1.5 py-0.5 bg-purple-500 text-white rounded-full font-medium">
               AI
+            </span>
+          )}
+
+          {/* Video Badge */}
+          {isVideo && (
+            <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 bg-blue-500 text-white rounded-full font-medium">
+              VIDEO
             </span>
           )}
         </div>
@@ -90,15 +119,14 @@ export default function MediaCard({ media, onDelete, onPreview }) {
 
         {/* Actions */}
         <div className="border-t flex divide-x">
-          <a
-            href={media.fileUrl}
-            target="_blank"
+          <button
+            onClick={() => onPreview?.(media)}
             className="flex-1 py-2 flex items-center justify-center text-xs text-gray-500 hover:bg-gray-50 transition"
           >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+            <Eye className="h-3.5 w-3.5" />
+          </button>
           <a
-            href={media.fileUrl}
+            href={fullUrl}
             download
             className="flex-1 py-2 flex items-center justify-center text-xs text-gray-500 hover:bg-gray-50 transition"
           >
