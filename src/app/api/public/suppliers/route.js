@@ -111,6 +111,23 @@ export async function GET(request) {
             take: 5,
             select: { id: true, url: true },
           },
+          productImages: {
+            where: {
+              isApproved: true,
+              isActive: true,
+              images: { some: {} },
+            },
+            take: 9,
+            select: {
+              id: true,
+              name: true,
+              images: {
+                take: 1,
+                orderBy: { sortOrder: 'asc' },
+                select: { url: true },
+              },
+            },
+          },
           warehouses: {
             where: { isActive: true, isPickupLocation: true },
             select: {
@@ -193,6 +210,23 @@ export async function GET(request) {
           take: 5,
           select: { id: true, url: true },
         },
+        productImages: {
+          where: {
+            isApproved: true,
+            isActive: true,
+            images: { some: {} },
+          },
+          take: 9,
+          select: {
+            id: true,
+            name: true,
+            images: {
+              take: 1,
+              orderBy: { sortOrder: 'asc' },
+              select: { url: true },
+            },
+          },
+        },
         settings: {
           select: {
             shopOpenTime: true,
@@ -243,7 +277,13 @@ export async function GET(request) {
         try {
           parsedTags = supplier.tags ? JSON.parse(supplier.tags) : [];
         } catch { parsedTags = []; }
-        return { ...rest, tags: parsedTags, categories, shopStatus, distance, isDeliverable: distance !== null ? distance <= maxDistance : null };
+        const formattedProductImages = (supplier.productImages || []).map(p => ({
+          productId: p.id,
+          productName: p.name,
+          imageUrl: p.images[0]?.url || null,
+        })).filter(p => p.imageUrl);
+
+        return { ...rest, tags: parsedTags, categories, shopStatus, productImages: formattedProductImages, distance, isDeliverable: distance !== null ? distance <= maxDistance : null };
       })
       .filter(supplier => {
         // If buyer location provided, only show deliverable suppliers
