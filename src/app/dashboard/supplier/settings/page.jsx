@@ -491,6 +491,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
               {/* Logo */}
               <div>
                 <label className="text-xs text-gray-500">Store Logo</label>
+                <p className="text-[10px] text-gray-400 mt-0.5">1:1 Square • 512×512 px • JPG/PNG • Max 5MB</p>
                 <div className="flex items-center gap-3 mt-1">
                   {(pendingLogo || supplier?.logo) && !pendingLogoRemove ? (
                     <img src={(pendingLogo || supplier.logo)?.startsWith('http') ? (pendingLogo || supplier.logo) : `https://vantagemarketspvt.com${pendingLogo || supplier.logo}`} alt="Logo" className="w-16 h-16 object-cover rounded-lg border" />
@@ -513,6 +514,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
               {/* Banner */}
               <div>
                 <label className="text-xs text-gray-500">Cover Banner</label>
+                <p className="text-[10px] text-gray-400 mt-0.5">16:9 Wide • 1920×1080 px • JPG/PNG • Max 5MB</p>
                 <div className="flex items-center gap-3 mt-1">
                   {(pendingBanner || supplier?.banner) && !pendingBannerRemove ? (
                     <img src={(pendingBanner || supplier.banner)?.startsWith('http') ? (pendingBanner || supplier.banner) : `https://vantagemarketspvt.com${pendingBanner || supplier.banner}`} alt="Banner" className="w-24 h-14 object-cover rounded-lg border" />
@@ -542,6 +544,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
           {/* Shop Photos */}
           <div className="col-span-2 mt-4">
             <label className="text-sm text-gray-500">Shop Photos (Max 5)</label>
+            <p className="text-xs text-gray-400 mt-0.5">1:1 Square • 1080×1080 px • JPG/PNG • Max 5MB each</p>
             <div className="flex gap-3 mt-2 flex-wrap">
               {photos.filter(p => !pendingPhotosRemove.includes(p.id)).map((photo) => (
                 <div key={photo.id} className="relative group">
@@ -596,6 +599,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
           {/* Cover Video */}
           <div className="col-span-2 mt-4">
             <label className="text-sm text-gray-500">Cover Video (Optional)</label>
+            <p className="text-xs text-gray-400 mt-0.5">16:9 • 1920×1080 px • All formats • Max 50MB • 15-30 seconds recommended</p>
             <p className="text-xs text-gray-400 mt-1">Add an intro video of your shop. Shows on your supplier page hero banner.</p>
             <div className="mt-2">
               {(coverVideo || pendingVideoUrl) && !pendingVideoRemove ? (

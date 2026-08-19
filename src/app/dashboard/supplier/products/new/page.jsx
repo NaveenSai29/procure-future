@@ -687,6 +687,7 @@ export default function NewProductPage() {
             </button>
             
             <p className="text-xs text-gray-400 mt-2">Upload your own photos FREE or generate AI images using credits.</p>
+            <p className="text-xs text-gray-400 mt-1">📐 1:1 Square • 1080×1080 px • JPG/PNG/WebP • Max 5MB each</p>
           </div>
 
           {/* Weight & Dimensions */}

@@ -26,6 +26,12 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid type. Must be "logo" or "banner"' }, { status: 400 });
     }
 
+    // Validate file size - max 5MB for logo, 5MB for banner
+    const maxSizeMB = 5;
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      return NextResponse.json({ error: `File too large. Maximum ${maxSizeMB}MB allowed.` }, { status: 400 });
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     const fileExt = file.name?.split('.').pop() || 'jpg';
