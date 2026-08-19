@@ -111,23 +111,6 @@ export async function GET(request) {
             take: 5,
             select: { id: true, url: true },
           },
-          productImages: {
-            where: {
-              isApproved: true,
-              isActive: true,
-              images: { some: {} },
-            },
-            take: 9,
-            select: {
-              id: true,
-              name: true,
-              images: {
-                take: 1,
-                orderBy: { sortOrder: 'asc' },
-                select: { url: true },
-              },
-            },
-          },
           warehouses: {
             where: { isActive: true, isPickupLocation: true },
             select: {
@@ -146,11 +129,17 @@ export async function GET(request) {
           products: {
             where: { isApproved: true, isActive: true },
             select: {
+              id: true,
+              name: true,
               category: {
                 select: { id: true, name: true },
               },
+              images: {
+                take: 1,
+                orderBy: { sortOrder: 'asc' },
+                select: { url: true },
+              },
             },
-            distinct: ['categoryId'],
             take: 10,
           },
           _count: { select: { products: true } },
@@ -175,12 +164,19 @@ export async function GET(request) {
         parsedTags = supplier.tags ? JSON.parse(supplier.tags) : [];
       } catch { parsedTags = []; }
 
+      const formattedProductImages = (products || []).map(p => ({
+        productId: p.id,
+        productName: p.name,
+        imageUrl: p.images?.[0]?.url || null,
+      })).filter(p => p.imageUrl);
+
       return NextResponse.json({
         success: true,
         data: {
           ...supplierData,
           tags: parsedTags,
           categories,
+          productImages: formattedProductImages,
           shopStatus,
           shopHours: settings ? {
             openTime: settings.shopOpenTime,
@@ -210,23 +206,6 @@ export async function GET(request) {
           take: 5,
           select: { id: true, url: true },
         },
-        productImages: {
-          where: {
-            isApproved: true,
-            isActive: true,
-            images: { some: {} },
-          },
-          take: 9,
-          select: {
-            id: true,
-            name: true,
-            images: {
-              take: 1,
-              orderBy: { sortOrder: 'asc' },
-              select: { url: true },
-            },
-          },
-        },
         settings: {
           select: {
             shopOpenTime: true,
@@ -247,12 +226,18 @@ export async function GET(request) {
         products: {
           where: { isApproved: true, isActive: true },
           select: {
+            id: true,
+            name: true,
             category: {
               select: { id: true, name: true },
             },
+            images: {
+              take: 1,
+              orderBy: { sortOrder: 'asc' },
+              select: { url: true },
+            },
           },
-          distinct: ['categoryId'],
-          take: 5,
+          take: 9,
         },
         _count: { select: { products: true } },
       },
@@ -277,20 +262,19 @@ export async function GET(request) {
         try {
           parsedTags = supplier.tags ? JSON.parse(supplier.tags) : [];
         } catch { parsedTags = []; }
-        const formattedProductImages = (supplier.productImages || []).map(p => ({
+
+        const formattedProductImages = (products || []).map(p => ({
           productId: p.id,
           productName: p.name,
-          imageUrl: p.images[0]?.url || null,
+          imageUrl: p.images?.[0]?.url || null,
         })).filter(p => p.imageUrl);
 
         return { ...rest, tags: parsedTags, categories, shopStatus, productImages: formattedProductImages, distance, isDeliverable: distance !== null ? distance <= maxDistance : null };
       })
       .filter(supplier => {
-        // If buyer location provided, only show deliverable suppliers
         if (buyerLat && buyerLng) {
           return supplier.isDeliverable === true;
         }
-        // No location provided, show all
         return true;
       });
 
