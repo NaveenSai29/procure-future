@@ -325,7 +325,7 @@ export class DeliveryService {
         breakdown: [
           { label: 'Delivery', amount: 0, originalAmount: originalFee, sub: bestVehicleType ? `${bestVehicleType} - ${Math.round(effectiveDistance)} km` : 'FREE' },
           { label: 'Platform Fee', amount: settings.platformFee },
-          { label: `GST (${settings.gstPercent}%)`, amount: 0 },
+          { label: 'GST & Other Charges', amount: 0 },
         ],
         isFree: true,
         distanceKm: Math.round(effectiveDistance * 10) / 10,
@@ -451,7 +451,7 @@ export class DeliveryService {
       codAmount > 0 && { label: 'COD Charge', amount: codAmount },
       surgeAmount > 0 && { label: surgeReason, amount: surgeAmount, isSurge: true },
       { label: 'Platform Fee', amount: platformFee },
-      { label: `GST (${settings.gstPercent}%)`, amount: gst },
+      { label: 'GST & Other Charges', amount: gst },
     ].filter(Boolean);
 
     return {
