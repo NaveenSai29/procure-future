@@ -329,6 +329,8 @@ model Supplier {
   autoCancelEnabled Boolean              @default(true)
   aiCredits       Int                 @default(100)
   aiGenerationsUsed Int               @default(0)
+  avgRating       Float               @default(0)
+  ratingCount     Int                 @default(0)
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   deletedAt      DateTime?
@@ -483,6 +485,7 @@ model Warehouse {
   addressLine1 String
   addressLine2 String?
   city         String
+  area         String?
   state        String
   pincode      String
   latitude     Float?
@@ -710,6 +713,9 @@ model Order {
     paymentDetails  Json?
     supplierCommissionRate Float                @default(0)
     status        String               @default("PENDING")
+    rating        Int?
+    ratingComment String?              @db.Text
+    ratedAt       DateTime?
     notes         String?
     deliveryInstructions String?
     instructionImages   String?

@@ -83,6 +83,8 @@ export async function GET(request) {
           gstBusinessName: true,
           isVerified: true,
           isActive: true,
+          avgRating: true,
+          ratingCount: true,
           createdAt: true,
           tags: true,
           coverVideo: true,
@@ -117,6 +119,7 @@ export async function GET(request) {
               id: true,
               name: true,
               city: true,
+              area: true,
               state: true,
               latitude: true,
               longitude: true,
@@ -199,6 +202,8 @@ export async function GET(request) {
         gstVerified: true,
         isVerified: true,
         isActive: true,
+        avgRating: true,
+        ratingCount: true,
         tags: true,
         coverVideo: true,
         photos: {
@@ -221,7 +226,7 @@ export async function GET(request) {
         warehouses: {
           where: { isActive: true, isPickupLocation: true, latitude: { not: null } },
           take: 1,
-          select: { latitude: true, longitude: true, city: true },
+          select: { latitude: true, longitude: true, city: true, area: true },
         },
         products: {
           where: { isApproved: true, isActive: true },
