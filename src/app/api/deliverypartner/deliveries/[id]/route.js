@@ -81,6 +81,9 @@ export async function GET(request, { params }) {
             paymentMethod: true,
             status: true,
             notes: true,
+            deliveryInstructions: true,
+            instructionImages: true,
+            instructionAudio: true,
             createdAt: true,
             buyer: {
               select: {

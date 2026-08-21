@@ -712,6 +712,8 @@ model Order {
     status        String               @default("PENDING")
     notes         String?
     deliveryInstructions String?
+    instructionImages   String?
+    instructionAudio    String?
     deliveryAddress  String?
     deliveryLat      Float?
     deliveryLng      Float?
