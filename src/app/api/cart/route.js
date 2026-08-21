@@ -89,7 +89,7 @@ export async function GET(request) {
       include: {
         supplier: {
           select: {
-            id: true, businessName: true, isVerified: true, isActive: true,
+            id: true, businessName: true, isVerified: true, isActive: true, codEnabled: true,
             settings: { select: { shopOpenTime: true, shopCloseTime: true, shopOpenDays: true } },
           },
         },
@@ -102,7 +102,7 @@ export async function GET(request) {
                 weight: true,
                 supplier: {
                   select: {
-                    id: true, businessName: true, isVerified: true, isActive: true,
+                    id: true, businessName: true, isVerified: true, isActive: true, codEnabled: true,
                     settings: { select: { shopOpenTime: true, shopCloseTime: true, shopOpenDays: true } },
                   },
                 },
@@ -184,6 +184,7 @@ export async function GET(request) {
         supplierId: cart.supplierId,
         supplierName: cart.supplier?.businessName,
         isVerified: cart.supplier?.isVerified,
+        codEnabled: cart.supplier?.codEnabled !== false,
         shopStatus: getShopStatus(cartSupplierIsActive, cartSupplierSettings),
         items: cartItems,
         itemCount: cartItems.length,
