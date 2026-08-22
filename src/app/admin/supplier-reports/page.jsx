@@ -3,19 +3,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ShieldExclamationIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  EyeIcon,
-  ClockIcon,
-  MagnifyingGlassIcon,
-} from '@heroicons/react/24/outline';
+  ShieldAlert,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  Clock,
+  Search,
+} from 'lucide-react';
 
 const STATUS_CONFIG = {
-  PENDING: { label: 'Pending', color: 'bg-amber-100 text-amber-700', icon: ClockIcon },
-  REVIEWED: { label: 'Reviewed', color: 'bg-blue-100 text-blue-700', icon: EyeIcon },
-  RESOLVED: { label: 'Resolved', color: 'bg-green-100 text-green-700', icon: CheckCircleIcon },
-  DISMISSED: { label: 'Dismissed', color: 'bg-gray-100 text-gray-600', icon: XCircleIcon },
+  PENDING: { label: 'Pending', color: 'bg-amber-100 text-amber-700', icon: Clock },
+  REVIEWED: { label: 'Reviewed', color: 'bg-blue-100 text-blue-700', icon: Eye },
+  RESOLVED: { label: 'Resolved', color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
+  DISMISSED: { label: 'Dismissed', color: 'bg-gray-100 text-gray-600', icon: XCircle },
 };
 
 const REASON_COLORS = {
@@ -105,7 +105,7 @@ export default function SupplierReportsPage() {
       <div className="flex items-center gap-3 mb-6 flex-wrap">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <MagnifyingGlassIcon className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Search supplier, buyer, reason..."
@@ -140,7 +140,7 @@ export default function SupplierReportsPage() {
         </div>
       ) : filteredReports.length === 0 ? (
         <div className="text-center py-20">
-          <ShieldExclamationIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <ShieldAlert className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-700">No reports found</h3>
           <p className="text-sm text-gray-500 mt-1">Try changing filters or search</p>
         </div>
