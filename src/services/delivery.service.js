@@ -345,7 +345,7 @@ export class DeliveryService {
         gst: 0,
         total: settings.platformFee,
         breakdown: [
-          { label: 'Delivery', amount: 0, originalAmount: originalFee, sub: bestVehicleType ? `${bestVehicleType} - ${Math.round(effectiveDistance)} km` : 'FREE' },
+          { label: 'Delivery', amount: 0, originalAmount: originalFee, sub: bestVehicleType ? `${bestVehicleType} - ${effectiveDistance.toFixed(1)} km` : 'FREE' },
           { label: 'Platform Fee', amount: settings.platformFee },
           { label: 'GST & Other Charges', amount: 0 },
         ],
