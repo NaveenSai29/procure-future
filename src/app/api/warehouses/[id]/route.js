@@ -1,6 +1,21 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 
+async function reverseGeocodeArea(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`,
+      { headers: { 'User-Agent': 'PROCURE-App/1.0' } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const address = data.address || {};
+    return address.suburb || address.neighbourhood || address.residential || address.quarter || address.city_district || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getSupplierId(userId) {
   const staff = await prisma.supplierStaff.findFirst({ where: { userId } });
   if (staff) return staff.supplierId;
@@ -65,6 +80,16 @@ export async function PATCH(request, { params }) {
     if (pincode !== undefined) updateData.pincode = pincode;
     if (latitude !== undefined) updateData.latitude = latitude;
     if (longitude !== undefined) updateData.longitude = longitude;
+
+    // Auto-detect area if location changed
+    if (latitude !== undefined || longitude !== undefined) {
+      const effectiveLat = latitude !== undefined ? latitude : existing.latitude;
+      const effectiveLng = longitude !== undefined ? longitude : existing.longitude;
+      if (effectiveLat && effectiveLng) {
+        const area = await reverseGeocodeArea(effectiveLat, effectiveLng);
+        if (area) updateData.area = area;
+      }
+    }
     if (isActive !== undefined) updateData.isActive = isActive;
     if (isPickupLocation !== undefined) updateData.isPickupLocation = isPickupLocation;
 

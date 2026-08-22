@@ -316,6 +316,21 @@ export class DeliveryService {
         bestVehicleType = bestVehicle?.type || null;
       }
       
+      // Calculate ETA even for free delivery
+      const freeTimeEstimate = await this.calculateEstimatedTime({
+        distanceKm: effectiveDistance,
+        totalWeight,
+        itemCount,
+        vehicleType: bestVehicleType,
+        isRaining: false,
+        isHeavyRain: false,
+        buyerLat,
+        buyerLng,
+        warehouseLat,
+        warehouseLng,
+        isExpress,
+      });
+
       return {
         deliveryFee: 0,
         originalDeliveryFee: originalFee,
@@ -329,7 +344,7 @@ export class DeliveryService {
         ],
         isFree: true,
         distanceKm: Math.round(effectiveDistance * 10) / 10,
-        estimatedTime: '25-30 mins',
+        estimatedTime: freeTimeEstimate.estimatedTime,
         surgeReason: null,
         isDeliverable: true,
         isRaining: false,

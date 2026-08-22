@@ -1,6 +1,21 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 
+async function reverseGeocodeArea(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16`,
+      { headers: { 'User-Agent': 'PROCURE-App/1.0' } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const address = data.address || {};
+    return address.suburb || address.neighbourhood || address.residential || address.quarter || address.city_district || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getSupplierId(userId) {
   const staff = await prisma.supplierStaff.findFirst({ where: { userId } });
   if (staff) return staff.supplierId;
@@ -34,7 +49,7 @@ export async function GET(req) {
     if (supplierId) {
       const warehouses = await prisma.warehouse.findMany({
         where: { supplierId },
-        select: { id: true, name: true, city: true, state: true, addressLine1: true, pincode: true, isActive: true, isPickupLocation: true },
+        select: { id: true, name: true, city: true, area: true, state: true, addressLine1: true, pincode: true, isActive: true, isPickupLocation: true },
         orderBy: { createdAt: "asc" },
       });
       return successResponse(warehouses);
@@ -73,12 +88,19 @@ export async function POST(request) {
     const sid = await getSupplierId(session.userId);
     if (!sid) return errorResponse("Supplier account required", 403);
 
+    // Auto-detect area from coordinates
+    let area = null;
+    if (latitude && longitude) {
+      area = await reverseGeocodeArea(latitude, longitude);
+    }
+
     const warehouse = await prisma.warehouse.create({
       data: {
         name,
         addressLine1,
         addressLine2: addressLine2 || null,
         city,
+        area,
         state,
         pincode,
         supplierId: sid,

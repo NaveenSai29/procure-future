@@ -53,7 +53,7 @@ function getShopStatus(isActive, settings) {
   if (!isActive) return { isOpen: false, reason: 'offline' };
   if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: false, reason: 'not_set' };
 
-  const now = new Date();
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
   const today = days[now.getDay()];
   let openDays = days;
