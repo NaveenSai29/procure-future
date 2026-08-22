@@ -15,7 +15,7 @@ function getShopStatus(settings, isActive) {
     return { isOpen: false, reason: 'not_set', nextOpenTime: null, nextOpenDay: null, closesIn: null };
   }
 
-  const now = new Date();
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const dayMap = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
   const currentDay = dayMap[now.getDay()];
   
