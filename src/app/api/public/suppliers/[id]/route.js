@@ -122,7 +122,6 @@ export async function GET(request, { params }) {
             pincode: true,
           },
         },
-        _count: { select: { products: true } },
       },
     });
 
@@ -134,6 +133,10 @@ export async function GET(request, { params }) {
     try {
       parsedTags = supplier.tags ? JSON.parse(supplier.tags) : [];
     } catch { parsedTags = []; }
+
+    const productsCount = await prisma.product.count({
+      where: { supplierId: id, isApproved: true, isActive: true },
+    });
 
     const shopStatus = getShopStatus(supplier.settings, supplier.isActive);
     const warehouse = supplier.warehouses?.[0];
@@ -150,6 +153,7 @@ export async function GET(request, { params }) {
         tags: parsedTags,
         shopStatus,
         distance,
+        productsCount,
       },
     });
   } catch (error) {
