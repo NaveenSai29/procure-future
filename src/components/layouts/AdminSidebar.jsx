@@ -12,7 +12,7 @@ import {
   BadgeCheck, Zap, AlertTriangle, Lock, ClipboardList, HeartHandshake,
   ScrollText, Tag, Layers, Landmark, Banknote, TrendingUp,
   PieChart, Radio, ListTodo, Wrench, Server, Key, LogOut, UserPlus, Wallet,
-  Bike, Building2, IndianRupee, Users2, FileText, Sparkles,
+  Bike, Building2, IndianRupee, Users2, FileText, Sparkles, ShieldAlert,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,7 @@ const menuGroups = [
       { title: "GST Verification", href: "/admin/gst", icon: BadgeCheck },
       { title: "HSN Codes", href: "/admin/hsn", icon: Hash },
       { title: "AI Generation", href: "/admin/ai-generation", icon: Sparkles },
+      { title: "Supplier Reports", href: "/admin/supplier-reports", icon: ShieldAlert },
       { title: "Supplier Settlements", href: "/admin/finance", icon: IndianRupee },
     ],
   },
