@@ -270,16 +270,16 @@ export class DeliveryService {
       }
     }
 
-    // Use effective distance for calculations (minimum 1km)
-    const effectiveDistance = Math.max(1, Math.round(distanceKm));
+    // Use exact distance for calculations
+    const effectiveDistance = distanceKm;
 
     // MAX DISTANCE CHECK — must run BEFORE free delivery check
     if (distanceKm > settings.maxDistance) {
       return {
         deliveryFee: null,
         isDeliverable: false,
-        distanceKm: Math.round(distanceKm),
-        message: `Delivery not available. Distance ${Math.round(distanceKm)} km exceeds maximum ${settings.maxDistance} km.`,
+        distanceKm: distanceKm,
+        message: `Delivery not available. Distance ${distanceKm.toFixed(1)} km exceeds maximum ${settings.maxDistance} km.`,
       };
     }
 
