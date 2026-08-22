@@ -475,6 +475,17 @@ export class DeliveryService {
       { label: 'GST & Other Charges', amount: gst },
     ].filter(Boolean);
 
+    // Weight-based extra time (B2B appropriate)
+    let weightExtra = 0;
+    if (totalWeight > 500) weightExtra = 45;
+    else if (totalWeight > 300) weightExtra = 35;
+    else if (totalWeight > 200) weightExtra = 30;
+    else if (totalWeight > 100) weightExtra = 25;
+    else if (totalWeight > 50) weightExtra = 20;
+    else if (totalWeight > 25) weightExtra = 15;
+    else if (totalWeight > 10) weightExtra = 10;
+    else if (totalWeight > 5) weightExtra = 5;
+
     return {
       deliveryFee,
       platformFee,
@@ -490,6 +501,7 @@ export class DeliveryService {
       selectedVehicle: bestVehicle?.type,
       estimatedTime,
       totalMinutes: timeEstimate.totalMinutes,
+      cartDisplayMinutes: Math.round((timeEstimate.breakdown.travelMinutes + 15 + weightExtra) * 1.1),
       breakdown,
       isRaining,
     };
