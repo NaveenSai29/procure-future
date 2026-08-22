@@ -50,10 +50,15 @@ function getShopStatus(settings, isActive) {
   const closeMinutes = closeH * 60 + closeM;
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  if (currentMinutes < openMinutes) {
+  // Handle overnight (close time before open time = closes next day)
+  const isOvernight = closeMinutes < openMinutes;
+  const effectiveCloseMinutes = isOvernight ? closeMinutes + 24 * 60 : closeMinutes;
+  const effectiveCurrentMinutes = isOvernight && currentMinutes < openMinutes ? currentMinutes + 24 * 60 : currentMinutes;
+
+  if (effectiveCurrentMinutes < openMinutes) {
     return { isOpen: false, reason: 'not_open_yet', nextOpenTime: settings.shopOpenTime, nextOpenDay: currentDay, closesIn: null };
   }
-  if (currentMinutes >= closeMinutes) {
+  if (effectiveCurrentMinutes >= effectiveCloseMinutes) {
     let nextDay = null;
     for (let i = 1; i <= 7; i++) {
       const checkIndex = (now.getDay() + i) % 7;
@@ -66,7 +71,7 @@ function getShopStatus(settings, isActive) {
     return { isOpen: false, reason: 'closed', nextOpenTime: settings.shopOpenTime, nextOpenDay: nextDay, closesIn: null };
   }
 
-  const closesIn = closeMinutes - currentMinutes;
+  const closesIn = effectiveCloseMinutes - effectiveCurrentMinutes;
   return { isOpen: true, reason: null, nextOpenTime: null, nextOpenDay: null, closesIn };
 }
 

@@ -26,32 +26,30 @@ function getShopStatus(settings, isActive) {
 
   const [openH, openM] = settings.shopOpenTime.split(':').map(Number);
   const [closeH, closeM] = settings.shopCloseTime.split(':').map(Number);
-  
-  const todayOpen = new Date(now);
-  todayOpen.setHours(openH, openM, 0, 0);
-  
-  const todayClose = new Date(now);
-  todayClose.setHours(closeH, closeM, 0, 0);
+  const openMinutes = openH * 60 + openM;
+  const closeMinutes = closeH * 60 + closeM;
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Handle overnight (close time before open time = closes next day)
+  const isOvernight = closeMinutes < openMinutes;
+  const effectiveCloseMinutes = isOvernight ? closeMinutes + 24 * 60 : closeMinutes;
+  const effectiveCurrentMinutes = isOvernight && currentMinutes < openMinutes ? currentMinutes + 24 * 60 : currentMinutes;
 
   // If today is not an open day
   if (!openDays.includes(today)) {
     return { isOpen: false, reason: 'day_off', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
   }
 
-  // Check if within open hours
-  if (now >= todayOpen && now < todayClose) {
-    const closesInMs = todayClose.getTime() - now.getTime();
-    const closesInMin = Math.floor(closesInMs / 60000);
-    return { isOpen: true, reason: null, nextOpenTime: null, closesIn: closesInMin };
+  if (effectiveCurrentMinutes < openMinutes) {
+    return { isOpen: false, reason: 'not_open_yet', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Today', closesIn: null };
   }
 
-  // Shop is closed for today - find next open time
-  if (now >= todayClose) {
+  if (effectiveCurrentMinutes >= effectiveCloseMinutes) {
     return { isOpen: false, reason: 'closed', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
   }
 
-  // Before opening time today
-  return { isOpen: false, reason: 'not_open_yet', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Today', closesIn: null };
+  const closesIn = effectiveCloseMinutes - effectiveCurrentMinutes;
+  return { isOpen: true, reason: null, nextOpenTime: null, closesIn };
 }
 
 export async function GET(request) {
