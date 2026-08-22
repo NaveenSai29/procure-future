@@ -32,15 +32,37 @@ export async function POST(request) {
       return errorResponse('Delivery partner profile not found', 404);
     }
 
+    const partner = await prisma.deliveryPartner.findUnique({
+      where: { id: user.deliveryPartner.id },
+      select: { currentLat: true, currentLng: true, lastLocationAt: true },
+    });
+
+    let currentSpeed = null;
+    const now = new Date();
+
+    if (partner?.currentLat && partner?.currentLng && partner?.lastLocationAt) {
+      const R = 6371;
+      const dLat = (latitude - partner.currentLat) * Math.PI / 180;
+      const dLng = (longitude - partner.currentLng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(partner.currentLat * Math.PI / 180) * Math.cos(latitude * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const timeHours = (now - new Date(partner.lastLocationAt)) / (1000 * 60 * 60);
+      if (timeHours > 0 && distanceKm > 0) {
+        currentSpeed = distanceKm / timeHours;
+      }
+    }
+
     await prisma.deliveryPartner.update({
       where: { id: user.deliveryPartner.id },
       data: {
         currentLat: latitude,
         currentLng: longitude,
+        lastLocationAt: now,
+        currentSpeed: currentSpeed ? Math.round(currentSpeed * 10) / 10 : null,
       },
     });
 
-    return successResponse({ message: 'Location updated' });
+    return successResponse({ message: 'Location updated', speed: currentSpeed ? Math.round(currentSpeed * 10) / 10 : null });
   } catch (error) {
     console.error('Update location error:', error);
     return errorResponse('Failed to update location', 500);

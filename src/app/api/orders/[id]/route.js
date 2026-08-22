@@ -131,6 +131,8 @@ export async function GET(request, { params }) {
                 rating: true,
                 currentLat: true,
                 currentLng: true,
+                currentSpeed: true,
+                lastLocationAt: true,
                 activeVehicle: {
                   select: { vehicleType: true, vehicleNumber: true },
                 },
