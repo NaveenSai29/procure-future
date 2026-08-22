@@ -260,11 +260,18 @@ export class DeliveryService {
     // DISTANCE — must calculate before any checks
     let distanceKm = 0;
     if (buyerLat && buyerLng && warehouseLat && warehouseLng) {
-      distanceKm = haversineDistance(buyerLat, buyerLng, warehouseLat, warehouseLng);
+      // Try OSRM road distance first (same as HomeScreen/SupplierListScreen)
+      const trafficInfo = await getTrafficMultiplier(buyerLat, buyerLng, warehouseLat, warehouseLng);
+      if (trafficInfo?.actualDistanceKm) {
+        distanceKm = trafficInfo.actualDistanceKm;
+      } else {
+        // Fallback: straight-line × 1.4 (road factor)
+        distanceKm = haversineDistance(buyerLat, buyerLng, warehouseLat, warehouseLng) * 1.4;
+      }
     }
 
     // Use effective distance for calculations (minimum 1km)
-    const effectiveDistance = Math.round(distanceKm);
+    const effectiveDistance = Math.max(1, Math.round(distanceKm));
 
     // MAX DISTANCE CHECK — must run BEFORE free delivery check
     if (distanceKm > settings.maxDistance) {
