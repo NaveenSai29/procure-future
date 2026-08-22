@@ -769,6 +769,8 @@ model DeliveryPartner {
   isOnline          Boolean   @default(false)
   currentLat        Float?
   currentLng        Float?
+  lastLocationAt  DateTime? @map("last_location_at")
+  currentSpeed    Float?    @map("current_speed")
   rating            Float     @default(0.0)
   totalDeliveries   Int       @default(0)
   activeVehicleId   String?   // Currently active vehicle
