@@ -489,6 +489,7 @@ export class DeliveryService {
       distanceKm: Math.round(effectiveDistance * 10) / 10,
       selectedVehicle: bestVehicle?.type,
       estimatedTime,
+      totalMinutes: timeEstimate.totalMinutes,
       breakdown,
       isRaining,
     };
