@@ -26,6 +26,14 @@ const DAYS = [
   { key: 'SUN', label: 'Sun' },
 ];
 
+const format12Hour = (time24) => {
+  if (!time24 || !time24.includes(':')) return '';
+  const [h, m] = time24.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 || 12;
+  return `${displayH}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
+
 // Business Info Edit Form Component
 function BusinessInfoForm({ supplier, onUpdate }) {
   const [editing, setEditing] = useState(false);
@@ -865,11 +873,11 @@ function ShopHoursForm({ settings, onUpdate }) {
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="text-xs text-gray-500">Open Time</label>
-            <p className="text-lg font-bold text-gray-900">{openTime || '—'}</p>
+            <p className="text-lg font-bold text-gray-900">{openTime ? format12Hour(openTime) : '—'}</p>
           </div>
           <div>
             <label className="text-xs text-gray-500">Close Time</label>
-            <p className="text-lg font-bold text-gray-900">{closeTime || '—'}</p>
+            <p className="text-lg font-bold text-gray-900">{closeTime ? format12Hour(closeTime) : '—'}</p>
           </div>
           <div>
             <label className="text-xs text-gray-500">Open Days</label>

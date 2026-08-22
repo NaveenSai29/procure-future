@@ -5,6 +5,14 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Save, DollarSign, Clock, Shield, Users, UserPlus, Trash2, Store, Mail, Phone, Bike, Star } from 'lucide-react';
 import { toast } from 'sonner';
 
+const format12Hour = (time24) => {
+  if (!time24 || !time24.includes(':')) return '';
+  const [h, m] = time24.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 || 12;
+  return `${displayH}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
+
 export default function SupplierDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -274,7 +282,7 @@ export default function SupplierDetailPage() {
             {shopOpenTime && shopCloseTime && shopOpenDays.length > 0 && (
               <div className="p-3 bg-green-50 rounded-xl border border-green-200">
                 <p className="text-sm text-green-700 font-medium">
-                  🕐 {shopOpenTime} - {shopCloseTime} on {shopOpenDays.map(d => d.substring(0, 3)).join(', ')}
+                  🕐 {format12Hour(shopOpenTime)} - {format12Hour(shopCloseTime)} on {shopOpenDays.map(d => d.substring(0, 3)).join(', ')}
                 </p>
               </div>
             )}
