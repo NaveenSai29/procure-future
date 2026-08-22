@@ -265,8 +265,7 @@ export class DeliveryService {
       if (trafficInfo?.actualDistanceKm) {
         distanceKm = trafficInfo.actualDistanceKm;
       } else {
-        // Fallback: straight-line × 1.4 (road factor)
-        distanceKm = haversineDistance(buyerLat, buyerLng, warehouseLat, warehouseLng) * 1.4;
+        distanceKm = 0;
       }
     }
 
@@ -519,16 +518,6 @@ export class DeliveryService {
       console.log('Map ETA error:', e.message);
     }
     
-    const straightKm = haversineDistance(originLat, originLng, destLat, destLng);
-    if (!straightKm) return null;
-    const roadKm = straightKm * 1.4;
-    const mins = Math.max(2, Math.round(roadKm * 3));
-    return {
-      distanceKm: roadKm.toFixed(1),
-      durationMin: mins,
-      isReal: false,
-      trafficLabel: null,
-      displayText: `${mins} min`,
-    };
+    return null;
   }
 }
