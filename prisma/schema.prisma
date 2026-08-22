@@ -718,6 +718,11 @@ model Order {
     rating        Int?
     ratingComment String?              @db.Text
     ratedAt       DateTime?
+    supplierRating    Int?
+    partnerRating     Int?
+    supplierRatedAt   DateTime?
+    partnerRatedAt    DateTime?
+    tipAmount         Float                @default(0)
     notes         String?
     deliveryInstructions String?
     instructionImages   String?
@@ -2108,4 +2113,19 @@ model SupplierReport {
   @@index([buyerId])
   @@index([status])
   @@index([createdAt])
+}
+
+model PartnerTip {
+  id          String   @id @default(uuid())
+  orderId     String
+  partnerId   String
+  buyerId     String
+  amount      Float
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  status      String   @default("COMPLETED")
+  createdAt   DateTime @default(now())
+
+  @@index([partnerId])
+  @@index([orderId])
 }

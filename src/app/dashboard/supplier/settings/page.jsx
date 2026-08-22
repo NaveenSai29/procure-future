@@ -484,62 +484,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
             </div>
           )}
 
-          {/* Logo & Banner Upload */}
-          <div className="col-span-2 mt-4 border-t pt-4">
-            <label className="text-sm text-gray-500">Store Branding</label>
-            <div className="grid grid-cols-2 gap-4 mt-2">
-              {/* Logo */}
-              <div>
-                <label className="text-xs text-gray-500">Store Logo</label>
-                <p className="text-[10px] text-gray-400 mt-0.5">1:1 Square • 512×512 px • JPG/PNG • Max 5MB</p>
-                <div className="flex items-center gap-3 mt-1">
-                  {(pendingLogo || supplier?.logo) && !pendingLogoRemove ? (
-                    <img src={(pendingLogo || supplier.logo)?.startsWith('http') ? (pendingLogo || supplier.logo) : `https://vantagemarketspvt.com${pendingLogo || supplier.logo}`} alt="Logo" className="w-16 h-16 object-cover rounded-lg border" />
-                  ) : (
-                    <div className="w-16 h-16 bg-gray-100 rounded-lg border flex items-center justify-center text-gray-400">Logo</div>
-                  )}
-                  <div className="flex flex-col gap-1">
-                    <label className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-blue-100 transition text-center">
-                      {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
-                      <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
-                    </label>
-                    {(pendingLogo || supplier?.logo) && !pendingLogoRemove && (
-                      <button onClick={handleRemoveLogo} className="px-3 py-1 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition">
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-              {/* Banner */}
-              <div>
-                <label className="text-xs text-gray-500">Cover Banner</label>
-                <p className="text-[10px] text-gray-400 mt-0.5">16:9 Wide • 1920×1080 px • JPG/PNG • Max 5MB</p>
-                <div className="flex items-center gap-3 mt-1">
-                  {(pendingBanner || supplier?.banner) && !pendingBannerRemove ? (
-                    <img src={(pendingBanner || supplier.banner)?.startsWith('http') ? (pendingBanner || supplier.banner) : `https://vantagemarketspvt.com${pendingBanner || supplier.banner}`} alt="Banner" className="w-24 h-14 object-cover rounded-lg border" />
-                  ) : (
-                    <div className="w-24 h-14 bg-gray-100 rounded-lg border flex items-center justify-center text-gray-400 text-xs">Banner</div>
-                  )}
-                  <div className="flex flex-col gap-1">
-                    <label className="px-3 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium cursor-pointer hover:bg-blue-100 transition text-center">
-                      {uploadingBanner ? 'Uploading...' : 'Upload Banner'}
-                      <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} disabled={uploadingBanner} />
-                    </label>
-                    {(pendingBanner || supplier?.banner) && !pendingBannerRemove && (
-                      <button onClick={handleRemoveBanner} className="px-3 py-1 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition">
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Preview hint */}
-            <p className="text-xs text-blue-500 mt-2">
-              💡 Preview: Uploaded branding will show on your supplier page in the buyer app.
-            </p>
-          </div>
+          {/* Branding - Cover Video + Shop Photos only */}
 
           {/* Shop Photos */}
           <div className="col-span-2 mt-4">
@@ -651,7 +596,7 @@ function BusinessInfoForm({ supplier, onUpdate }) {
           </div>
 
           {/* Save Branding - Common button at bottom */}
-          {(pendingLogo !== null || pendingBanner !== null || pendingLogoRemove || pendingBannerRemove || pendingVideoRemove || pendingVideoUrl !== null || pendingPhotosRemove.length > 0 || pendingPhotos.length > 0) && (
+          {(pendingVideoRemove || pendingVideoUrl !== null || pendingPhotosRemove.length > 0 || pendingPhotos.length > 0) && (
             <div className="col-span-2 mt-4 border-t pt-4 flex gap-2">
               <button
                 onClick={handleSaveBranding}
@@ -661,10 +606,6 @@ function BusinessInfoForm({ supplier, onUpdate }) {
               </button>
               <button
                 onClick={() => {
-                  setPendingLogo(null);
-                  setPendingBanner(null);
-                  setPendingLogoRemove(false);
-                  setPendingBannerRemove(false);
                   setPendingVideoRemove(false);
                   setPendingVideoUrl(null);
                   setPendingPhotosRemove([]);

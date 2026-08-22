@@ -7,7 +7,7 @@ export async function POST(request, { params }) {
     if (!session) return errorResponse('Unauthorized', 401);
 
     const { id } = await params;
-    const { rating, comment } = await request.json();
+    const { rating } = await request.json();
 
     if (!rating || rating < 1 || rating > 5) return errorResponse('Rating must be 1-5', 400);
 
@@ -17,8 +17,7 @@ export async function POST(request, { params }) {
         id: true,
         buyerId: true,
         status: true,
-        rating: true,
-        product: { select: { supplierId: true } },
+        delivery: { select: { partnerId: true } },
       },
     });
 
@@ -26,38 +25,17 @@ export async function POST(request, { params }) {
     if (order.buyerId !== session.userId) return errorResponse('You can only rate your own orders', 403);
     if (order.status !== 'DELIVERED') return errorResponse('Can only rate delivered orders', 400);
 
-    // Update order rating
+    // Update order partner rating
     await prisma.order.update({
       where: { id },
-      data: { rating, ratingComment: comment || null, ratedAt: new Date() },
+      data: { partnerRating: rating, partnerRatedAt: new Date() },
     });
 
-    // Update supplier rating
-    const supplierId = order.product?.supplierId;
-    if (supplierId) {
-      const supplier = await prisma.supplier.findUnique({
-        where: { id: supplierId },
-        select: { avgRating: true, ratingCount: true },
-      });
-
-      if (supplier) {
-        const newCount = supplier.ratingCount + 1;
-        const newAvg = ((supplier.avgRating * supplier.ratingCount) + rating) / newCount;
-        await prisma.supplier.update({
-          where: { id: supplierId },
-          data: {
-            avgRating: Math.round(newAvg * 10) / 10,
-            ratingCount: newCount,
-          },
-        });
-      }
-    }
-
-    // Update delivery partner rating
-    const delivery = await prisma.delivery.findUnique({ where: { orderId: id } });
-    if (delivery?.partnerId) {
+    // Update partner rating
+    const partnerId = order.delivery?.partnerId;
+    if (partnerId) {
       const partner = await prisma.deliveryPartner.findUnique({
-        where: { id: delivery.partnerId },
+        where: { id: partnerId },
         select: { rating: true, totalDeliveries: true },
       });
 
@@ -68,15 +46,15 @@ export async function POST(request, { params }) {
         const currentSum = currentRating * previousRatedCount;
         const newRating = (currentSum + rating) / (previousRatedCount + 1);
         await prisma.deliveryPartner.update({
-          where: { id: delivery.partnerId },
+          where: { id: partnerId },
           data: { rating: Math.round(newRating * 10) / 10 },
         });
       }
     }
 
-    return successResponse({ message: 'Rating submitted' });
+    return successResponse({ message: 'Partner rated successfully' });
   } catch (error) {
-    console.error('Rating error:', error);
-    return errorResponse('Failed to save rating', 500);
+    console.error('Partner rating error:', error);
+    return errorResponse('Failed to rate partner', 500);
   }
 }
