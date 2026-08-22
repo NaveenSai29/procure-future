@@ -469,7 +469,7 @@ export class DeliveryService {
 
     // BREAKDOWN
     const breakdown = [
-      { label: 'Delivery', amount: deliveryFee, sub: `${bestVehicle?.type || 'Delivery'} - ${Math.round(effectiveDistance)} km` },
+      { label: 'Delivery', amount: deliveryFee, sub: `${bestVehicle?.type || 'Delivery'} - ${effectiveDistance.toFixed(1)} km` },
       codAmount > 0 && { label: 'COD Charge', amount: codAmount },
       surgeAmount > 0 && { label: surgeReason, amount: surgeAmount, isSurge: true },
       { label: 'Platform Fee', amount: platformFee },
