@@ -1,5 +1,13 @@
 "use client";
 
+const format12Hour = (time24) => {
+  if (!time24 || !time24.includes(':')) return '';
+  const [h, m] = time24.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const displayH = h % 12 || 12;
+  return `${displayH}:${m.toString().padStart(2, '0')} ${ampm}`;
+};
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -235,7 +243,7 @@ export default function DashboardPage() {
           <p className="text-muted-foreground flex items-center gap-1 mt-1">
             <span className={`inline-block w-2 h-2 rounded-full ${isVerified ? "bg-green-500" : "bg-yellow-500"}`} />
             {isVerified ? "Verified Supplier" : "Pending Verification"} • {supplier.businessType}
-            {hasShopHours && <span className="ml-1">• {supplierSettings.shopOpenTime} - {supplierSettings.shopCloseTime}</span>}
+            {hasShopHours && <span className="ml-1">• {format12Hour(supplierSettings.shopOpenTime)} - {format12Hour(supplierSettings.shopCloseTime)}</span>}
           </p>
         </div>
         <Link href="/dashboard/supplier/products/new">
@@ -311,6 +319,33 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Revenue Trend Chart */}
+      {stats?.revenueTrend && stats.revenueTrend.length > 0 && (
+        <div className="bg-background rounded-xl border p-5">
+          <h2 className="font-semibold mb-4">Revenue (Last 7 Days)</h2>
+          <div className="flex items-end justify-between gap-2 h-32">
+            {stats.revenueTrend.map((day, i) => {
+              const maxRevenue = Math.max(...stats.revenueTrend.map(d => d.revenue), 1);
+              const heightPercent = (day.revenue / maxRevenue) * 100;
+              return (
+                <div key={i} className="flex flex-col items-center flex-1 gap-1">
+                  <span className="text-[10px] text-muted-foreground">
+                    {day.revenue > 0 ? `₹${Math.round(day.revenue / 1000)}k` : ''}
+                  </span>
+                  <div className="w-full flex items-end justify-center" style={{ height: '80px' }}>
+                    <div 
+                      className={`w-8 rounded-t-lg ${day.revenue > 0 ? 'bg-orange-500' : 'bg-gray-200'}`}
+                      style={{ height: `${Math.max(heightPercent, 4)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{day.date}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(({ label, value, change, up, icon: Icon, color, bg, href }) => (
@@ -329,6 +364,34 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      {/* Top Products */}
+      {stats?.topProducts && stats.topProducts.length > 0 && (
+        <div className="bg-background rounded-xl border">
+          <div className="p-4 border-b">
+            <h2 className="font-semibold">Top Products</h2>
+          </div>
+          <div className="p-4 space-y-2">
+            {stats.topProducts.map((p, i) => (
+              <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                <div className="flex items-center gap-3">
+                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                    i === 0 ? 'bg-yellow-100 text-yellow-700' :
+                    i === 1 ? 'bg-gray-100 text-gray-700' :
+                    i === 2 ? 'bg-orange-100 text-orange-700' :
+                    'bg-gray-50 text-gray-500'
+                  }`}>#{i + 1}</span>
+                  <div>
+                    <p className="text-sm font-medium">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">{p.orderCount} orders</p>
+                  </div>
+                </div>
+                <span className="text-sm font-semibold">₹{p.totalRevenue.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent Orders + Alerts */}
       <div className="grid lg:grid-cols-3 gap-6">
