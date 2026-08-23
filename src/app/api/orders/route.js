@@ -103,7 +103,7 @@ async function isShopOpen(supplierId) {
     // If no shop hours set, shop is closed until configured
     if (!settings?.shopOpenTime || !settings?.shopCloseTime) return false;
 
-    const now = new Date();
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
     const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
     const today = days[now.getDay()];
 
