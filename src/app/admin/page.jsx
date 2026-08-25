@@ -7,6 +7,7 @@ import {
   Clock, AlertCircle, FileText, RotateCcw, CheckCircle, XCircle,
   ArrowUp, ArrowDown, Activity, UserPlus, Building, Eye, Banknote, Timer, Truck
 } from 'lucide-react';
+import { formatOrderId } from '@/lib/formatOrderId';
 
 const formatOrderId = (id) => {
   if (!id) return '#N/A';

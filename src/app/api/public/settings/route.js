@@ -71,6 +71,7 @@ export async function GET() {
         vehicles: vehicles,
         deliveryVerification: {
           deliveryRadiusMeters: parseInt(delivery.deliveryRadiusMeters) || 50,
+          pickupRadiusMeters: parseInt(delivery.pickupRadiusMeters) || 100,
           waitTimerMinutes: parseInt(delivery.waitTimerMinutes) || 5,
           photoProofRequired: delivery.photoProofRequired !== 'false' && delivery.photoProofRequired !== false,
           newOrderTimeoutSeconds: parseInt(delivery.newOrderTimeoutSeconds) || 120,

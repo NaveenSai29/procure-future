@@ -39,6 +39,7 @@ export default function AdminSettingsPage() {
     riderIconUrl: '',
     surgeEnabled: false, rainSurgeMultiplier: 1.5, autoWeatherEnabled: true, peakHours: [],
     deliveryRadiusMeters: 50,
+    pickupRadiusMeters: 100,
     waitTimerMinutes: 5,
     photoProofRequired: true,
     returnFeePercent: 100,
@@ -138,6 +139,7 @@ export default function AdminSettingsPage() {
           autoWeatherEnabled: d.autoWeatherEnabled ?? prev.autoWeatherEnabled,
           peakHours: d.peakHours || prev.peakHours,
           deliveryRadiusMeters: d.deliveryRadiusMeters ?? prev.deliveryRadiusMeters ?? 50,
+          pickupRadiusMeters: d.pickupRadiusMeters ?? prev.pickupRadiusMeters ?? 100,
           waitTimerMinutes: d.waitTimerMinutes ?? prev.waitTimerMinutes ?? 5,
           photoProofRequired: d.photoProofRequired ?? prev.photoProofRequired ?? true,
           returnFeePercent: d.returnFeePercent ?? prev.returnFeePercent ?? 100,
@@ -525,6 +527,11 @@ export default function AdminSettingsPage() {
                 <p className="text-xs text-gray-400 mt-1">Partner must be within this distance to swipe deliver</p>
               </div>
               <div>
+                <label className="text-sm font-medium">Pickup Radius (meters)</label>
+                <input type="number" value={deliveryForm.pickupRadiusMeters || 100} onChange={e => setDeliveryForm(prev => ({ ...prev, pickupRadiusMeters: parseInt(e.target.value) || 100 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold" min="10" max="500" />
+                <p className="text-xs text-gray-400 mt-1">Partner must be within this distance to confirm pickup</p>
+              </div>
+              <div>
                 <label className="text-sm font-medium">Wait Timer (minutes)</label>
                 <input type="number" value={deliveryForm.waitTimerMinutes} onChange={e => setDeliveryForm(prev => ({ ...prev, waitTimerMinutes: parseInt(e.target.value) || 5 }))} className="w-full px-3 py-2.5 border rounded-lg mt-1.5 font-bold" min="1" max="30" />
                 <p className="text-xs text-gray-400 mt-1">Customer wait time before partner can proceed</p>
@@ -639,6 +646,7 @@ export default function AdminSettingsPage() {
               autoWeatherEnabled: deliveryForm.autoWeatherEnabled, peakHours: deliveryForm.peakHours,
               riderIconUrl: deliveryForm.riderIconUrl,
               deliveryRadiusMeters: parseInt(deliveryForm.deliveryRadiusMeters) || 50,
+              pickupRadiusMeters: parseInt(deliveryForm.pickupRadiusMeters) || 100,
               waitTimerMinutes: parseInt(deliveryForm.waitTimerMinutes) || 5,
               photoProofRequired: deliveryForm.photoProofRequired,
               returnFeePercent: parseInt(deliveryForm.returnFeePercent) || 100,
