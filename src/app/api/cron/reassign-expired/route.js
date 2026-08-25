@@ -3,10 +3,18 @@ import { successResponse, errorResponse } from '@/lib/auth';
 import { NotificationService } from '@/services/notification.service';
 
 /**
- * POST - Reassign expired deliveries (partner didn't accept in 30s)
- * Called by cron job or when partner rejects
+ * Reassign expired deliveries (partner didn't accept in timeout)
+ * Called by cron job (GET) or when partner rejects (POST)
  */
+export async function GET() {
+  return handleReassign();
+}
+
 export async function POST(request) {
+  return handleReassign();
+}
+
+async function handleReassign() {
   try {
     // Find all expired deliveries
     const expiredDeliveries = await prisma.delivery.findMany({
@@ -74,14 +82,14 @@ export async function POST(request) {
         .sort((a, b) => a.distance - b.distance)[0];
 
       if (nextPartner) {
-        // Assign to next partner with 30s window
+        // Assign to next partner with timeout window
         await prisma.delivery.create({
           data: {
             orderId: delivery.orderId,
             partnerId: nextPartner.id,
             status: 'ASSIGNED',
             assignedAt: new Date(),
-            expiresAt: new Date(Date.now() + 30 * 1000),
+            expiresAt: new Date(Date.now() + 300 * 1000), // 5 minutes timeout
           },
         });
 
@@ -91,7 +99,7 @@ export async function POST(request) {
             userId: nextPartner.user.id,
             type: 'PUSH',
             title: '🛵 New Delivery Order!',
-            message: `₹${order.totalAmount} — Accept now! (30s)`,
+            message: `₹${order.totalAmount} — Accept now! (5 min)`,
             eventType: 'new_order_broadcast',
             data: {
               deliveryId: null,
@@ -102,7 +110,7 @@ export async function POST(request) {
           });
         }
       } else {
-        // No more partners — cancel the order or mark for manual assignment
+        // No more partners — mark for manual assignment
         await prisma.order.update({
           where: { id: delivery.orderId },
           data: { status: 'PENDING_ASSIGNMENT' },

@@ -73,6 +73,7 @@ export async function GET() {
       try {
         // Only cancel if order is still in the relevant state
         const shouldCancel = 
+          (sla.slaType === 'RESPONSE' && sla.order.status === 'PENDING') ||
           (sla.slaType === 'PROCESSING' && ['ACCEPTED', 'PROCESSING'].includes(sla.order.status)) ||
           (sla.slaType === 'PICKUP' && sla.order.status === 'READY_FOR_PICKUP');
 

@@ -522,9 +522,9 @@ export default function SupplierOrdersPage() {
                 <tr><td colSpan={8} className="p-8 text-center text-gray-400">No orders found</td></tr>
               ) : (
                 filteredOrders.map(order => {
-                  const actions = supplierActions[order.status] || [];
-                  const declineReasonText = getDeclineReason(order);
                   const slaRemaining = getSLARemaining(order);
+                  const actions = slaRemaining?.expired ? [] : (supplierActions[order.status] || []);
+                  const declineReasonText = getDeclineReason(order);
                   return (
                     <tr key={order.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
@@ -575,9 +575,13 @@ export default function SupplierOrdersPage() {
                               {action.label}
                             </button>
                           ))}
-                          {!actions.length && order.status !== 'DELIVERED' && order.status !== 'DECLINED' && order.status !== 'CANCELLED' && order.status !== 'EXPIRED' && order.status !== 'RETURNED' && order.status !== 'RETURNING' && (
+                          {slaRemaining?.expired && ['PENDING', 'ACCEPTED', 'PROCESSING', 'READY_FOR_PICKUP'].includes(order.status) ? (
+                            <span className="text-xs text-red-500 font-medium">
+                              SLA Breached
+                            </span>
+                          ) : !actions.length && order.status !== 'DELIVERED' && order.status !== 'DECLINED' && order.status !== 'CANCELLED' && order.status !== 'EXPIRED' && order.status !== 'RETURNED' && order.status !== 'RETURNING' && (
                             <span className="text-xs text-gray-400">
-                              {order.status === 'ACCEPTED' ? 'Auto-processing...' : order.status === 'READY_FOR_PICKUP' ? 'Awaiting pickup' : order.status === 'SHIPPED' ? 'In transit' : 'Auto-processing...'}
+                              {order.status === 'ACCEPTED' ? 'Auto-processing...' : order.status === 'READY_FOR_PICKUP' ? 'Awaiting pickup' : order.status ==='SHIPPED' ? 'In transit' : 'Auto-processing...'}
                             </span>
                           )}
                           {(order.status === 'RETURNED' || order.status === 'RETURNING') && (

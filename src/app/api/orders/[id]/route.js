@@ -186,6 +186,20 @@ export async function PATCH(request, { params }) {
 
     if (!status) return errorResponse("Status is required", 422);
 
+    // ─── SLA BREACH CHECK: Block supplier actions on breached orders ───
+    if (status === 'ACCEPTED' || status === 'PROCESSING' || status === 'READY_FOR_PICKUP' || status === 'DECLINED') {
+      const activeSLA = await prisma.orderSLA.findFirst({
+        where: {
+          orderId: id,
+          status: 'ACTIVE',
+          deadline: { lt: new Date() },
+        },
+      });
+      if (activeSLA) {
+        return errorResponse("SLA has been breached. This order can no longer be updated.", 422);
+      }
+    }
+
     // ─── BUYER: Cancel own order (only when PENDING) ───
     if (status === 'CANCELLED' && order.buyerId === session.userId) {
       if (order.status !== 'PENDING') return errorResponse("Can only cancel orders that are still pending", 422);
