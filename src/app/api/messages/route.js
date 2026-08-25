@@ -12,17 +12,51 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const supplierId = searchParams.get("supplierId");
 
-    // Get messages with a specific supplier
+    // Get messages with a specific supplier (or SUPPORT)
     if (supplierId) {
+      let effectiveSupplierId = supplierId;
+      
+      // If SUPPORT, find or create PROCURE Support supplier from admin settings
+      if (supplierId === 'SUPPORT') {
+        let supportSupplier = await prisma.supplier.findFirst({
+          where: { businessName: 'PROCURE Support' },
+        });
+        
+        if (!supportSupplier) {
+          // Get support details from admin settings
+          const settings = await prisma.systemSetting.findMany({
+            where: { category: 'GENERAL' },
+          });
+          
+          const settingsMap = {};
+          settings.forEach(s => {
+            try { settingsMap[s.key] = JSON.parse(s.value); } 
+            catch { settingsMap[s.key] = s.value; }
+          });
+          
+          supportSupplier = await prisma.supplier.create({
+            data: {
+              businessName: 'PROCURE Support',
+              email: settingsMap.supportEmail || 'support@vantagemarketspvt.com',
+              mobile: settingsMap.supportPhone || '',
+              isVerified: true,
+              isActive: true,
+            },
+          });
+        }
+        
+        effectiveSupplierId = supportSupplier.id;
+      }
+
       const messages = await prisma.customerMessage.findMany({
-        where: { supplierId, buyerId },
+        where: { supplierId: effectiveSupplierId, buyerId },
         orderBy: { createdAt: "asc" },
         take: 100,
       });
 
       // Mark supplier messages as read
       await prisma.customerMessage.updateMany({
-        where: { supplierId, buyerId, senderType: "SUPPLIER", isRead: false },
+        where: { supplierId: effectiveSupplierId, buyerId, senderType: "SUPPLIER", isRead: false },
         data: { isRead: true },
       });
 
@@ -80,8 +114,31 @@ export async function POST(req) {
     
     if (!supplierId || !message) return errorResponse("supplierId and message required", 422);
 
+    let effectiveSupplierId = supplierId;
+    
+    // If SUPPORT, find or create PROCURE Support supplier
+    if (supplierId === 'SUPPORT') {
+      let supportSupplier = await prisma.supplier.findFirst({
+        where: { businessName: 'PROCURE Support' },
+      });
+      
+      if (!supportSupplier) {
+        supportSupplier = await prisma.supplier.create({
+          data: {
+            businessName: 'PROCURE Support',
+            email: 'support@vantagemarketspvt.com',
+            mobile: '1800123456',
+            isVerified: true,
+            isActive: true,
+          },
+        });
+      }
+      
+      effectiveSupplierId = supportSupplier.id;
+    }
+
     const msg = await prisma.customerMessage.create({
-      data: { supplierId, buyerId, senderType: "BUYER", message },
+      data: { supplierId: effectiveSupplierId, buyerId, senderType: "BUYER", message },
     });
 
     // ─── SEND NOTIFICATION TO SUPPLIER ───
