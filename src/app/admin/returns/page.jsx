@@ -3,6 +3,13 @@ import { useState, useEffect } from 'react';
 import { RotateCcw, Check, X, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
+const formatOrderId = (id) => {
+  if (!id) return '#N/A';
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = parseInt(hex, 16) % 100000;
+  return `#${num.toString().padStart(5, '0')}`;
+};
+
 export default function AdminReturnsPage() {
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +61,7 @@ export default function AdminReturnsPage() {
           <tbody className="divide-y">
             {returns.map(r => (
               <tr key={r.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-mono text-xs">#{r.orderId?.slice(0, 8)}</td>
+                <td className="px-4 py-3 font-mono text-xs">{r.orderId ? formatOrderId(r.orderId) : 'N/A'}</td>
                 <td className="px-4 py-3 text-sm">{r.buyer?.name || 'N/A'}</td>
                 <td className="px-4 py-3 text-sm max-w-xs truncate">{r.reason}</td>
                 <td className="px-4 py-3 text-sm font-medium">Rs.{r.refundAmount || r.order?.totalAmount || 0}</td>

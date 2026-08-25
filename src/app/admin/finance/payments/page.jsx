@@ -9,6 +9,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const formatOrderId = (id) => {
+  if (!id) return '#N/A';
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = parseInt(hex, 16) % 100000;
+  return `#${num.toString().padStart(5, '0')}`;
+};
+
 export default function AdminPaymentsPage() {
   const [stats, setStats] = useState(null);
   const [payments, setPayments] = useState([]);
@@ -184,7 +191,7 @@ export default function AdminPaymentsPage() {
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-gray-400 font-mono">Order:</span>
-                          <span className="text-xs font-mono font-medium text-gray-700">{p.orderId?.slice(0, 8)}...</span>
+                          <span className="text-xs font-mono font-medium text-gray-700">{p.orderId ? formatOrderId(p.orderId) : 'N/A'}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs text-gray-400 font-mono">Pay:</span>

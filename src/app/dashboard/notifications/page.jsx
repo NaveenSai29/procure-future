@@ -4,6 +4,19 @@ import { useState, useEffect } from 'react';
 import { Bell, Mail, MessageSquare, ShoppingBag, FileText, Check, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+const formatOrderId = (id) => {
+  if (!id) return '#N/A';
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = parseInt(hex, 16) % 100000;
+  return `#${num.toString().padStart(5, '0')}`;
+};
+
+const formatMessageWithOrderId = (message) => {
+  if (!message) return message;
+  // Replace UUID pattern (8-4-4-4-12) with formatted order ID
+  return message.replace(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, (match) => formatOrderId(match));
+};
+
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, unreadCount: 0 });
@@ -194,7 +207,7 @@ export default function NotificationsPage() {
                     </span>
                   </div>
                   <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-                    {notification.message}
+                    {formatMessageWithOrderId(notification.message)}
                   </p>
                   {notification.template && (
                     <span className="inline-block mt-2 px-2 py-0.5 text-xs bg-gray-100 text-gray-500 rounded">

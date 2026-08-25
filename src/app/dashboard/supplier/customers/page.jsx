@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 import { Users, Mail, Phone, ShoppingCart, Search, TrendingUp, Calendar, IndianRupee, ChevronRight, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
+const formatOrderId = (id) => {
+  if (!id) return '#N/A';
+  const hex = id.replace(/-/g, '').slice(0, 6);
+  const num = parseInt(hex, 16) % 100000;
+  return `#${num.toString().padStart(5, '0')}`;
+};
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -163,7 +170,7 @@ export default function CustomersPage() {
               {(selectedCustomer.orders || []).slice(0, 10).map(order => (
                 <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">#{order.id?.slice(0, 8)?.toUpperCase()}</p>
+                    <p className="text-sm font-medium text-gray-900">{formatOrderId(order.id)}</p>
                     <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                   </div>
                   <div className="text-right">
