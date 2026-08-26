@@ -174,3 +174,41 @@ export async function POST(req) {
     return errorResponse("Failed to send message", 500);
   }
 }
+
+// DELETE - Clear all messages with a supplier (when conversation ends)
+export async function DELETE(req) {
+  try {
+    const session = await getSessionUser();
+    if (!session) return errorResponse("Not authenticated", 401);
+
+    const { searchParams } = new URL(req.url);
+    const supplierId = searchParams.get("supplierId");
+    
+    if (!supplierId) return errorResponse("supplierId required", 422);
+
+    let effectiveSupplierId = supplierId;
+    
+    // If SUPPORT, find the actual supplier ID
+    if (supplierId === 'SUPPORT') {
+      const supportSupplier = await prisma.supplier.findFirst({
+        where: { businessName: 'PROCURE Support' },
+      });
+      if (supportSupplier) {
+        effectiveSupplierId = supportSupplier.id;
+      }
+    }
+
+    // Delete all messages for this buyer+supplier
+    await prisma.customerMessage.deleteMany({
+      where: { 
+        supplierId: effectiveSupplierId, 
+        buyerId: session.userId,
+      },
+    });
+
+    return successResponse({ message: "Conversation cleared" });
+  } catch (error) {
+    console.error("Delete messages error:", error);
+    return errorResponse("Failed to delete messages", 500);
+  }
+}
