@@ -50,7 +50,9 @@ export default function AdminMessagesPage() {
   useEffect(() => {
     if (!selectedConv) return;
     const interval = setInterval(() => {
-      fetch(`/api/admin/messages?userId=${selectedConv.buyer.id}&supplierId=${selectedConv.supplier.id}`)
+      // If conversation is archived, pass showArchived=true
+      const showArchivedParam = selectedConv.isArchived ? '&showArchived=true' : '';
+      fetch(`/api/admin/messages?userId=${selectedConv.buyer.id}&supplierId=${selectedConv.supplier.id}${showArchivedParam}`)
         .then(res => res.json())
         .then(json => {
           if (json.success) {
@@ -60,12 +62,14 @@ export default function AdminMessagesPage() {
         .catch(() => {});
     }, 3000);
     return () => clearInterval(interval);
-  }, [selectedConv?.buyer?.id, selectedConv?.supplier?.id]);
+  }, [selectedConv?.buyer?.id, selectedConv?.supplier?.id, selectedConv?.isArchived]);
 
   const openConversation = async (conv) => {
     setSelectedConv(conv);
     try {
-      const res = await fetch(`/api/admin/messages?userId=${conv.buyer.id}&supplierId=${conv.supplier.id}`);
+      // If conversation is archived, pass showArchived=true
+      const showArchivedParam = conv.isArchived ? '&showArchived=true' : '';
+      const res = await fetch(`/api/admin/messages?userId=${conv.buyer.id}&supplierId=${conv.supplier.id}${showArchivedParam}`);
       const json = await res.json();
       if (json.success) setMessages(json.data || []);
     } catch {
@@ -344,14 +348,22 @@ export default function AdminMessagesPage() {
                     </p>
                     <p className="text-xs text-gray-400">{selectedConv.messageCount} messages</p>
                   </div>
-                  {/* End Chat Button */}
-                  <button
-                    onClick={() => setShowEndChatModal(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition border border-red-200"
-                  >
-                    <XCircle className="h-3.5 w-3.5" />
-                    End Chat
-                  </button>
+                  {/* End Chat Button - only show for active chats */}
+                  {!selectedConv.isArchived && (
+                    <button
+                      onClick={() => setShowEndChatModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition border border-red-200"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      End Chat
+                    </button>
+                  )}
+                  {selectedConv.isArchived && (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg text-xs font-medium">
+                      <XCircle className="h-3.5 w-3.5" />
+                      Closed
+                    </span>
+                  )}
                 </div>
 
                 <div id="message-container" className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[420px]">
@@ -388,18 +400,26 @@ export default function AdminMessagesPage() {
                 </div>
 
                 <div className="p-4 border-t flex gap-2">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                    placeholder="Type your reply as support team..."
-                    className="flex-1 px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-orange-500"
-                  />
-                  <button onClick={sendMessage} disabled={sending || !newMessage.trim()}
-                    className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 text-white rounded-xl hover:from-orange-600 hover:to-rose-600 disabled:opacity-50 flex items-center gap-2">
-                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  </button>
+                  {selectedConv.isArchived ? (
+                    <div className="flex-1 text-center py-2.5 text-sm text-gray-400">
+                      This conversation is closed
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                        placeholder="Type your reply as support team..."
+                        className="flex-1 px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-orange-500"
+                      />
+                      <button onClick={sendMessage} disabled={sending || !newMessage.trim()}
+                        className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-rose-500 text-white rounded-xl hover:from-orange-600 hover:to-rose-600 disabled:opacity-50 flex items-center gap-2">
+                        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      </button>
+                    </>
+                  )}
                 </div>
               </>
             )}
