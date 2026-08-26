@@ -37,10 +37,13 @@ export async function GET(req) {
           supportSupplier = await prisma.supplier.create({
             data: {
               businessName: 'PROCURE Support',
-              email: settingsMap.supportEmail || 'support@vantagemarketspvt.com',
-              mobile: settingsMap.supportPhone || '',
+              businessType: 'SERVICE',
+              email: settingsMap.supportEmail,
+              mobile: settingsMap.supportPhone,
+              gstin: 'SUPPORT00000',
               isVerified: true,
               isActive: true,
+              codEnabled: false,
             },
           });
         }
