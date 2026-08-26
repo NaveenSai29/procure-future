@@ -40,6 +40,11 @@ export async function GET(req) {
       return successResponse(messages);
     }
 
+    // Identify PROCURE Support supplier
+    const supportSupplier = await prisma.supplier.findFirst({
+      where: { businessName: 'PROCURE Support' },
+    });
+
     // Get all unique conversations
     const allMessages = await prisma.customerMessage.findMany({
       orderBy: { createdAt: "desc" },
@@ -58,6 +63,7 @@ export async function GET(req) {
         conversations[key] = {
           buyer: msg.buyer,
           supplier: msg.supplier,
+          isSupportChat: supportSupplier && msg.supplierId === supportSupplier.id,
           lastMessage: msg.message?.substring(0, 100),
           lastMessageAt: msg.createdAt,
           lastSender: msg.senderType,
@@ -184,5 +190,41 @@ export async function POST(req) {
   } catch (error) {
     console.error("Admin send message error:", error);
     return errorResponse("Failed to send message", 500);
+  }
+}
+
+// DELETE - Admin ends conversation (clears messages)
+export async function DELETE(req) {
+  try {
+    const session = await getSessionUser();
+    if (!session) return errorResponse("Not authenticated", 401);
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      include: { roles: { include: { role: true } } },
+    });
+    const userRoles = user.roles.map(r => r.role.name);
+    if (!userRoles.includes("SUPER_ADMIN") && !userRoles.includes("ADMIN")) {
+      return errorResponse("Access denied", 403);
+    }
+
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+    const supplierId = searchParams.get("supplierId");
+    
+    if (!userId || !supplierId) return errorResponse("userId and supplierId required", 422);
+
+    // Delete all messages for this buyer+supplier
+    await prisma.customerMessage.deleteMany({
+      where: { 
+        supplierId, 
+        buyerId: userId,
+      },
+    });
+
+    return successResponse({ message: "Conversation ended by admin" });
+  } catch (error) {
+    console.error("Admin delete messages error:", error);
+    return errorResponse("Failed to end conversation", 500);
   }
 }
