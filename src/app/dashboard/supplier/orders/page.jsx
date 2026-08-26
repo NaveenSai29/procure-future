@@ -372,6 +372,8 @@ export default function SupplierOrdersPage() {
   };
 
   const getSLARemaining = (order) => {
+    // Don't show SLA for final states
+    if (['DELIVERED', 'CANCELLED', 'DECLINED', 'EXPIRED'].includes(order.status)) return null;
     if (!order.orderSLA || order.orderSLA.status !== 'ACTIVE') return null;
     const deadline = new Date(order.orderSLA.deadline);
     const now = new Date();
