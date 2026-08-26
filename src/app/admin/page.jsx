@@ -9,13 +9,6 @@ import {
 } from 'lucide-react';
 import { formatOrderId } from '@/lib/formatOrderId';
 
-const formatOrderId = (id) => {
-  if (!id) return '#N/A';
-  const hex = id.replace(/-/g, '').slice(0, 6);
-  const num = parseInt(hex, 16) % 100000;
-  return `#${num.toString().padStart(5, '0')}`;
-};
-
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
