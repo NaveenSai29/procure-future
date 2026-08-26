@@ -144,7 +144,7 @@ export async function POST(req) {
     // ─── SEND NOTIFICATION TO SUPPLIER ───
     try {
       const staff = await prisma.supplierStaff.findFirst({
-        where: { supplierId },
+        where: { supplierId: effectiveSupplierId },
         select: { userId: true },
       });
 
