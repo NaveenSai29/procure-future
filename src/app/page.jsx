@@ -36,7 +36,23 @@ export default function HomePage() {
     try {
       const res = await fetch("/api/auth/me");
       const data = await res.json();
-      if (data.success) setUser(data.data);
+      if (data.success) {
+        setUser(data.data);
+        
+        // Auto-redirect based on role
+        const userRoles = data.data?.roles || [];
+        const isAdminUser = userRoles.includes("SUPER_ADMIN") || userRoles.includes("ADMIN");
+        const isSupplierUser = userRoles.includes("SUPPLIER") || userRoles.includes("SUPPLIER_ADMIN");
+        
+        if (isAdminUser) {
+          window.location.href = '/admin';
+          return;
+        }
+        if (isSupplierUser) {
+          window.location.href = '/dashboard';
+          return;
+        }
+      }
     } catch {} finally { setLoading(false); }
   };
 
