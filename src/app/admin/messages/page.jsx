@@ -13,7 +13,7 @@ export default function AdminMessagesPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('conversations');
-  const [conversationFilter, setConversationFilter] = useState('ALL'); // ALL, SUPPORT, SUPPLIER
+  const [conversationFilter, setConversationFilter] = useState('ALL'); // ALL, SUPPORT, SUPPLIER, ARCHIVED
   const [selectedConv, setSelectedConv] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -38,6 +38,30 @@ export default function AdminMessagesPage() {
 
   useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
+  // Auto-refresh conversations every 3 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchConversations();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [fetchConversations]);
+
+  // Auto-refresh messages when a conversation is open
+  useEffect(() => {
+    if (!selectedConv) return;
+    const interval = setInterval(() => {
+      fetch(`/api/admin/messages?userId=${selectedConv.buyer.id}&supplierId=${selectedConv.supplier.id}`)
+        .then(res => res.json())
+        .then(json => {
+          if (json.success) {
+            setMessages(json.data || []);
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [selectedConv?.buyer?.id, selectedConv?.supplier?.id]);
+
   const openConversation = async (conv) => {
     setSelectedConv(conv);
     try {
@@ -48,6 +72,14 @@ export default function AdminMessagesPage() {
       toast.error('Failed to load messages');
     }
   };
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    const msgContainer = document.getElementById('message-container');
+    if (msgContainer) {
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+  }, [messages]);
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConv) return;
@@ -158,9 +190,10 @@ export default function AdminMessagesPage() {
 
   // Filter conversations based on selected filter
   const filteredConversations = data?.conversations?.filter(conv => {
-    if (conversationFilter === 'ALL') return true;
-    if (conversationFilter === 'SUPPORT') return conv.isSupportChat === true;
-    if (conversationFilter === 'SUPPLIER') return conv.isSupportChat !== true;
+    if (conversationFilter === 'ALL') return !conv.isArchived;
+    if (conversationFilter === 'SUPPORT') return conv.isSupportChat === true && !conv.isArchived;
+    if (conversationFilter === 'SUPPLIER') return conv.isSupportChat !== true && !conv.isArchived;
+    if (conversationFilter === 'ARCHIVED') return conv.isArchived === true;
     return true;
   }) || [];
 
@@ -203,9 +236,10 @@ export default function AdminMessagesPage() {
               {/* Filter Tabs */}
               <div className="flex gap-1 mt-3 bg-white rounded-lg p-1 border">
                 {[
-                  { id: 'ALL', label: 'All' },
+                  { id: 'ALL', label: 'Active' },
                   { id: 'SUPPORT', label: 'Support', icon: Headphones },
                   { id: 'SUPPLIER', label: 'Supplier', icon: Store },
+                  { id: 'ARCHIVED', label: 'Closed', icon: XCircle },
                 ].map(filter => (
                   <button
                     key={filter.id}
@@ -254,6 +288,11 @@ export default function AdminMessagesPage() {
                           {conv.isSupportChat && (
                             <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">
                               <Headphones className="h-2.5 w-2.5" /> Support
+                            </span>
+                          )}
+                          {conv.isArchived && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                              <XCircle className="h-2.5 w-2.5" /> Closed
                             </span>
                           )}
                         </div>
@@ -315,7 +354,7 @@ export default function AdminMessagesPage() {
                   </button>
                 </div>
 
-                <div className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[420px]">
+                <div id="message-container" className="flex-1 p-4 space-y-3 overflow-y-auto max-h-[420px]">
                   {messages.length === 0 ? (
                     <div className="text-center py-16 text-gray-400">
                       <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-30" />

@@ -1845,6 +1845,8 @@ model CustomerMessage {
   senderType  String
   message     String   @db.Text
   isRead      Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  archivedAt  DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1854,6 +1856,7 @@ model CustomerMessage {
   @@index([supplierId, buyerId])
   @@index([buyerId])
   @@index([createdAt])
+  @@index([isArchived])
 }
 
 model FraudAlert {

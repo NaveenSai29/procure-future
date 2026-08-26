@@ -24,13 +24,19 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
     const supplierId = searchParams.get("supplierId");
+    const showArchived = searchParams.get("showArchived");
 
     // Get messages with specific user + supplier pair
     if (userId && supplierId) {
       const messages = await prisma.customerMessage.findMany({
-        where: { buyerId: userId, supplierId },
+        where: { 
+          buyerId: userId, 
+          supplierId,
+          // If showArchived=true, show all; otherwise show only active
+          ...(showArchived === 'true' ? {} : { isArchived: false }),
+        },
         orderBy: { createdAt: "asc" },
-        take: 100,
+        take: 200,
         include: {
           buyer: { select: { id: true, name: true, email: true } },
           supplier: { select: { id: true, businessName: true } },
@@ -45,10 +51,10 @@ export async function GET(req) {
       where: { businessName: 'PROCURE Support' },
     });
 
-    // Get all unique conversations
+    // Get all unique conversations (including archived)
     const allMessages = await prisma.customerMessage.findMany({
       orderBy: { createdAt: "desc" },
-      take: 500,
+      take: 1000,
       include: {
         buyer: { select: { id: true, name: true, email: true } },
         supplier: { select: { id: true, businessName: true } },
@@ -64,6 +70,8 @@ export async function GET(req) {
           buyer: msg.buyer,
           supplier: msg.supplier,
           isSupportChat: supportSupplier && msg.supplierId === supportSupplier.id,
+          isArchived: msg.isArchived,
+          archivedAt: msg.archivedAt,
           lastMessage: msg.message?.substring(0, 100),
           lastMessageAt: msg.createdAt,
           lastSender: msg.senderType,
@@ -214,11 +222,16 @@ export async function DELETE(req) {
     
     if (!userId || !supplierId) return errorResponse("userId and supplierId required", 422);
 
-    // Delete all messages for this buyer+supplier
-    await prisma.customerMessage.deleteMany({
+    // Archive all messages for this buyer+supplier (don't delete)
+    await prisma.customerMessage.updateMany({
       where: { 
         supplierId, 
         buyerId: userId,
+        isArchived: false,
+      },
+      data: {
+        isArchived: true,
+        archivedAt: new Date(),
       },
     });
 

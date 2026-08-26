@@ -58,7 +58,7 @@ export async function GET(req) {
       }
 
       const messages = await prisma.customerMessage.findMany({
-        where: { supplierId: effectiveSupplierId, buyerId },
+        where: { supplierId: effectiveSupplierId, buyerId, isArchived: false },
         orderBy: { createdAt: "asc" },
         take: 100,
       });
@@ -198,15 +198,20 @@ export async function DELETE(req) {
       }
     }
 
-    // Delete all messages for this buyer+supplier
-    await prisma.customerMessage.deleteMany({
+    // Archive all messages for this buyer+supplier (don't delete)
+    await prisma.customerMessage.updateMany({
       where: { 
         supplierId: effectiveSupplierId, 
         buyerId: session.userId,
+        isArchived: false,
+      },
+      data: {
+        isArchived: true,
+        archivedAt: new Date(),
       },
     });
 
-    return successResponse({ message: "Conversation cleared" });
+    return successResponse({ message: "Conversation archived" });
   } catch (error) {
     console.error("Delete messages error:", error);
     return errorResponse("Failed to delete messages", 500);
