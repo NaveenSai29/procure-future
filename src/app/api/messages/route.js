@@ -2,6 +2,41 @@ import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 import { NotificationService } from "@/services/notification.service";
 
+// Helper: Get or create PROCURE Support supplier
+async function getOrCreateSupportSupplier() {
+  let supportSupplier = await prisma.supplier.findFirst({
+    where: { businessName: 'PROCURE Support' },
+  });
+  
+  if (!supportSupplier) {
+    // Get support details from admin settings
+    const settings = await prisma.systemSetting.findMany({
+      where: { category: 'GENERAL' },
+    });
+    
+    const settingsMap = {};
+    settings.forEach(s => {
+      try { settingsMap[s.key] = JSON.parse(s.value); } 
+      catch { settingsMap[s.key] = s.value; }
+    });
+    
+    supportSupplier = await prisma.supplier.create({
+      data: {
+        businessName: 'PROCURE Support',
+        businessType: 'SERVICE',
+        email: settingsMap.supportEmail,
+        mobile: settingsMap.supportPhone,
+        gstin: 'SUPPORT00000',
+        isVerified: true,
+        isActive: true,
+        codEnabled: false,
+      },
+    });
+  }
+  
+  return supportSupplier;
+}
+
 // GET - Get buyer's conversations with suppliers
 export async function GET(req) {
   try {
@@ -16,38 +51,9 @@ export async function GET(req) {
     if (supplierId) {
       let effectiveSupplierId = supplierId;
       
-      // If SUPPORT, find or create PROCURE Support supplier from admin settings
+      // If SUPPORT, find or create PROCURE Support supplier
       if (supplierId === 'SUPPORT') {
-        let supportSupplier = await prisma.supplier.findFirst({
-          where: { businessName: 'PROCURE Support' },
-        });
-        
-        if (!supportSupplier) {
-          // Get support details from admin settings
-          const settings = await prisma.systemSetting.findMany({
-            where: { category: 'GENERAL' },
-          });
-          
-          const settingsMap = {};
-          settings.forEach(s => {
-            try { settingsMap[s.key] = JSON.parse(s.value); } 
-            catch { settingsMap[s.key] = s.value; }
-          });
-          
-          supportSupplier = await prisma.supplier.create({
-            data: {
-              businessName: 'PROCURE Support',
-              businessType: 'SERVICE',
-              email: settingsMap.supportEmail,
-              mobile: settingsMap.supportPhone,
-              gstin: 'SUPPORT00000',
-              isVerified: true,
-              isActive: true,
-              codEnabled: false,
-            },
-          });
-        }
-        
+        const supportSupplier = await getOrCreateSupportSupplier();
         effectiveSupplierId = supportSupplier.id;
       }
 
@@ -59,17 +65,24 @@ export async function GET(req) {
 
       // Mark supplier messages as read
       await prisma.customerMessage.updateMany({
-        where: { supplierId: effectiveSupplierId, buyerId, senderType: "SUPPLIER", isRead: false },
+        where: { supplierId: effectiveSupplierId, buyerId, senderType: { in: ["SUPPLIER", "ADMIN"] }, isRead: false },
         data: { isRead: true },
       });
 
       return successResponse(messages);
     }
 
-    // Get all conversations
+    // Get all conversations (excluding PROCURE Support from this list)
+    const supportSupplier = await prisma.supplier.findFirst({
+      where: { businessName: 'PROCURE Support' },
+    });
+
     const conversations = await prisma.customerMessage.groupBy({
       by: ["supplierId"],
-      where: { buyerId },
+      where: { 
+        buyerId,
+        ...(supportSupplier && { supplierId: { not: supportSupplier.id } }),
+      },
       _count: { id: true },
       _max: { createdAt: true },
     });
@@ -106,7 +119,7 @@ export async function GET(req) {
   }
 }
 
-// POST - Buyer sends message to supplier
+// POST - Buyer sends message to supplier or support
 export async function POST(req) {
   try {
     const session = await getSessionUser();
@@ -121,22 +134,7 @@ export async function POST(req) {
     
     // If SUPPORT, find or create PROCURE Support supplier
     if (supplierId === 'SUPPORT') {
-      let supportSupplier = await prisma.supplier.findFirst({
-        where: { businessName: 'PROCURE Support' },
-      });
-      
-      if (!supportSupplier) {
-        supportSupplier = await prisma.supplier.create({
-          data: {
-            businessName: 'PROCURE Support',
-            email: 'support@vantagemarketspvt.com',
-            mobile: '1800123456',
-            isVerified: true,
-            isActive: true,
-          },
-        });
-      }
-      
+      const supportSupplier = await getOrCreateSupportSupplier();
       effectiveSupplierId = supportSupplier.id;
     }
 
@@ -144,28 +142,30 @@ export async function POST(req) {
       data: { supplierId: effectiveSupplierId, buyerId, senderType: "BUYER", message },
     });
 
-    // ─── SEND NOTIFICATION TO SUPPLIER ───
-    try {
-      const staff = await prisma.supplierStaff.findFirst({
-        where: { supplierId: effectiveSupplierId },
-        select: { userId: true },
-      });
-
-      if (staff) {
-        const buyer = await prisma.user.findUnique({
-          where: { id: buyerId },
-          select: { name: true },
+    // Send notification - only for regular suppliers (not SUPPORT)
+    if (supplierId !== 'SUPPORT') {
+      try {
+        const staff = await prisma.supplierStaff.findFirst({
+          where: { supplierId: effectiveSupplierId },
+          select: { userId: true },
         });
 
-        NotificationService.send({
-          userId: staff.userId,
-          type: 'IN_APP',
-          title: '💬 New Message',
-          message: `${buyer?.name || 'A buyer'} sent you a message: "${message.substring(0, 80)}${message.length > 80 ? '...' : ''}"`,
-        }).catch(() => {});
+        if (staff) {
+          const buyer = await prisma.user.findUnique({
+            where: { id: buyerId },
+            select: { name: true },
+          });
+
+          NotificationService.send({
+            userId: staff.userId,
+            type: 'IN_APP',
+            title: '💬 New Message',
+            message: `${buyer?.name || 'A buyer'} sent you a message: "${message.substring(0, 80)}${message.length > 80 ? '...' : ''}"`,
+          }).catch(() => {});
+        }
+      } catch (notifErr) {
+        console.error('Message notification error:', notifErr.message);
       }
-    } catch (notifErr) {
-      console.error('Message notification error:', notifErr.message);
     }
 
     return successResponse(msg, 201);
