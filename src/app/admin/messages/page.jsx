@@ -77,13 +77,7 @@ export default function AdminMessagesPage() {
     }
   };
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    const msgContainer = document.getElementById('message-container');
-    if (msgContainer) {
-      msgContainer.scrollTop = msgContainer.scrollHeight;
-    }
-  }, [messages]);
+  // REMOVED: No auto-scroll - admin controls scrolling manually
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConv) return;
@@ -375,23 +369,55 @@ export default function AdminMessagesPage() {
                   ) : (
                     messages.map((msg, i) => {
                       const isBotSelectionMsg = isBotSelection(msg);
+                      const isAdminMsg = msg.senderType === 'ADMIN';
+                      const isBotMsg = msg.senderType === 'BOT' || (msg.senderType === 'BUYER' && msg.message?.startsWith('[BOT]'));
+                      
+                      // Determine alignment: Admin + Bot = right, Buyer/Supplier = left
+                      const alignRight = isAdminMsg || isBotMsg;
+                      
+                      // Determine bubble style
+                      let bubbleStyle = 'bg-gray-100 text-gray-800'; // Default: buyer left
+                      let senderName = msg.buyer?.name || 'Buyer';
+                      
+                      if (isAdminMsg) {
+                        bubbleStyle = 'bg-gradient-to-r from-orange-500 to-rose-500 text-white';
+                        senderName = 'You (Admin)';
+                      } else if (isBotMsg) {
+                        bubbleStyle = 'bg-gradient-to-r from-blue-500 to-blue-600 text-white';
+                        senderName = '🤖 Pico Assistant';
+                      } else if (msg.senderType === 'SUPPLIER') {
+                        bubbleStyle = 'bg-emerald-50 text-gray-800 border border-emerald-100';
+                        senderName = msg.supplier?.businessName || 'Supplier';
+                      }
+                      
                       return (
-                        <div key={i} className={`flex ${msg.senderType === 'ADMIN' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${
-                            msg.senderType === 'ADMIN' ? 'bg-gradient-to-r from-orange-500 to-rose-500 text-white' :
-                            msg.senderType === 'BUYER' ? 'bg-gray-100 text-gray-800' :
-                            'bg-blue-50 text-gray-800'
-                          }`}>
-                            <p className="text-xs font-semibold mb-0.5 opacity-70 flex items-center gap-1">
-                              {msg.senderType === 'ADMIN' ? 'You (Admin)' : msg.senderType === 'BUYER' ? msg.buyer?.name : msg.supplier?.businessName}
-                              {isBotSelectionMsg && (
-                                <span className="inline-flex items-center gap-0.5 text-[9px] bg-purple-100 text-purple-600 px-1 py-0.5 rounded-full ml-1">
-                                  <Bot className="h-2.5 w-2.5" /> Selected
-                                </span>
+                        <div key={i} className={`flex ${alignRight ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${bubbleStyle}`}>
+                            <p className={`text-xs font-semibold mb-0.5 flex items-center gap-1 ${alignRight ? 'justify-end' : ''}`}>
+                              {alignRight ? (
+                                <>
+                                  {isBotSelectionMsg && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] bg-purple-100 text-purple-600 px-1 py-0.5 rounded-full">
+                                      <Bot className="h-2.5 w-2.5" /> Selected
+                                    </span>
+                                  )}
+                                  {senderName}
+                                </>
+                              ) : (
+                                <>
+                                  {senderName}
+                                  {isBotSelectionMsg && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] bg-purple-100 text-purple-600 px-1 py-0.5 rounded-full ml-1">
+                                      <Bot className="h-2.5 w-2.5" /> Selected
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </p>
-                            <p>{cleanMessage(msg.message)}</p>
-                            <p className="text-right text-xs opacity-50 mt-1">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                            <p>{cleanMessage(msg.message?.replace(/^\[BOT\]\s*/i, ''))}</p>
+                            <p className={`text-xs opacity-50 mt-1 ${alignRight ? 'text-right' : 'text-left'}`}>
+                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
                           </div>
                         </div>
                       );
