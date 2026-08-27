@@ -30,20 +30,11 @@ export async function GET(req) {
 
     // Get messages with specific buyer
     if (buyerId) {
-      let messages = await prisma.customerMessage.findMany({
+      const messages = await prisma.customerMessage.findMany({
         where: { supplierId, buyerId },
         orderBy: { createdAt: "asc" },
         take: 100,
       });
-
-      // If no messages with exact supplierId, try without supplierId filter
-      if (messages.length === 0) {
-        messages = await prisma.customerMessage.findMany({
-          where: { buyerId },
-          orderBy: { createdAt: "asc" },
-          take: 100,
-        });
-      }
 
       // Mark buyer/admin messages as read
       await prisma.customerMessage.updateMany({
@@ -54,22 +45,13 @@ export async function GET(req) {
       return successResponse(messages);
     }
 
-    // Get all conversations - try exact supplierId first, fallback to all
-    let conversations = await prisma.customerMessage.groupBy({
+    // Get conversations ONLY for this supplier
+    const conversations = await prisma.customerMessage.groupBy({
       by: ["buyerId"],
       where: { supplierId },
       _count: { id: true },
       _max: { createdAt: true },
     });
-
-    // If no conversations found with exact supplierId, get all
-    if (conversations.length === 0) {
-      conversations = await prisma.customerMessage.groupBy({
-        by: ["buyerId"],
-        _count: { id: true },
-        _max: { createdAt: true },
-      });
-    }
 
     const buyerIds = conversations.map(c => c.buyerId);
     const buyers = buyerIds.length > 0 ? await prisma.user.findMany({
@@ -79,7 +61,7 @@ export async function GET(req) {
 
     const unreadCounts = await prisma.customerMessage.groupBy({
       by: ["buyerId"],
-      where: { senderType: { in: ["BUYER", "ADMIN"] }, isRead: false },
+      where: { supplierId, senderType: { in: ["BUYER", "ADMIN"] }, isRead: false },
       _count: { id: true },
     });
 
