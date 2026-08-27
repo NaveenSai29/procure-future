@@ -3,13 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Bell, Mail, MessageSquare, ShoppingBag, FileText, Check, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-
-const formatOrderId = (id) => {
-  if (!id) return '#N/A';
-  const hex = id.replace(/-/g, '').slice(0, 6);
-  const num = parseInt(hex, 16) % 100000;
-  return `#${num.toString().padStart(5, '0')}`;
-};
+import { formatOrderId } from '@/lib/formatOrderId';
 
 const formatMessageWithOrderId = (message) => {
   if (!message) return message;
