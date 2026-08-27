@@ -3,6 +3,7 @@ import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
 import { NotificationService } from "@/services/notification.service";
 import { getOrderConfirmationEmail } from "@/services/email-templates.service";
 import { EmailService } from "@/services/email.service";
+import { formatOrderId } from "@/lib/formatOrderId";
 
 // Deduct wallet balance when order is placed
 async function deductWallet(userId, amount, referenceId, description) {
@@ -434,7 +435,7 @@ export async function POST(request) {
             userId: supplierStaff.userId,
             type: 'IN_APP',
             title: 'New Order Received',
-            message: `Order #${order.id.slice(0, 8)} for "${product.name}" - Qty: ${finalQty}`,
+            message: `Order ${formatOrderId(order.id)} for "${product.name}" - Qty: ${finalQty}`,
           }).catch(() => {});
         }
 
@@ -581,7 +582,7 @@ export async function POST(request) {
         session.userId, 
         walletDeduction, 
         order.id,
-        `Payment for order #${order.id.slice(0, 8)}`
+        `Payment for order ${formatOrderId(order.id)}`
       );
     }
 
@@ -600,7 +601,7 @@ export async function POST(request) {
         userId: supplierStaff.userId,
         type: 'IN_APP',
         title: 'New Order Received',
-        message: `Order #${order.id.slice(0, 8)} for "${product.name}" - Qty: ${finalQty}`,
+        message: `Order ${formatOrderId(order.id)} for "${product.name}" - Qty: ${finalQty}`,
       }).catch(() => {});
     }
 
@@ -609,15 +610,15 @@ export async function POST(request) {
       type: 'IN_APP',
       title: 'Order Placed Successfully',
       message: stockCheck.adjusted 
-        ? `Your order #${order.id.slice(0, 8)} has been placed. Quantity adjusted to ${finalQty}.` 
-        : `Your order #${order.id.slice(0, 8)} has been placed. Track in My Orders.`,
+        ? `Your order ${formatOrderId(order.id)} has been placed. Quantity adjusted to ${finalQty}.` 
+        : `Your order ${formatOrderId(order.id)} has been placed. Track in My Orders.`,
     }).catch(() => {});
 
     if (buyer?.email) {
       try {
         const emailTemplate = getOrderConfirmationEmail({
           buyerName: buyer.name,
-          orderId: order.id.slice(0, 8).toUpperCase(),
+          orderId: formatOrderId(order.id),
           totalAmount: finalAmount,
           items: [{ name: product.name, quantity: finalQty, price: finalAmount }],
         });
