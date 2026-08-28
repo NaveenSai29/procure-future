@@ -85,7 +85,8 @@ export async function POST(request) {
     });
 
     // Capture if this is a NEW user BEFORE marking as verified
-    const wasNewUser = !user.mobileVerified;
+    // New users have default name "Buyer" or "Delivery Partner"
+    const wasNewUser = user.name === 'Buyer' || user.name === 'Delivery Partner' || !user.mobileVerified;
 
     // Mark mobile as verified
     if (wasNewUser) {
