@@ -19,32 +19,70 @@ async function sendSMS(mobile, otp) {
     return true;
   }
 
+  const API_KEY = process.env.FAST2SMS_API_KEY || '';
+  
+  if (!API_KEY) {
+    console.error('❌ FAST2SMS_API_KEY is not set in .env');
+    return false;
+  }
+
   // SMS enabled: Send via Fast2SMS
   try {
+    console.log(`📱 Attempting to send OTP to ${mobile}...`);
+    
+    // Try OTP route first (requires DLT approved template)
     const res = await fetch('https://www.fast2sms.com/dev/bulkV2', {
       method: 'POST',
       headers: {
-        'authorization': process.env.FAST2SMS_API_KEY || '',
+        'authorization': API_KEY,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         route: 'otp',
         variables_values: otp,
         numbers: mobile,
+        schedule_time: '',
       }),
     });
     
     const data = await res.json();
+    console.log('📱 Fast2SMS Response:', JSON.stringify(data));
     
     if (data.return === true) {
-      console.log(`✅ SMS sent to ${mobile}`);
+      console.log(`✅ SMS sent to ${mobile} via OTP route`);
       return true;
-    } else {
-      console.error('Fast2SMS error:', data.message || 'Unknown error');
-      return false;
     }
+    
+    // If OTP route fails, try Quick SMS route
+    console.log('⚠️ OTP route failed, trying Quick SMS...');
+    console.log('⚠️ OTP route error:', data.message || 'Unknown');
+    
+    const quickRes = await fetch('https://www.fast2sms.com/dev/bulkV2', {
+      method: 'POST',
+      headers: {
+        'authorization': API_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        route: 'q',
+        message: `Your Pico OTP is ${otp}. Valid for 5 minutes. Do not share with anyone.`,
+        numbers: mobile,
+        schedule_time: '',
+      }),
+    });
+    
+    const quickData = await quickRes.json();
+    console.log('📱 Quick SMS Response:', JSON.stringify(quickData));
+    
+    if (quickData.return === true) {
+      console.log(`✅ SMS sent to ${mobile} via Quick SMS route`);
+      return true;
+    }
+    
+    console.error('❌ Both routes failed:', quickData.message || 'Unknown error');
+    return false;
   } catch (e) {
-    console.error('SMS send error:', e.message);
+    console.error('❌ SMS send error:', e.message);
     return false;
   }
 }
