@@ -41,9 +41,22 @@ async function handleReferralReward(order) {
     });
     if (!buyer?.referredBy) return;
     const referral = await prisma.referral.findFirst({
-      where: { referrerId: buyer.referredBy, referredId: order.buyerId, status: "PURCHASED" },
+      where: { referrerId: buyer.referredBy, referredId: order.buyerId, status: { in: ["REGISTERED", "PURCHASED"] } },
     });
     if (!referral) return;
+    // Check purchase threshold
+    let purchaseThreshold = 5000;
+    try {
+      const thresholdSetting = await prisma.systemSetting.findFirst({ where: { category: 'REFERRAL', key: 'purchase_threshold' } });
+      if (thresholdSetting) { const val = parseInt(thresholdSetting.value); if (!isNaN(val) && val > 0) purchaseThreshold = val; }
+    } catch {}
+
+    // Check if this order meets threshold
+    if (order.totalAmount < purchaseThreshold) {
+      console.log(`Referral: Order ₹${order.totalAmount} below threshold ₹${purchaseThreshold}. Skipping reward.`);
+      return;
+    }
+
     let rewardAmount = 100;
     try {
       const setting = await prisma.systemSetting.findFirst({ where: { category: 'REFERRAL', key: 'reward_amount' } });
