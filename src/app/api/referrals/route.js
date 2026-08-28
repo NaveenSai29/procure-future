@@ -127,7 +127,6 @@ export async function GET() {
           wallet: { select: { totalEarned: true } },
         },
       });
-      // We track total earned from referrals separately via the referral records
       const deliveryPaidReferrals = deliveryReferrals.filter(r => r.status === 'PAID');
       partnerReferralEarnings = deliveryPaidReferrals.reduce((sum, r) => sum + (r.rewardAmount || 0), 0);
     }
@@ -174,5 +173,87 @@ export async function GET() {
   } catch (error) {
     console.error("User referrals error:", error);
     return errorResponse("Failed to fetch referrals", 500);
+  }
+}
+
+export async function POST(request) {
+  try {
+    const session = await getSessionUser();
+    if (!session) return errorResponse("Not authenticated", 401);
+
+    const body = await request.json();
+    const { referralCode } = body;
+
+    if (!referralCode) return errorResponse("Referral code required", 422);
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { id: true, referredBy: true, mobile: true },
+    });
+
+    if (!user) return errorResponse("User not found", 404);
+
+    // Don't allow self-referral
+    const referrer = await prisma.user.findFirst({
+      where: { referralCode: referralCode.trim().toUpperCase() },
+      select: { id: true, name: true },
+    });
+
+    if (!referrer) return errorResponse("Invalid referral code", 400);
+
+    if (referrer.id === user.id) return errorResponse("You cannot use your own referral code", 400);
+
+    // Check if already referred
+    if (user.referredBy) return errorResponse("Referral code already applied", 400);
+
+    const existingReferral = await prisma.referral.findFirst({
+      where: { referredId: user.id },
+    });
+
+    if (existingReferral) return errorResponse("Referral already exists", 400);
+
+    // Update user with referral
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { referredBy: referrer.id },
+    });
+
+    // Determine referral type based on user's role
+    const userRoles = await prisma.userRole.findMany({
+      where: { userId: user.id },
+      include: { role: true },
+    });
+    const isDelivery = userRoles.some(r => r.role.name === 'DELIVERY_PARTNER');
+    const referralType = isDelivery ? 'DELIVERY' : 'BUYER';
+
+    // Create referral record
+    await prisma.referral.create({
+      data: {
+        referrerId: referrer.id,
+        referredId: user.id,
+        referralType,
+        status: 'REGISTERED',
+      },
+    });
+
+    // Notify referrer
+    try {
+      const { NotificationService } = await import('@/services/notification.service');
+      const title = isDelivery ? '🎉 New Delivery Referral!' : '🎉 New Referral!';
+      const message = isDelivery
+        ? `A new delivery partner joined using your referral code!`
+        : `Someone just joined using your referral code!`;
+      NotificationService.send({
+        userId: referrer.id,
+        type: 'IN_APP',
+        title,
+        message,
+      }).catch(() => {});
+    } catch {}
+
+    return successResponse({ message: "Referral code applied successfully" });
+  } catch (error) {
+    console.error("Apply referral error:", error);
+    return errorResponse("Failed to apply referral code", 500);
   }
 }

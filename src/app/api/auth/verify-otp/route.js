@@ -84,8 +84,11 @@ export async function POST(request) {
       data: { isUsed: true },
     });
 
+    // Capture if this is a NEW user BEFORE marking as verified
+    const wasNewUser = !user.mobileVerified;
+
     // Mark mobile as verified
-    if (!user.mobileVerified) {
+    if (wasNewUser) {
       await prisma.user.update({
         where: { id: user.id },
         data: { mobileVerified: true, lastLogin: new Date() },
@@ -129,7 +132,7 @@ export async function POST(request) {
 
     const isNewUser = isDelivery 
       ? !updatedUser?.deliveryPartner?.vehicleNumber 
-      : !user.mobileVerified;
+      : wasNewUser;
 
     return successResponse({
       user: {
