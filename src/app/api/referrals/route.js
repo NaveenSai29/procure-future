@@ -28,6 +28,21 @@ async function getReferralReward() {
   }
 }
 
+async function getPurchaseThreshold() {
+  try {
+    const setting = await prisma.systemSetting.findFirst({
+      where: { category: 'REFERRAL', key: 'purchase_threshold' },
+    });
+    if (setting) {
+      const val = parseInt(setting.value);
+      return isNaN(val) ? 5000 : val;
+    }
+    return 5000;
+  } catch {
+    return 5000;
+  }
+}
+
 async function getDeliveryReferralSettings() {
   try {
     const [thresholdSetting, rewardSetting, enabledSetting, rewardTypeSetting] = await Promise.all([
@@ -164,6 +179,7 @@ export async function GET() {
     return successResponse({
       referralCode,
       rewardAmount,
+      purchaseThreshold: await getPurchaseThreshold(),
       totalEarned,
       totalReferrals: buyerReferrals.length + deliveryReferrals.length,
       buyerReferrals: formattedBuyerReferrals,
