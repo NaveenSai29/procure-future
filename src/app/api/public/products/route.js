@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { CacheService } from "@/services/cache.service";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com';
 function getFullImageUrl(path) { if (!path) return null; if (path.startsWith('http')) return path; return `${BASE_URL}${path}`; }
@@ -99,6 +100,18 @@ export async function GET(request) {
     const buyerLng = parseFloat(searchParams.get("buyerLng") || "0");
     const maxDistanceParam = parseFloat(searchParams.get("maxDistance") || "0"); // in km, 0 = no limit
     const hasLocation = buyerLat !== 0 && buyerLng !== 0;
+
+    // Build cache key
+    const cacheKey = `products_p${page}_l${limit}_s${search}_c${categoryId}_sup${supplierId}_lat${buyerLat ? buyerLat.toFixed(3) : 0}_lng${buyerLng ? buyerLng.toFixed(3) : 0}_sort${sortBy}_${sortOrder}`;
+
+    // Check cache first
+    const cached = await CacheService.get(cacheKey);
+    if (cached) {
+      return NextResponse.json({
+        success: true,
+        data: cached,
+      });
+    }
 
     // Get admin-configured max distance if buyer has location
     let effectiveMaxDistance = maxDistanceParam;
@@ -281,17 +294,22 @@ export async function GET(request) {
     // Paginate after sorting
     const paginatedProducts = formattedProducts.slice((page - 1) * limit, page * limit);
 
+    const result = {
+      products: paginatedProducts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+
+    // Cache for 60 seconds
+    await CacheService.set(cacheKey, result, 60);
+
     return NextResponse.json({
       success: true,
-      data: {
-        products: paginatedProducts,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-        },
-      },
+      data: result,
     });
   } catch (error) {
     console.error("Public products error:", error);

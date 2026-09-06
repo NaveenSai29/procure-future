@@ -2132,3 +2132,12 @@ model PartnerTip {
   @@index([partnerId])
   @@index([orderId])
 }
+
+model Cache {
+  id         String   @id @default(uuid())
+  cacheKey   String   @unique
+  cacheValue String   @db.LongText
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

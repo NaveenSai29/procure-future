@@ -1,8 +1,15 @@
 import prisma from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { CacheService } from '@/services/cache.service';
 
 export async function GET() {
   try {
+    // Check cache first
+    const cached = await CacheService.get('public_settings');
+    if (cached) {
+      return NextResponse.json({ success: true, data: cached });
+    }
+
     // Get GENERAL settings
     const generalSettings = await prisma.systemSetting.findMany({
       where: { category: 'GENERAL' },
@@ -53,64 +60,69 @@ export async function GET() {
       vehicles = delivery.vehicles || [];
     } catch { vehicles = []; }
 
+    const result = {
+      platform: {
+        name: general.platformName || 'Pico',
+        description: general.platformDescription || 'Enterprise procurement platform for modern businesses.',
+        supportEmail: general.supportEmail || 'support@vantagemarketspvt.com',
+        supportPhone: general.supportPhone || '1800-PICO',
+        url: process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com',
+        language: general.language || 'English',
+        currency: general.currency || 'INR',
+        timezone: general.timezone || 'Asia/Kolkata',
+      },
+      freeDeliveryAbove: parseFloat(delivery.freeDeliveryAbove) || 999,
+      riderIconUrl: delivery.riderIconUrl || null,
+      vehicles: vehicles,
+      deliveryVerification: {
+        deliveryRadiusMeters: parseInt(delivery.deliveryRadiusMeters) || 50,
+        pickupRadiusMeters: parseInt(delivery.pickupRadiusMeters) || 100,
+        waitTimerMinutes: parseInt(delivery.waitTimerMinutes) || 5,
+        photoProofRequired: delivery.photoProofRequired !== 'false' && delivery.photoProofRequired !== false,
+        newOrderTimeoutSeconds: parseInt(delivery.newOrderTimeoutSeconds) || 120,
+      },
+      bankDetails: {
+        bankName: bankDetails.bankName || '',
+        accountHolder: bankDetails.accountHolder || '',
+        accountNumber: bankDetails.accountNumber || '',
+        ifscCode: bankDetails.ifscCode || '',
+        branchName: bankDetails.branchName || '',
+        upiId: bankDetails.upiId || '',
+        notes: bankDetails.notes || '',
+      },
+      notificationSettings: {
+        newOrderSound: notification.newOrderSound !== false && notification.newOrderSound !== 'false',
+        soundVolume: parseInt(notification.soundVolume) || 50,
+        soundFileUrl: notification.soundFileUrl || null,
+        newOrderRepeat: notification.newOrderRepeat !== false && notification.newOrderRepeat !== 'false',
+        newOrderRepeatInterval: parseInt(notification.newOrderRepeatInterval) || 120,
+        pickupSound: notification.pickupSound !== false && notification.pickupSound !== 'false',
+        pickupSoundFileUrl: notification.pickupSoundFileUrl || null,
+        pickupRepeat: notification.pickupRepeat !== false && notification.pickupRepeat !== 'false',
+        pickupRepeatInterval: parseInt(notification.pickupRepeatInterval) || 120,
+        deliveryNewOrderSound: notification.deliveryNewOrderSound !== false && notification.deliveryNewOrderSound !== 'false',
+        deliverySoundFileUrl: notification.deliverySoundFileUrl || null,
+        deliveryRepeat: notification.deliveryRepeat !== false && notification.deliveryRepeat !== 'false',
+        deliveryRepeatInterval: parseInt(notification.deliveryRepeatInterval) || 10,
+      },
+    };
+
+    // Cache for 5 minutes (300 seconds)
+    await CacheService.set('public_settings', result, 300);
+
     return NextResponse.json({
       success: true,
-      data: {
-        platform: {
-          name: general.platformName || 'PROCURE',
-          description: general.platformDescription || 'Enterprise procurement platform for modern businesses.',
-          supportEmail: general.supportEmail || 'support@procure.com',
-          supportPhone: general.supportPhone || '1800-PROCURE',
-          url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-          language: general.language || 'English',
-          currency: general.currency || 'INR',
-          timezone: general.timezone || 'Asia/Kolkata',
-        },
-        freeDeliveryAbove: parseFloat(delivery.freeDeliveryAbove) || 999,
-        riderIconUrl: delivery.riderIconUrl || null,
-        vehicles: vehicles,
-        deliveryVerification: {
-          deliveryRadiusMeters: parseInt(delivery.deliveryRadiusMeters) || 50,
-          pickupRadiusMeters: parseInt(delivery.pickupRadiusMeters) || 100,
-          waitTimerMinutes: parseInt(delivery.waitTimerMinutes) || 5,
-          photoProofRequired: delivery.photoProofRequired !== 'false' && delivery.photoProofRequired !== false,
-          newOrderTimeoutSeconds: parseInt(delivery.newOrderTimeoutSeconds) || 120,
-        },
-        bankDetails: {
-          bankName: bankDetails.bankName || '',
-          accountHolder: bankDetails.accountHolder || '',
-          accountNumber: bankDetails.accountNumber || '',
-          ifscCode: bankDetails.ifscCode || '',
-          branchName: bankDetails.branchName || '',
-          upiId: bankDetails.upiId || '',
-          notes: bankDetails.notes || '',
-        },
-        notificationSettings: {
-          newOrderSound: notification.newOrderSound !== false && notification.newOrderSound !== 'false',
-          soundVolume: parseInt(notification.soundVolume) || 50,
-          soundFileUrl: notification.soundFileUrl || null,
-          newOrderRepeat: notification.newOrderRepeat !== false && notification.newOrderRepeat !== 'false',
-          newOrderRepeatInterval: parseInt(notification.newOrderRepeatInterval) || 120,
-          pickupSound: notification.pickupSound !== false && notification.pickupSound !== 'false',
-          pickupSoundFileUrl: notification.pickupSoundFileUrl || null,
-          pickupRepeat: notification.pickupRepeat !== false && notification.pickupRepeat !== 'false',
-          pickupRepeatInterval: parseInt(notification.pickupRepeatInterval) || 120,
-          deliveryNewOrderSound: notification.deliveryNewOrderSound !== false && notification.deliveryNewOrderSound !== 'false',
-          deliverySoundFileUrl: notification.deliverySoundFileUrl || null,
-          deliveryRepeat: notification.deliveryRepeat !== false && notification.deliveryRepeat !== 'false',
-          deliveryRepeatInterval: parseInt(notification.deliveryRepeatInterval) || 10,
-        },
-      },
+      data: result,
     });
   } catch (error) {
     return NextResponse.json({
       success: true,
       data: {
         platform: {
-          name: 'PROCURE',
+          name: 'Pico',
           description: 'Enterprise procurement platform for modern businesses.',
-          supportEmail: 'support@procure.com',
-          supportPhone: '1800-PROCURE',
+          supportEmail: 'support@vantagemarketspvt.com',
+          supportPhone: '1800-PICO',
         },
         freeDeliveryAbove: 999,
         riderIconUrl: null,

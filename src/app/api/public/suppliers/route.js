@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { CacheService } from "@/services/cache.service";
 
 // Helper to calculate distance between two coordinates
 function haversineDistance(lat1, lng1, lat2, lng2) {
@@ -58,6 +59,15 @@ export async function GET(request) {
     const supplierId = searchParams.get("supplierId");
     const buyerLat = parseFloat(searchParams.get("buyerLat"));
     const buyerLng = parseFloat(searchParams.get("buyerLng"));
+
+    // Build cache key (include location for distance-specific results)
+    const cacheKey = `suppliers_${supplierId || 'all'}_${buyerLat ? buyerLat.toFixed(3) : 'no'}_${buyerLng ? buyerLng.toFixed(3) : 'loc'}`;
+
+    // Check cache first
+    const cached = await CacheService.get(cacheKey);
+    if (cached) {
+      return NextResponse.json({ success: true, data: cached });
+    }
 
     // Get max distance setting
     const distanceSetting = await prisma.systemSetting.findFirst({
@@ -171,20 +181,25 @@ export async function GET(request) {
         imageUrl: p.images?.[0]?.url || null,
       })).filter(p => p.imageUrl);
 
+      const result = {
+        ...supplierData,
+        tags: parsedTags,
+        categories,
+        productImages: formattedProductImages,
+        shopStatus,
+        shopHours: settings ? {
+          openTime: settings.shopOpenTime,
+          closeTime: settings.shopCloseTime,
+          openDays: settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : null,
+        } : null,
+      };
+
+      // Cache for 60 seconds
+      await CacheService.set(cacheKey, result, 60);
+
       return NextResponse.json({
         success: true,
-        data: {
-          ...supplierData,
-          tags: parsedTags,
-          categories,
-          productImages: formattedProductImages,
-          shopStatus,
-          shopHours: settings ? {
-            openTime: settings.shopOpenTime,
-            closeTime: settings.shopCloseTime,
-            openDays: settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : null,
-          } : null,
-        },
+        data: result,
       });
     }
 
@@ -280,6 +295,9 @@ export async function GET(request) {
         }
         return true;
       });
+
+    // Cache for 60 seconds
+    await CacheService.set(cacheKey, formattedSuppliers, 60);
 
     return NextResponse.json({ success: true, data: formattedSuppliers });
   } catch (error) {
