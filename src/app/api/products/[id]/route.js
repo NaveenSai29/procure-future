@@ -54,8 +54,23 @@ export async function GET(request, { params }) {
         attributes: true,
         images: true,
         variants: true,
-        inventory: { include: { warehouse: { select: { id: true, name: true } } } },
-        supplier: { select: { id: true, businessName: true, isVerified: true } },
+        inventory: { include: { warehouse: { select: { id: true, name: true, latitude: true, longitude: true } } } },
+        supplier: { 
+          select: { 
+            id: true, 
+            businessName: true, 
+            isVerified: true,
+            warehouses: {
+              select: {
+                id: true,
+                name: true,
+                latitude: true,
+                longitude: true,
+              },
+              take: 1,
+            },
+          } 
+        },
       },
     });
     if (!product) return errorResponse("Not found", 404);
