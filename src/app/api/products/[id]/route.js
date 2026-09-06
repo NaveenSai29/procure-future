@@ -101,6 +101,36 @@ export async function PATCH(request, { params }) {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
     const { id } = await params;
+    
+    // Check if user has permission to update this product
+    const existingProduct = await prisma.product.findUnique({
+      where: { id },
+      select: { supplierId: true },
+    });
+    
+    if (!existingProduct) return errorResponse("Product not found", 404);
+    
+    // Check if user is staff of this supplier or super admin
+    const staff = await prisma.supplierStaff.findFirst({
+      where: {
+        userId: session.userId,
+        supplierId: existingProduct.supplierId,
+      },
+      select: { id: true },
+    });
+    
+    const isSuperAdmin = await prisma.userRole.findFirst({
+      where: {
+        userId: session.userId,
+        role: { name: 'SUPER_ADMIN' },
+      },
+      select: { id: true },
+    });
+    
+    if (!staff && !isSuperAdmin) {
+      return errorResponse("You don't have permission to update this product", 403);
+    }
+    
     const body = await request.json();
     const {
       name, categoryId, brandId, sku, barcode, hsnCode, unit,
@@ -297,6 +327,36 @@ export async function DELETE(request, { params }) {
     const session = await getSessionUser();
     if (!session) return errorResponse("Not authenticated", 401);
     const { id } = await params;
+    
+    // Check if user has permission to delete this product
+    const existingProduct = await prisma.product.findUnique({
+      where: { id },
+      select: { supplierId: true },
+    });
+    
+    if (!existingProduct) return errorResponse("Product not found", 404);
+    
+    // Check if user is staff of this supplier or super admin
+    const staff = await prisma.supplierStaff.findFirst({
+      where: {
+        userId: session.userId,
+        supplierId: existingProduct.supplierId,
+      },
+      select: { id: true },
+    });
+    
+    const isSuperAdmin = await prisma.userRole.findFirst({
+      where: {
+        userId: session.userId,
+        role: { name: 'SUPER_ADMIN' },
+      },
+      select: { id: true },
+    });
+    
+    if (!staff && !isSuperAdmin) {
+      return errorResponse("You don't have permission to delete this product", 403);
+    }
+    
     await prisma.product.delete({ where: { id } });
     return successResponse({ message: "Deleted" });
   } catch (error) {
