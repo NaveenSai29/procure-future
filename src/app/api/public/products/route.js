@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com';
 function getFullImageUrl(path) { if (!path) return null; if (path.startsWith('http')) return path; return `${BASE_URL}${path}`; }
 
-// Haversine distance in km
+// OSRM Road Distance in km (fallback to Haversine if OSRM fails)
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = toRad(lat2 - lat1);
@@ -19,6 +19,24 @@ function getDistance(lat1, lon1, lat2, lon2) {
 
 function toRad(deg) {
   return deg * (Math.PI / 180);
+}
+
+async function getRoadDistance(lat1, lon1, lat2, lon2) {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(3000),
+    });
+    const data = await response.json();
+    if (data.code === 'Ok' && data.routes?.[0]) {
+      return data.routes[0].distance / 1000; // meters to km
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // Helper to calculate shop status
@@ -169,14 +187,30 @@ export async function GET(request) {
       },
     });
 
-    // Calculate distance for each product
-    let formattedProducts = allProducts.map((product) => {
+    // Calculate distance for each product using OSRM road distance (parallel)
+    const distancePromises = allProducts.map(async (product) => {
       const lat = product.supplier?.warehouses[0]?.latitude || null;
       const lng = product.supplier?.warehouses[0]?.longitude || null;
       let distance = null;
       if (hasLocation && lat && lng) {
-        distance = getDistance(buyerLat, buyerLng, lat, lng);
+        // Try OSRM road distance first
+        const roadDistance = await getRoadDistance(buyerLat, buyerLng, lat, lng);
+        if (roadDistance !== null) {
+          distance = roadDistance;
+        } else {
+          // Fallback to Haversine if OSRM fails
+          distance = getDistance(buyerLat, buyerLng, lat, lng);
+        }
       }
+      return { product, distance };
+    });
+
+    const productsWithDistance = await Promise.all(distancePromises);
+
+    // Calculate distance for each product
+    let formattedProducts = productsWithDistance.map(({ product, distance }) => {
+      const lat = product.supplier?.warehouses[0]?.latitude || null;
+      const lng = product.supplier?.warehouses[0]?.longitude || null;
 
       // Calculate shop status from supplier settings
       const shopStatus = getShopStatus(product.supplier?.settings, product.supplier?.isActive);
