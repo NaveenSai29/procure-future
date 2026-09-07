@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { CacheService } from "@/services/cache.service";
+import { getShopStatus } from "@/lib/shopStatus";
 
 // Helper to calculate distance between two coordinates
 function haversineDistance(lat1, lng1, lat2, lng2) {
@@ -9,48 +10,6 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
   const dLng = (lng2 - lng1) * Math.PI / 180;
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// Helper to check if shop is currently open
-function getShopStatus(settings, isActive) {
-  if (!isActive) return { isOpen: false, reason: 'offline', nextOpenTime: null, closesIn: null };
-  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: false, reason: 'not_set', nextOpenTime: null, closesIn: null };
-
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-  const today = days[now.getDay()];
-  
-  let openDays = [];
-  try {
-    openDays = settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : days;
-  } catch { openDays = days; }
-
-  const [openH, openM] = settings.shopOpenTime.split(':').map(Number);
-  const [closeH, closeM] = settings.shopCloseTime.split(':').map(Number);
-  const openMinutes = openH * 60 + openM;
-  const closeMinutes = closeH * 60 + closeM;
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-  // Handle overnight (close time before open time = closes next day)
-  const isOvernight = closeMinutes < openMinutes;
-  const effectiveCloseMinutes = isOvernight ? closeMinutes + 24 * 60 : closeMinutes;
-  const effectiveCurrentMinutes = isOvernight && currentMinutes < openMinutes ? currentMinutes + 24 * 60 : currentMinutes;
-
-  // If today is not an open day
-  if (!openDays.includes(today)) {
-    return { isOpen: false, reason: 'day_off', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
-  }
-
-  if (effectiveCurrentMinutes < openMinutes) {
-    return { isOpen: false, reason: 'not_open_yet', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Today', closesIn: null };
-  }
-
-  if (effectiveCurrentMinutes >= effectiveCloseMinutes) {
-    return { isOpen: false, reason: 'closed', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
-  }
-
-  const closesIn = effectiveCloseMinutes - effectiveCurrentMinutes;
-  return { isOpen: true, reason: null, nextOpenTime: null, closesIn };
 }
 
 export async function GET(request) {

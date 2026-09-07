@@ -1,45 +1,6 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
-
-// Helper to calculate shop status
-function getShopStatus(settings, isActive) {
-  if (!isActive) return { isOpen: false, reason: 'offline', nextOpenTime: null, closesIn: null };
-  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: false, reason: 'not_set', nextOpenTime: null, closesIn: null };
-
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-  const today = days[now.getDay()];
-
-  let openDays = [];
-  try {
-    openDays = settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : days;
-  } catch { openDays = days; }
-
-  const [openH, openM] = settings.shopOpenTime.split(':').map(Number);
-  const [closeH, closeM] = settings.shopCloseTime.split(':').map(Number);
-
-  const todayOpen = new Date(now);
-  todayOpen.setHours(openH, openM, 0, 0);
-
-  const todayClose = new Date(now);
-  todayClose.setHours(closeH, closeM, 0, 0);
-
-  if (!openDays.includes(today)) {
-    return { isOpen: false, reason: 'day_off', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
-  }
-
-  if (now >= todayOpen && now < todayClose) {
-    const closesInMs = todayClose.getTime() - now.getTime();
-    const closesInMin = Math.floor(closesInMs / 60000);
-    return { isOpen: true, reason: null, nextOpenTime: null, closesIn: closesInMin };
-  }
-
-  if (now >= todayClose) {
-    return { isOpen: false, reason: 'closed', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
-  }
-
-  return { isOpen: false, reason: 'not_open_yet', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Today', closesIn: null };
-}
+import { getShopStatus } from "@/lib/shopStatus";
 
 // GET single product
 export async function GET(request, { params }) {

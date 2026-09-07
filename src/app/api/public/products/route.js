@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { CacheService } from "@/services/cache.service";
+import { getShopStatus } from "@/lib/shopStatus";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com';
 function getFullImageUrl(path) { if (!path) return null; if (path.startsWith('http')) return path; return `${BASE_URL}${path}`; }
@@ -38,50 +39,6 @@ async function getRoadDistance(lat1, lon1, lat2, lon2) {
   } catch {
     return null;
   }
-}
-
-// Helper to calculate shop status
-function getShopStatus(settings, isActive) {
-  if (!isActive) return { isOpen: false, reason: 'offline', nextOpenTime: null, closesIn: null };
-  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: false, reason: 'not_set', nextOpenTime: null, closesIn: null };
-
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-  const today = days[now.getDay()];
-
-  let openDays = [];
-  try {
-    openDays = settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : days;
-  } catch { openDays = days; }
-
-  const [openH, openM] = settings.shopOpenTime.split(':').map(Number);
-  const [closeH, closeM] = settings.shopCloseTime.split(':').map(Number);
-
-  const todayOpen = new Date(now);
-  todayOpen.setHours(openH, openM, 0, 0);
-
-  const todayClose = new Date(now);
-  todayClose.setHours(closeH, closeM, 0, 0);
-
-  // If today is not an open day
-  if (!openDays.includes(today)) {
-    return { isOpen: false, reason: 'day_off', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
-  }
-
-  // Check if within open hours
-  if (now >= todayOpen && now < todayClose) {
-    const closesInMs = todayClose.getTime() - now.getTime();
-    const closesInMin = Math.floor(closesInMs / 60000);
-    return { isOpen: true, reason: null, nextOpenTime: null, closesIn: closesInMin };
-  }
-
-  // Shop is closed - find next open time
-  if (now >= todayClose) {
-    return { isOpen: false, reason: 'closed', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Tomorrow', closesIn: null };
-  }
-
-  // Before opening time today
-  return { isOpen: false, reason: 'not_open_yet', nextOpenTime: `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`, nextOpenDay: 'Today', closesIn: null };
 }
 
 export async function GET(request) {
@@ -225,7 +182,7 @@ export async function GET(request) {
       const lat = product.supplier?.warehouses[0]?.latitude || null;
       const lng = product.supplier?.warehouses[0]?.longitude || null;
 
-      // Calculate shop status from supplier settings
+      // Calculate shop status from supplier settings (using shared utility)
       const shopStatus = getShopStatus(product.supplier?.settings, product.supplier?.isActive);
       const shopHours = product.supplier?.settings ? {
         openTime: product.supplier.settings.shopOpenTime,

@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
+import { getShopStatus } from "@/lib/shopStatus";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com';
 function getFullImageUrl(path) { if (!path) return null; if (path.startsWith('http')) return path; return `${BASE_URL}${path}`; }
@@ -46,27 +47,6 @@ async function getProductSupplier(productId) {
     select: { supplierId: true },
   });
   return product?.supplierId || null;
-}
-
-// Helper: Check if shop is currently open based on hours
-function getShopStatus(isActive, settings) {
-  if (!isActive) return { isOpen: false, reason: 'offline' };
-  if (!settings?.shopOpenTime || !settings?.shopCloseTime) return { isOpen: false, reason: 'not_set' };
-
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-  const today = days[now.getDay()];
-  let openDays = days;
-  try { openDays = settings.shopOpenDays ? JSON.parse(settings.shopOpenDays) : days; } catch {}
-
-  const [oh, om] = settings.shopOpenTime.split(':').map(Number);
-  const [ch, cm] = settings.shopCloseTime.split(':').map(Number);
-  const tOpen = new Date(now); tOpen.setHours(oh, om, 0, 0);
-  const tClose = new Date(now); tClose.setHours(ch, cm, 0, 0);
-
-  if (!openDays.includes(today)) return { isOpen: false, reason: 'day_off' };
-  if (now >= tOpen && now < tClose) return { isOpen: true, reason: null };
-  return { isOpen: false, reason: 'closed' };
 }
 
 export async function GET(request) {
@@ -173,7 +153,7 @@ export async function GET(request) {
           moq: item.product?.pricing[0]?.minQty || 1,
           weight: item.product?.weight || 1,
           quantity: item.quantity,
-          shopStatus: getShopStatus(effectiveIsActive, effectiveSettings),
+          shopStatus: getShopStatus(effectiveSettings, effectiveIsActive),
         };
         allItems.push(formatted);
         return formatted;
@@ -185,7 +165,7 @@ export async function GET(request) {
         supplierName: cart.supplier?.businessName,
         isVerified: cart.supplier?.isVerified,
         codEnabled: cart.supplier?.codEnabled !== false,
-        shopStatus: getShopStatus(cartSupplierIsActive, cartSupplierSettings),
+        shopStatus: getShopStatus(cartSupplierSettings, cartSupplierIsActive),
         items: cartItems,
         itemCount: cartItems.length,
         subtotal: cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
