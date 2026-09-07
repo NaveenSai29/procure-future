@@ -11,6 +11,84 @@ const formatOrderId = (id) => {
   return `#${num.toString().padStart(5, '0')}`;
 };
 
+const OrderHistory = ({ orders }) => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const ordersPerPage = 5;
+  const totalPages = Math.ceil(orders.length / ordersPerPage);
+  const startIndex = (currentPage - 1) * ordersPerPage;
+  const paginatedOrders = orders.slice(startIndex, startIndex + ordersPerPage);
+
+  if (orders.length === 0) {
+    return (
+      <>
+        <h4 className="font-semibold text-gray-900 mb-3">Order History</h4>
+        <p className="text-sm text-gray-400 text-center py-4">No order history</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-semibold text-gray-900">Order History</h4>
+        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+          {orders.length} orders
+        </span>
+      </div>
+      <div className="space-y-2 min-h-[200px]">
+        {paginatedOrders.map(order => (
+          <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-gray-900">{formatOrderId(order.id)}</p>
+              <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold">₹{order.totalAmount?.toLocaleString()}</p>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                order.status === 'DELIVERED' ? 'bg-green-100 text-green-700' :
+                order.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                order.status === 'REJECTED' ? 'bg-gray-100 text-gray-700' :
+                order.status === 'EXPIRED' ? 'bg-gray-100 text-gray-700' :
+                order.status === 'DECLINED' ? 'bg-red-100 text-red-700' :
+                'bg-yellow-100 text-yellow-700'
+              }`}>{order.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 pt-3 border-t">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+              currentPage === 1 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+            }`}
+          >
+            ← Previous
+          </button>
+          <span className="text-xs text-gray-500">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
+              currentPage === totalPages 
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+            }`}
+          >
+            Next →
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +181,7 @@ export default function CustomersPage() {
               <div className="space-y-2 text-sm border-t pt-3">
                 <div className="flex justify-between">
                   <span className="text-gray-500 flex items-center gap-1"><ShoppingCart className="h-3 w-3" /> Orders</span>
-                  <span className="font-semibold">{customer.totalOrders || 0}</span>
+                  <span className="font-semibold">{customer.orders?.length || customer.totalOrders || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500 flex items-center gap-1"><IndianRupee className="h-3 w-3" /> Total Spent</span>
@@ -165,28 +243,7 @@ export default function CustomersPage() {
               </div>
             </div>
 
-            <h4 className="font-semibold text-gray-900 mb-3">Order History</h4>
-            <div className="space-y-2">
-              {(selectedCustomer.orders || []).slice(0, 10).map(order => (
-                <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{formatOrderId(order.id)}</p>
-                    <p className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold">₹{order.totalAmount?.toLocaleString()}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      order.status === 'DELIVERED' ? 'bg-green-100 text-green-700' :
-                      order.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>{order.status}</span>
-                  </div>
-                </div>
-              ))}
-              {(!selectedCustomer.orders || selectedCustomer.orders.length === 0) && (
-                <p className="text-sm text-gray-400 text-center py-4">No order history</p>
-              )}
-            </div>
+            <OrderHistory orders={selectedCustomer.orders || []} />
           </div>
         </div>
       )}

@@ -15,7 +15,7 @@ export async function GET() {
       where: { product: { supplierId: staff.supplierId } },
       include: {
         buyer: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, email: true },
         },
       },
     });
