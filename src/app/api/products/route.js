@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
+import { CacheService } from "@/services/cache.service";
 
 // GET - List products for current supplier
 export async function GET(request) {
@@ -173,6 +174,10 @@ export async function POST(request) {
         }
       }
     }
+
+    // Clear cache so new product appears immediately
+    await CacheService.deleteByPrefix('products_');
+    await CacheService.deleteByPrefix('suppliers_');
 
     return successResponse({ product }, 201);
   } catch (error) {

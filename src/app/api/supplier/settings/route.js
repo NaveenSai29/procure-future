@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { CacheService } from '@/services/cache.service';
 
 export async function GET() {
   try {
@@ -64,6 +65,10 @@ export async function PATCH(request) {
         data: { isActive: body.isActive }
       });
 
+      // Clear cache so shop status updates immediately
+      await CacheService.deleteByPrefix('products_');
+      await CacheService.deleteByPrefix('suppliers_');
+
       return NextResponse.json({ success: true, isActive: body.isActive });
     }
 
@@ -79,6 +84,10 @@ export async function PATCH(request) {
         create: { supplierId: supplierStaff.supplierId, ...settingsData },
         update: settingsData,
       });
+
+      // Clear cache so shop hours update immediately everywhere
+      await CacheService.deleteByPrefix('products_');
+      await CacheService.deleteByPrefix('suppliers_');
 
       return NextResponse.json({ success: true, settings });
     }
@@ -146,6 +155,9 @@ export async function PUT(request) {
         }).catch(() => {});
       }
       
+      // Clear cache so logo/banner updates immediately
+      await CacheService.deleteByPrefix('suppliers_');
+      
       return NextResponse.json({ success: true });
     }
 
@@ -181,6 +193,9 @@ export async function PUT(request) {
         gstVerified: true, gstBusinessName: true, gstVerificationDate: true,
       }
     });
+
+    // Clear cache so supplier updates appear immediately
+    await CacheService.deleteByPrefix('suppliers_');
 
     await prisma.auditLog.create({
       data: {

@@ -1,5 +1,6 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser, successResponse, errorResponse } from "@/lib/auth";
+import { CacheService } from "@/services/cache.service";
 
 export async function GET(req) {
   try {
@@ -161,6 +162,10 @@ export async function PATCH(request) {
         },
       });
 
+      // Clear cache so bulk changes appear immediately
+      await CacheService.deleteByPrefix('products_');
+      await CacheService.deleteByPrefix('suppliers_');
+
       return successResponse({ message: `${productIds.length} products updated` });
     }
 
@@ -233,6 +238,10 @@ export async function PATCH(request) {
       },
     });
 
+    // Clear cache so product changes appear immediately
+    await CacheService.deleteByPrefix('products_');
+    await CacheService.deleteByPrefix('suppliers_');
+
     return successResponse(product);
   } catch (error) {
     console.error("Product update error:", error);
@@ -263,6 +272,10 @@ export async function DELETE(request) {
         entityId: productId,
       },
     });
+
+    // Clear cache so deleted product disappears immediately
+    await CacheService.deleteByPrefix('products_');
+    await CacheService.deleteByPrefix('suppliers_');
 
     return successResponse({ message: "Product deleted" });
   } catch (error) {
