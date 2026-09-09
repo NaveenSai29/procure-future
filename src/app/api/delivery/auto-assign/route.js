@@ -125,7 +125,9 @@ export async function POST(request) {
 
     if (!order) return errorResponse('Order not found', 404);
 
-    const existingDelivery = await prisma.delivery.findUnique({ where: { orderId } });
+    const existingDelivery = await prisma.delivery.findFirst({ 
+      where: { orderId, status: { not: 'EXPIRED' } } 
+    });
     if (existingDelivery) return errorResponse('Delivery already assigned', 400);
 
     const supplier = order.product?.supplier;

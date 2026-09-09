@@ -333,7 +333,7 @@ export async function PATCH(request, { params }) {
       historyData.notes = "Order packed and ready for pickup";
       // ─── AUTO-ASSIGN DELIVERY PARTNER ───
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://vantagemarketspvt.com';
         console.log('🔄 Auto-assigning delivery for order:', id.slice(0, 8));
         const assignRes = await fetch(`${baseUrl}/api/delivery/auto-assign`, {
           method: 'POST',
