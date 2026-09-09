@@ -83,13 +83,19 @@ async function handleReassign() {
 
       if (nextPartner) {
         // Assign to next partner with timeout window
+        // Get admin timeout setting
+        const timeoutSetting = await prisma.systemSetting.findFirst({
+          where: { category: 'DELIVERY', key: 'newOrderTimeoutSeconds' },
+        });
+        const acceptWindowSeconds = timeoutSetting ? parseInt(timeoutSetting.value) : 120;
+
         await prisma.delivery.create({
           data: {
             orderId: delivery.orderId,
             partnerId: nextPartner.id,
             status: 'ASSIGNED',
             assignedAt: new Date(),
-            expiresAt: new Date(Date.now() + 300 * 1000), // 5 minutes timeout
+            expiresAt: new Date(Date.now() + acceptWindowSeconds * 1000),
           },
         });
 

@@ -211,14 +211,20 @@ export async function POST(request) {
 
     const bestPartner = partnersWithDistance[0];
 
-    // Swiggy style: Assign to NEAREST partner with 30-second acceptance window
+    // Get admin timeout setting
+    const timeoutSetting = await prisma.systemSetting.findFirst({
+      where: { category: 'DELIVERY', key: 'newOrderTimeoutSeconds' },
+    });
+    const acceptWindowSeconds = timeoutSetting ? parseInt(timeoutSetting.value) : 120;
+
+    // Assign to NEAREST partner with admin-configured acceptance window
     const delivery = await prisma.delivery.create({
       data: {
         orderId,
         partnerId: bestPartner.id,
         status: 'ASSIGNED',
         assignedAt: new Date(),
-        expiresAt: new Date(Date.now() + 30 * 1000), // 30 seconds to accept
+        expiresAt: new Date(Date.now() + acceptWindowSeconds * 1000),
       },
       include: {
         order: {
@@ -248,7 +254,7 @@ export async function POST(request) {
         userId: bestPartner.user.id,
         type: 'PUSH',
         title: '🛵 New Delivery Order!',
-        message: `₹${order.totalAmount} — Accept now! (30s)`,
+        message: `₹${order.totalAmount} — Accept now! (${acceptWindowSeconds}s)`,
         eventType: 'new_order',
         data: {
           deliveryId: delivery.id,
