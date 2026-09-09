@@ -66,21 +66,21 @@ export async function GET(request) {
                     select: {
                       id: true,
                       businessName: true,
-                    },
-                  },
-                  warehouses: {
-                    where: { isPickupLocation: true, isActive: true },
-                    take: 1,
-                    select: {
-                      id: true,
-                      name: true,
-                      addressLine1: true,
-                      addressLine2: true,
-                      city: true,
-                      state: true,
-                      pincode: true,
-                      latitude: true,
-                      longitude: true,
+                      warehouses: {
+                        where: { isPickupLocation: true, isActive: true },
+                        take: 1,
+                        select: {
+                          id: true,
+                          name: true,
+                          addressLine1: true,
+                          addressLine2: true,
+                          city: true,
+                          state: true,
+                          pincode: true,
+                          latitude: true,
+                          longitude: true,
+                        },
+                      },
                     },
                   },
                 },
@@ -102,7 +102,7 @@ export async function GET(request) {
       const { netEarning } = await CommissionService.calculateDeliveryNetEarning(deliveryFee);
       
       // Build pickup address from warehouse
-      const pickupWarehouse = d.order?.product?.warehouses?.[0] || null;
+      const pickupWarehouse = d.order?.product?.supplier?.warehouses?.[0] || null;
       const pickupAddress = pickupWarehouse
         ? [
             pickupWarehouse.addressLine1,
